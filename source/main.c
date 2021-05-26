@@ -17,13 +17,6 @@
 #define CPAD_PAGEMULT 0.02f
 #define CPAD_PAGECURVE 3.2f
 
-//#define create_page(result, subtex, initial_color) \
-//   C3D_TexInitVRAM(&(result.texture), subtex.width, subtex.height, GPU_RGB8);\
-//   result.target = C3D_RenderTargetCreateFromTex(&(result.texture), GPU_TEXFACE_2D, 0, -1);\
-//   result.image.tex = &(result.texture); \
-//   result.image.subtex = &subtex; \
-//   C2D_TargetClear(result.target, initial_color); 
-
 //Return the new page position given the existing position and the circlepad input
 float calc_pagepos(circlePosition pos, float existing_pos)
 {
@@ -42,15 +35,13 @@ float calc_pagepos(circlePosition pos, float existing_pos)
 }
 
 struct PageData {
-   //Simple structures
-   Tex3DS_SubTexture subtex;
+   Tex3DS_SubTexture subtex;     //Simple structures
    C3D_Tex texture;
    C2D_Image image;
-   //Actual data?
-   C3D_RenderTarget * target;
+   C3D_RenderTarget * target;    //Actual data?
 };
 
-void create_page(struct PageData * result, Tex3DS_SubTexture subtex, u32 initial_color)
+void create_page(struct PageData * result, Tex3DS_SubTexture subtex)
 {
    result->subtex = subtex;
    C3D_TexInitVRAM(&(result->texture), subtex.width, subtex.height, GPU_RGBA5551);
@@ -58,8 +49,6 @@ void create_page(struct PageData * result, Tex3DS_SubTexture subtex, u32 initial
    result->image.tex = &(result->texture);
    result->image.subtex = &(result->subtex);
    C2D_TargetClear(result->target, 0xFFFFFFFF); 
-   //C2D_SceneBegin(result->target);
-   //C2D_DrawRectSolid(0, 0, 0.5f, subtex.width, subtex.height, initial_color);
 }
 
 void clear_page(struct PageData page)
@@ -83,26 +72,11 @@ int main(int argc, char** argv)
       0.0f, 1.0f, 1.0f, 0.0f
    };
 
-   const u32 initial_color = C2D_Color32(255,255,255,0);
-
    struct PageData frontpg, backpg; 
-   create_page(&frontpg, subtex, initial_color);
-   create_page(&backpg, subtex, initial_color);
+   create_page(&frontpg, subtex);
+   create_page(&backpg, subtex);
 
-   //C3D_Tex tex;
-   //C3D_TexInitVRAM(&tex, subtex.width, subtex.height, GPU_RGBA5551);
-   //C3D_RenderTarget* target = C3D_RenderTargetCreateFromTex(&tex, GPU_TEXFACE_2D, 0, -1);
-   //C2D_Image img = {&tex,&subtex};
-
-
-   //C3D_TexInitVRAM(&(result->texture), subtex.width, subtex.height, GPU_RGBA8);
-   //result->target = C3D_RenderTargetCreateFromTex(&(result->texture), GPU_TEXFACE_2D, 0, -1);
-   //result->image.tex = &(result->texture);
-   //result->image.subtex = &(result->subtex); //This could be a problem
-   //C2D_TargetClear(result->target, initial_color); //hopefully transparent
-   //create_page(frontpg, subtex, initial_color);
-   //create_page(&backpg, subtex, initial_color);
-
+   const u32 initial_color = C2D_Color32(255,255,255,0);
    const u32 bg_color = C2D_Color32(255,255,255,255);
 
    const u32 color_a = C2D_Color32f(1,0,0,1.0f);
@@ -121,15 +95,10 @@ int main(int argc, char** argv)
    //u32 start_frame = 0;
    float page_pos = 0;
 
-   //C2D_TargetClear(target, bg_color); 
-   //C2D_DrawRectSolid(0, 0, 0.5f, subtex.width, subtex.height, initial_color);
-   //C3D_FrameDrawOn(target);
+   C3D_RenderTarget * target = frontpg.target;
 
-
-   printf("Offscreen rendertarget test\n");
-   printf("Touch the bottom screen to place a colored square centered on the touch point\n");
-   printf("Press ABXY to change the color of the square\n");
-
+   printf("Press ABXY to change color\n");
+   printf("C-pad to scroll up/down\n");
    printf("\nPress START to quit.\n");
 
 
@@ -147,6 +116,20 @@ int main(int argc, char** argv)
       else if(kDown & KEY_B) color_selected = &color_b;
       else if(kDown & KEY_X) color_selected = &color_x;
       else if(kDown & KEY_Y) color_selected = &color_y;
+      
+      if(kDown & KEY_SELECT)
+      {
+         if(target == frontpg.target)
+         {
+            target = backpg.target;
+            printf("Changing to back layer");
+         }
+         else
+         {
+            target = frontpg.target;
+            printf("Changing to front layer");
+         }
+      }
 
       hidTouchRead(&current_touch);
 
@@ -169,25 +152,28 @@ int main(int argc, char** argv)
       // Render the scene
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
-      if(touching)
+      if(current_frame == 0)
       {
          C2D_SceneBegin(frontpg.target);
-         //C2D_SceneBegin(target);
+         C2D_DrawRectSolid(0, 0, 0.5f, subtex.width, subtex.height, initial_color);
+         C2D_SceneBegin(backpg.target);
+         C2D_DrawRectSolid(0, 0, 0.5f, subtex.width, subtex.height, initial_color);
+      }
+
+      if(touching)
+      {
+         C2D_SceneBegin(target);
 
          //C2D_DrawRectSolid(current_touch.px - 2, current_touch.py - 2, 0.5f, 4, 4, *color_selected);
          C2D_DrawLine(last_touch.px, last_touch.py + page_pos, *color_selected,
                current_touch.px, current_touch.py + page_pos, *color_selected, 
                2, 0.5f);
-
-         //printf("Drew line: %d,%d %d,%d\n", current_touch.px, current_touch.py,
-         //      frontpg.image.subtex->width, frontpg.target);
       }
 
       C2D_TargetClear(screen, bg_color);
       C2D_SceneBegin(screen);
       C2D_DrawImageAt(backpg.image, 0, -page_pos, 0.5f, NULL, 1.0f, 1.0f);
       C2D_DrawImageAt(frontpg.image, 0, -page_pos, 0.5f, NULL, 1.0f, 1.0f);
-      //C2D_DrawImageAt(img, 0, -page_pos, 0.5f, NULL, 1.0f, 1.0f);
       C3D_FrameEnd(0);
 
       last_touch = current_touch;
@@ -196,8 +182,6 @@ int main(int argc, char** argv)
 
    clear_page(frontpg);
    clear_page(backpg);
-   //C3D_RenderTargetDelete(target);
-   //C3D_TexDelete(&tex);
 
    C2D_Fini();
    C3D_Fini();
