@@ -41,14 +41,14 @@ struct PageData {
    C3D_RenderTarget * target;    //Actual data?
 };
 
-void create_page(struct PageData * result, Tex3DS_SubTexture subtex)
+void create_page(struct PageData * result, Tex3DS_SubTexture subtex, u32 initial_color)
 {
    result->subtex = subtex;
    C3D_TexInitVRAM(&(result->texture), subtex.width, subtex.height, GPU_RGBA5551);
    result->target = C3D_RenderTargetCreateFromTex(&(result->texture), GPU_TEXFACE_2D, 0, -1);
    result->image.tex = &(result->texture);
    result->image.subtex = &(result->subtex);
-   C2D_TargetClear(result->target, 0xFFFFFFFF); 
+   C2D_TargetClear(result->target, initial_color); //0xFFFFFFFF); 
 }
 
 void clear_page(struct PageData page)
@@ -67,16 +67,9 @@ int main(int argc, char** argv)
    consoleInit(GFX_TOP, NULL);
    C3D_RenderTarget* screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
-   const Tex3DS_SubTexture subtex = {
-      PAGEWIDTH, PAGEHEIGHT,
-      0.0f, 1.0f, 1.0f, 0.0f
-   };
-
-   struct PageData frontpg, backpg; 
-   create_page(&frontpg, subtex);
-   create_page(&backpg, subtex);
-
    const u32 initial_color = C2D_Color32(255,255,255,0);
+   //This one lets me draw, but ofc the layers don't work with a non-transparent layer
+   //const u32 initial_color = C2D_Color32(255,255,255,255);
    const u32 bg_color = C2D_Color32(255,255,255,255);
 
    const u32 color_a = C2D_Color32f(1,0,0,1.0f);
@@ -86,18 +79,25 @@ int main(int argc, char** argv)
 
    const u32* color_selected = &color_a;
 
-   //touchPosition start_touch;
+   const Tex3DS_SubTexture subtex = {
+      PAGEWIDTH, PAGEHEIGHT,
+      0.0f, 1.0f, 1.0f, 0.0f
+   };
+
+   struct PageData frontpg, backpg; 
+   create_page(&frontpg, subtex, initial_color);
+   create_page(&backpg, subtex, initial_color);
+
    touchPosition last_touch;
    touchPosition current_touch;
-   //touchPosition end_touch;
    bool touching = false;
    u32 current_frame = 0;
-   //u32 start_frame = 0;
    float page_pos = 0;
 
    C3D_RenderTarget * target = frontpg.target;
 
    printf("Press ABXY to change color\n");
+   printf("Press SELECT to change layers\n");
    printf("C-pad to scroll up/down\n");
    printf("\nPress START to quit.\n");
 
@@ -122,25 +122,23 @@ int main(int argc, char** argv)
          if(target == frontpg.target)
          {
             target = backpg.target;
-            printf("Changing to back layer");
+            printf("Changing to back layer\n");
          }
          else
          {
             target = frontpg.target;
-            printf("Changing to front layer");
+            printf("Changing to front layer\n");
          }
       }
 
       hidTouchRead(&current_touch);
 
       if(kDown & KEY_TOUCH) {
-         //start_touch = current_touch;
-         //start_frame = current_frame;
          //Just throw away last touch from last time, we don't care
          last_touch = current_touch;
       }
       if(kUp & KEY_TOUCH) {
-         //end_touch = current_touch;
+         //Nothing yet
       }
 
       touching = (kHeld & KEY_TOUCH) > 0;
@@ -151,14 +149,6 @@ int main(int argc, char** argv)
 
       // Render the scene
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-
-      if(current_frame == 0)
-      {
-         C2D_SceneBegin(frontpg.target);
-         C2D_DrawRectSolid(0, 0, 0.5f, subtex.width, subtex.height, initial_color);
-         C2D_SceneBegin(backpg.target);
-         C2D_DrawRectSolid(0, 0, 0.5f, subtex.width, subtex.height, initial_color);
-      }
 
       if(touching)
       {
