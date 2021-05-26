@@ -41,14 +41,14 @@ struct PageData {
    C3D_RenderTarget * target;    //Actual data?
 };
 
-void create_page(struct PageData * result, Tex3DS_SubTexture subtex, u32 initial_color)
+void create_page(struct PageData * result, Tex3DS_SubTexture subtex) //, u32 initial_color)
 {
    result->subtex = subtex;
    C3D_TexInitVRAM(&(result->texture), subtex.width, subtex.height, GPU_RGBA5551);
    result->target = C3D_RenderTargetCreateFromTex(&(result->texture), GPU_TEXFACE_2D, 0, -1);
    result->image.tex = &(result->texture);
    result->image.subtex = &(result->subtex);
-   C2D_TargetClear(result->target, initial_color); //0xFFFFFFFF); 
+   //C2D_TargetClear(result->target, initial_color); //0xFFFFFFFF); 
 }
 
 void clear_page(struct PageData page)
@@ -85,12 +85,13 @@ int main(int argc, char** argv)
    };
 
    struct PageData frontpg, backpg; 
-   create_page(&frontpg, subtex, initial_color);
-   create_page(&backpg, subtex, initial_color);
+   create_page(&frontpg, subtex); //, initial_color);
+   create_page(&backpg, subtex); //, initial_color);
 
-   touchPosition last_touch;
    touchPosition current_touch;
+   touchPosition last_touch = current_touch; //Why? compiler warning shush
    bool touching = false;
+   bool page_initialized = false;
    u32 current_frame = 0;
    float page_pos = 0;
 
@@ -149,6 +150,13 @@ int main(int argc, char** argv)
 
       // Render the scene
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+
+      if(!page_initialized)
+      {
+         C2D_TargetClear(frontpg.target, initial_color); //0xFFFFFFFF); 
+         C2D_TargetClear(backpg.target, initial_color); //0xFFFFFFFF); 
+         page_initialized = true;
+      }
 
       if(touching)
       {
