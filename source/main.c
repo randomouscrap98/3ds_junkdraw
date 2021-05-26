@@ -10,7 +10,7 @@
 #define SCREENWIDTH 320
 #define SCREENHEIGHT 240
 #define PAGEWIDTH 512
-#define PAGEHEIGHT 2048
+#define PAGEHEIGHT 512
 #define CPAD_DEADZONE 40
 #define CPAD_THEORETICALMAX 160
 #define CPAD_PAGECONST 1
@@ -35,20 +35,21 @@ float calc_pagepos(circlePosition pos, float existing_pos)
 }
 
 struct PageData {
+   Tex3DS_SubTexture subtex;
    C3D_Tex texture;
    C3D_RenderTarget * target;
-   C2D_Image image;
+   C2D_Image image; //Simple structure
 };
 
-struct PageData create_page(const Tex3DS_SubTexture * subtex)
+//Pass by value? whatever
+void create_page(struct PageData * result, Tex3DS_SubTexture subtex, u32 initial_color)
 {
-   struct PageData result;
-   C3D_TexInitVRAM(&result.texture, subtex->width, subtex->height, GPU_RGBA5551);
-   result.target = C3D_RenderTargetCreateFromTex(&result.texture, GPU_TEXFACE_2D, 0, -1);
-   result.image.tex = &result.texture;
-   result.image.subtex = subtex; //This could be a problem
-   C2D_TargetClear(result.target, 0); //hopefully transparent
-   return result;
+   result->subtex = subtex;
+   C3D_TexInitVRAM(&(result->texture), subtex.width, subtex.height, GPU_RGB8);
+   result->target = C3D_RenderTargetCreateFromTex(&(result->texture), GPU_TEXFACE_2D, 0, -1);
+   result->image.tex = &(result->texture);
+   result->image.subtex = &(result->subtex); //This could be a problem
+   C2D_TargetClear(result->target, initial_color); //hopefully transparent
 }
 
 void clear_page(struct PageData page)
@@ -71,8 +72,12 @@ int main(int argc, char** argv)
       PAGEWIDTH, PAGEHEIGHT,
       0.0f, 1.0f, 1.0f, 0.0f
    };
-   struct PageData frontpg = create_page(&subtex);
-   struct PageData backpg = create_page(&subtex);
+
+   const u32 initial_color = C2D_Color32(255,255,255,0);
+
+   struct PageData frontpg, backpg; 
+   create_page(&frontpg, subtex, initial_color); //&subtex);
+   //struct PageData backpg = create_page(&subtex);
 
    const u32 bg_color = C2D_Color32(255,255,255,255);
 
@@ -83,13 +88,13 @@ int main(int argc, char** argv)
 
    const u32* color_selected = &color_a;
 
-   touchPosition start_touch;
+   //touchPosition start_touch;
    touchPosition last_touch;
    touchPosition current_touch;
-   touchPosition end_touch;
+   //touchPosition end_touch;
    bool touching = false;
    u32 current_frame = 0;
-   u32 start_frame = 0;
+   //u32 start_frame = 0;
    float page_pos = 0;
 
    printf("Offscreen rendertarget test\n");
@@ -117,20 +122,20 @@ int main(int argc, char** argv)
       hidTouchRead(&current_touch);
 
       if(kDown & KEY_TOUCH) {
-         start_touch = current_touch;
-         start_frame = current_frame;
+         //start_touch = current_touch;
+         //start_frame = current_frame;
          //Just throw away last touch from last time, we don't care
          last_touch = current_touch;
       }
       if(kUp & KEY_TOUCH) {
-         end_touch = current_touch;
+         //end_touch = current_touch;
       }
 
       touching = (kHeld & KEY_TOUCH) > 0;
 
       circlePosition pos;
 		hidCircleRead(&pos);
-      page_pos = calc_pagepos(pos, page_pos);
+      //page_pos = calc_pagepos(pos, page_pos);
 
       // Render the scene
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
@@ -155,7 +160,7 @@ int main(int argc, char** argv)
    }
 
    clear_page(frontpg);
-   clear_page(backpg);
+   //clear_page(backpg);
 
    C2D_Fini();
    C3D_Fini();
