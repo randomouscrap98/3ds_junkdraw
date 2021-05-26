@@ -16,10 +16,6 @@
 #define CPAD_PAGECONST 1
 #define CPAD_PAGEMULT 0.02f
 #define CPAD_PAGECURVE 3.2f
-//#define PAGEMULT_TARGETMIN 1.0f
-//#define PAGEMULT_TARGETMAX 30.0f
-//This BETTER be optimized out!!
-//#define CPAD_RATIO ((PAGEMULT_TARGETMAX - PAGEMULT_TARGETMIN) / CPAD_THEORETICALMAX)
 
 int main(int argc, char** argv)
 {
@@ -105,16 +101,9 @@ int main(int argc, char** argv)
 
       if(cpadmag > CPAD_DEADZONE)
       {
-         //sign = pos.dy < 0 ? -1 : 1; 
-         //page_pos = C2D_Clamp(page_pos + pow(pos.dy * CPAD_PAGEMULT, CPAD_PAGECURVE), 
-         //      0, PAGEHEIGHT - SCREENHEIGHT);
          page_pos = C2D_Clamp(page_pos + (pos.dy < 0 ? 1 : -1) * 
                (CPAD_PAGECONST + pow(cpadmag * CPAD_PAGEMULT, CPAD_PAGECURVE)), 
                0, PAGEHEIGHT - SCREENHEIGHT);
-
-               //(sign * PAGEMULT_TARGETMIN) + 
-               //((pos.dy - sign * CPAD_DEADZONE) * CPAD_RATIO),
-               //0, PAGEHEIGHT - SCREENHEIGHT);
       }
 
       // Render the scene
