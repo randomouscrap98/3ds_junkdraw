@@ -41,14 +41,13 @@ struct PageData {
    C3D_RenderTarget * target;    //Actual data?
 };
 
-void create_page(struct PageData * result, Tex3DS_SubTexture subtex) //, u32 initial_color)
+void create_page(struct PageData * result, Tex3DS_SubTexture subtex)
 {
    result->subtex = subtex;
    C3D_TexInitVRAM(&(result->texture), subtex.width, subtex.height, GPU_RGBA5551);
    result->target = C3D_RenderTargetCreateFromTex(&(result->texture), GPU_TEXFACE_2D, 0, -1);
    result->image.tex = &(result->texture);
    result->image.subtex = &(result->subtex);
-   //C2D_TargetClear(result->target, initial_color); //0xFFFFFFFF); 
 }
 
 void clear_page(struct PageData page)
@@ -67,9 +66,7 @@ int main(int argc, char** argv)
    consoleInit(GFX_TOP, NULL);
    C3D_RenderTarget* screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
-   const u32 initial_color = C2D_Color32(255,255,255,0);
-   //This one lets me draw, but ofc the layers don't work with a non-transparent layer
-   //const u32 initial_color = C2D_Color32(255,255,255,255);
+   const u32 initial_color = C2D_Color32(0,0,0,0);
    const u32 bg_color = C2D_Color32(255,255,255,255);
 
    const u32 color_a = C2D_Color32f(1,0,0,1.0f);
@@ -85,14 +82,16 @@ int main(int argc, char** argv)
    };
 
    struct PageData frontpg, backpg; 
-   create_page(&frontpg, subtex); //, initial_color);
-   create_page(&backpg, subtex); //, initial_color);
+   create_page(&frontpg, subtex); 
+   create_page(&backpg, subtex);
 
    touchPosition current_touch;
    touchPosition last_touch = current_touch; //Why? compiler warning shush
+   touchPosition start_touch;
    bool touching = false;
    bool page_initialized = false;
    u32 current_frame = 0;
+   u32 start_frame = 0;
    float page_pos = 0;
 
    C3D_RenderTarget * target = frontpg.target;
@@ -135,6 +134,8 @@ int main(int argc, char** argv)
       hidTouchRead(&current_touch);
 
       if(kDown & KEY_TOUCH) {
+         start_frame = current_frame;
+         start_touch = current_touch;
          //Just throw away last touch from last time, we don't care
          last_touch = current_touch;
       }
@@ -153,8 +154,8 @@ int main(int argc, char** argv)
 
       if(!page_initialized)
       {
-         C2D_TargetClear(frontpg.target, initial_color); //0xFFFFFFFF); 
-         C2D_TargetClear(backpg.target, initial_color); //0xFFFFFFFF); 
+         C2D_TargetClear(frontpg.target, initial_color); 
+         C2D_TargetClear(backpg.target, initial_color);
          page_initialized = true;
       }
 
@@ -162,7 +163,13 @@ int main(int argc, char** argv)
       {
          C2D_SceneBegin(target);
 
-         //C2D_DrawRectSolid(current_touch.px - 2, current_touch.py - 2, 0.5f, 4, 4, *color_selected);
+         //Calling JUST C2D_DrawLine (like I want) produces no output. Calling
+         //C2DDrawRectSolid beforehand makes it all work.
+         //if(start_frame == current_frame)
+         //{
+            C2D_DrawRectSolid(current_touch.px - 1, current_touch.py - 1, 0.5f, 2, 2, *color_selected);
+         //}
+
          C2D_DrawLine(last_touch.px, last_touch.py + page_pos, *color_selected,
                current_touch.px, current_touch.py + page_pos, *color_selected, 
                2, 0.5f);
