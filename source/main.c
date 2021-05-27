@@ -29,6 +29,10 @@
 
 #define LINESTYLE_STROKE 0
 
+#define SCROLL_WIDTH 3
+#define SCROLL_BG C2D_Color32f(0.8,0.8,0.8,1)
+#define SCROLL_BAR C2D_Color32f(0.5,0.5,0.5,1)
+
 //#define DEBUG_COORD
 #define DEBUG_RUNTESTS
 
@@ -107,7 +111,7 @@ float calc_pagepos(s16 d, float existing_pos, u32 max_pos)
 void update_screenmodifier(struct ScreenModifier * mod, circlePosition pos)
 {
    mod->ofs_x = calc_pagepos(pos.dx, mod->ofs_x, PAGEWIDTH - SCREENWIDTH);
-   mod->ofs_y = calc_pagepos(pos.dy, mod->ofs_y, PAGEHEIGHT - SCREENHEIGHT);
+   mod->ofs_y = calc_pagepos(-pos.dy, mod->ofs_y, PAGEHEIGHT - SCREENHEIGHT);
 }
 
 
@@ -151,6 +155,27 @@ void draw_lines(const struct LinePackage * linepack, const struct ScreenModifier
       //TODO: doesn't take into account the type yet! Some types (like
       //rectangle) draw something other than lines!
    }
+}
+
+void draw_scrollbars(const struct ScreenModifier * mod)
+{
+   //Need to draw an n-thickness scrollbar on the right and bottom. Assumes
+   //standard page size for screen modifier.
+
+   //Bottom and right scrollbar bg
+   C2D_DrawRectSolid(0, SCREENHEIGHT - SCROLL_WIDTH, 0.5f, 
+         SCREENWIDTH, SCROLL_WIDTH, SCROLL_BG);
+   C2D_DrawRectSolid(SCREENWIDTH - SCROLL_WIDTH, 0, 0.5f, 
+         SCROLL_WIDTH, SCREENHEIGHT, SCROLL_BG);
+
+   u16 sofs_x = (float)mod->ofs_x / PAGEWIDTH * SCREENWIDTH;
+   u16 sofs_y = (float)mod->ofs_y / PAGEHEIGHT * SCREENHEIGHT;
+
+   //bottom and right scrollbar bar
+   C2D_DrawRectSolid(sofs_x, SCREENHEIGHT - SCROLL_WIDTH, 0.5f, 
+         SCREENWIDTH * SCREENWIDTH / (float)PAGEWIDTH / mod->zoom, SCROLL_WIDTH, SCROLL_BAR);
+   C2D_DrawRectSolid(SCREENWIDTH - SCROLL_WIDTH, sofs_y, 0.5f, 
+         SCROLL_WIDTH, SCREENHEIGHT * SCREENHEIGHT / (float)PAGEHEIGHT / mod->zoom, SCROLL_BAR);
 }
 
 
@@ -246,7 +271,7 @@ int main(int argc, char** argv)
    for(int i = 0; i < PAGECOUNT; i++)
       create_page(pages + i, subtex);
 
-   struct ScreenModifier screen_mod = {0,0,0}; 
+   struct ScreenModifier screen_mod = {0,0,1}; 
 
    touchPosition current_touch;
    touchPosition last_touch = current_touch; //Why? compiler warning shush
@@ -256,8 +281,6 @@ int main(int argc, char** argv)
    u32 current_frame = 0;
    u32 start_frame = 0;
    u32 end_frame = 0;
-   //u16 width = 2;
-   //u16 current_page = PAGECOUNT - 1; //Always go on the top page
 
    //u8 tool = 0;
 
@@ -269,9 +292,6 @@ int main(int argc, char** argv)
    pending.width = 2;
    pending.layer = PAGECOUNT - 1; //Always start on the top page
    pending.color = full_to_truehalf(color_a);
-
-   //u16 pending_count = TOOL_PENCIL;
-   //u8 pending_style = LINESTYLE_STROKE;
 
    printf("Press ABXY to change color\n");
    printf("Press SELECT to change layers\n");
@@ -301,7 +321,6 @@ int main(int argc, char** argv)
       if(kDown & KEY_SELECT)
       {
          pending.layer = (pending.layer + 1) % PAGECOUNT;
-         //current_page = (current_page + 1) % PAGECOUNT;
          printf("Changing to layer %d\n", pending.layer);
       }
 
@@ -367,7 +386,11 @@ int main(int argc, char** argv)
       C2D_TargetClear(screen, bg_color);
       C2D_SceneBegin(screen);
       for(int i = 0; i < PAGECOUNT; i++)
-         C2D_DrawImageAt(pages[i].image, -screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f, NULL, 1.0f, 1.0f);
+      {
+         C2D_DrawImageAt(pages[i].image, -screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f, 
+               NULL, screen_mod.zoom, screen_mod.zoom);
+      }
+      draw_scrollbars(&screen_mod);
       C3D_FrameEnd(0);
 
       last_touch = current_touch;
