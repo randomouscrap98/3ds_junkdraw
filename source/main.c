@@ -23,7 +23,14 @@
 #define CPAD_PAGECURVE 3.2f
 
 //#define DEBUG_COORD
+#define DEBUG_RUNTESTS
 
+// TODO: Figure out these weirdness things:
+// - Can't draw on the first 8 pixels along the edge of a target, system crashes
+// - Fill color works perfectly fine using line/rect calls, but ClearTarget
+//   MUST have the proper 16 bit format....
+// - ClearTarget with a transparent color seems to make the color stick using
+//   DrawLine unless a DrawRect (or perhaps other) call is performed.
 
 //Generic page difference using cpad values, return the new page position given 
 //the existing position and the circlepad input
@@ -52,6 +59,20 @@ float calc_pagepos_y(circlePosition pos, float existing_pos) {
 
 
 
+struct SimpleLine {
+   u8 layer;
+   u16 color;
+   u8 width;
+   u16 x1;
+   u16 y1;
+   u16 x2;
+   u16 y2;
+   bool rectangle;
+};
+
+
+
+
 struct PageData {
    Tex3DS_SubTexture subtex;     //Simple structures
    C3D_Tex texture;
@@ -74,21 +95,62 @@ void delete_page(struct PageData page)
    C3D_TexDelete(&page.texture);
 }
 
+
+
 u32 full_to_half(u32 val)
 {
-   //Format: 0xAABBGGRR
-   //Half  : 0bGGBBBBBARRRRRGGGxxxxxxxxxxxxxxxx
+   //Format: 0b AAAAAAAA BBBBBBBB GGGGGGGG RRRRRRRR
+   //Half  : 0b GGBBBBBA RRRRRGGG 00000000 00000000
    u8 green = (val & 0x0000FF00) >> 11; //crush last three bits
 
    return 
       (
-         (val & 0xFF000000 ? 0x0100 : 0) +   //Alpha is lowest bit on upper byte
-         (val & 0x000000F8) +                //Red is slightly nice because it's already in the right position
-         ((green & 0x1c) >> 2) + ((green & 0x03) << 14) + //Green is split between bytes
+         (val & 0xFF000000 ? 0x0100 : 0) |   //Alpha is lowest bit on upper byte
+         (val & 0x000000F8) |                //Red is slightly nice because it's already in the right position
+         ((green & 0x1c) >> 2) | ((green & 0x03) << 14) | //Green is split between bytes
          ((val & 0x00F80000) >> 10)          //Blue is just shifted and crushed
       ) << 16; //first 2 bytes are trash
 }
 
+u32 half_to_full(u16 val)
+{
+   //Half : 0b                   GGBBBBBA RRRRRGGG
+   //Full : 0b AAAAAAAA BBBBBBBB GGGGGGGG RRRRRRRR
+   return
+      (
+         (val & 0x0100 ? 0xFF000000 : 0)  |  //Alpha always 255 or 0
+         ((val & 0x3E00) << 10) |            //Blue just shift a lot
+         ((val & 0x0007) << 13) | ((val & 0xc000) >> 3) |  //Green is split
+         (val & 0x00f8)                      //Red is easy, already in the right place
+      );
+}
+
+
+
+void run_tests()
+{
+   printf("Running tests; only errors will be displayed\n");
+   if(test_transparenthalftofull()) return; 
+   printf("\nAll tests passed\n");
+}
+
+int test_transparenthalftofull()
+{
+   //It's such a small space, literally just run the gamut of 16 bit colors
+   for(u32 col = 0; col <= 0xFFFF; col++)
+   {
+      u32 full = half_to_full(col);
+      u32 half = full_to_half(full);
+      if((col & 0xFFF) == 0xFFF) printf(".");
+      if((col << 16) != half)
+      {
+         printf("ERR: Expected %08x, got %08x, full: %08x\n", col << 16, half, full);
+         return 1;
+      }
+   }
+
+   return 0;
+}
 
 
 int main(int argc, char** argv)
@@ -101,12 +163,8 @@ int main(int argc, char** argv)
    consoleInit(GFX_TOP, NULL);
    C3D_RenderTarget* screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
-   //const u32 initial_color = 0xffff;//C2D_Color32f(0.5f, 0.5f, 0.5f, 1.0f);
    //weird byte order? 16 bits of color are at top
-   //const u32 initial_color = full_to_half(C2D_Color32(0x12,0x34,0x56,0x78));
    const u32 initial_color = full_to_half(C2D_Color32(128,128,128,255));
-      //= 0x01f80000; //C2D_Color32(0,0,200,255);
-      //1 + 31 + (16 << 5) + (16 << 10);//C2D_Color32f(0.5f,1.0f,1.0f,1.0f);
    //const u32 bg_color = C2D_Color32(255,255,255,255);
    const u32 bg_color = C2D_Color32f(0.0,0.0,0.00,1.0);
 
@@ -145,6 +203,9 @@ int main(int argc, char** argv)
    printf("\nPress START to quit.\n");
    printf("STARTING COLOR: %08x\n", initial_color);
 
+#ifdef DEBUG_RUNTESTS
+   run_tests();
+#endif
 
    while(aptMainLoop())
    {
@@ -235,6 +296,7 @@ int main(int argc, char** argv)
       current_frame++;
    }
 
+END:
    for(int i = 0; i < PAGECOUNT; i++)
       delete_page(pages[i]);
 
