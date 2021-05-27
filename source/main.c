@@ -262,7 +262,7 @@ int main(int argc, char** argv)
    //u8 tool = 0;
 
    struct LinePackage pending;
-   struct SimpleLine pending_lines[MAX_STROKE_LINES];
+   struct SimpleLine * pending_lines = malloc(MAX_STROKE_LINES * sizeof(struct SimpleLine));
    pending.lines = pending_lines; //Use the stack for my pending stroke
    pending.line_count = 0;
    pending.style = LINESTYLE_STROKE;
@@ -317,7 +317,7 @@ int main(int argc, char** argv)
          end_frame = current_frame;
       }
 
-      touching = (kHeld & KEY_TOUCH) > 0;
+      touching = (page_initialized && (kHeld & KEY_TOUCH) > 0);
 
       circlePosition pos;
 		hidCircleRead(&pos);
@@ -337,44 +337,25 @@ int main(int argc, char** argv)
       {
          C2D_SceneBegin(pages[pending.layer].target);
 
-         //This is for a stroke, do different things if we have different tools!
-         struct SimpleLine * line = &pending.lines[pending.line_count];
-         line->x1 = last_touch.px;
-         line->y1 = last_touch.py;
-         line->x2 = current_touch.px;
-         line->y2 = current_touch.py;
+         if(pending.line_count < MAX_STROKE_LINES)
+         {
+            //This is for a stroke, do different things if we have different tools!
+            struct SimpleLine * line = pending.lines + pending.line_count;
+            line->x1 = last_touch.px;
+            line->y1 = last_touch.py;
+            line->x2 = current_touch.px;
+            line->y2 = current_touch.py;
 
-         pending.lines = line; //Force the pending line to only show the end
-         u16 oldcount = pending.line_count;
-         pending.line_count = 1;
+            pending.lines = line; //Force the pending line to only show the end
+            u16 oldcount = pending.line_count;
+            pending.line_count = 1;
 
-         //Draw ONLY the current line
-         //draw_lines(&pending, &screen_mod);
-         //Reset pending lines to proper thing
-         pending.lines = pending_lines;
-         pending.line_count = oldcount + 1;
-
-         //u16 width_ofs = width / 2;
-         //float old_x = C2D_Clamp(last_touch.px + page_pos_x, PAGE_EDGEBUF + width_ofs, PAGEWIDTH - 1);
-         //float old_y = C2D_Clamp(last_touch.py + page_pos_y, PAGE_EDGEBUF + width_ofs, PAGEHEIGHT - 1);
-         //float real_x = C2D_Clamp(current_touch.px + page_pos_x, PAGE_EDGEBUF + width_ofs, PAGEWIDTH - 1);
-         //float real_y = C2D_Clamp(current_touch.py + page_pos_y, PAGE_EDGEBUF + width_ofs, PAGEHEIGHT - 1);
-
-//#ifdef DEBUGCOORD
-//         printf("%d,%d: %.1f,%.1f  %.1f,%.1f\n", 
-//               current_touch.px, current_touch.py, 
-//               page_pos_x, page_pos_y, real_x, real_y);
-//#endif
-
-         //Calling JUST C2D_DrawLine (like I want) produces no output. Calling
-         //C2DDrawRectSolid beforehand makes it all work.
-         //if(start_frame == current_frame)
-         //{
-         //C2D_DrawRectSolid(0,0,0.5f,1,1,*color_selected);
-               //real_x - 1, real_y - 1, 0.5f, 2, 2, *color_selected);
-         //C2D_DrawRectSolid(real_x - width_ofs, real_y - width_ofs, 0.5f, width, width, *color_selected);
-         //}
-         //C2D_DrawLine(old_x, old_y, *color_selected, real_x, real_y, *color_selected, width, 0.5f);
+            //Draw ONLY the current line
+            draw_lines(&pending, &screen_mod);
+            //Reset pending lines to proper thing
+            pending.lines = pending_lines;
+            pending.line_count = oldcount + 1;
+         }
       }
 
       //TODO: Here, you would NORMALLY save the line or whatever
@@ -392,6 +373,8 @@ int main(int argc, char** argv)
       last_touch = current_touch;
       current_frame++;
    }
+
+   free(pending_lines);
 
    for(int i = 0; i < PAGECOUNT; i++)
       delete_page(pages[i]);
