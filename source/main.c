@@ -18,6 +18,7 @@
 //   MUST have the proper 16 bit format....
 // - ClearTarget with a transparent color seems to make the color stick using
 //   DrawLine unless a DrawRect (or perhaps other) call is performed.
+// - Can't fill with transparency to clear.... 
 
 
 // -- SIMPLE UTILS --
@@ -80,15 +81,14 @@ struct ScreenModifier
 
 //Generic page difference using cpad values, return the new page position given 
 //the existing position and the circlepad input
-float calc_pagepos(s16 d, float existing_pos, u32 max_pos)
+float calc_pagepos(s16 d, float existing_pos)
 {
    u16 cpadmag = abs(d);
 
    if(cpadmag > CPAD_DEADZONE)
    {
-      return C2D_Clamp(existing_pos + (d < 0 ? -1 : 1) * 
-            (CPAD_PAGECONST + pow(cpadmag * CPAD_PAGEMULT, CPAD_PAGECURVE)), 
-            0, max_pos);
+      return existing_pos + (d < 0 ? -1 : 1) * 
+            (CPAD_PAGECONST + pow(cpadmag * CPAD_PAGEMULT, CPAD_PAGECURVE));
    }
    else
    {
@@ -96,11 +96,28 @@ float calc_pagepos(s16 d, float existing_pos, u32 max_pos)
    }
 }
 
+void set_screenmodifier_ofs(struct ScreenModifier * mod, u16 ofs_x, u16 ofs_y)
+{
+   mod->ofs_x = C2D_Clamp(ofs_x, 0, PAGEWIDTH * mod->zoom - SCREENWIDTH);
+   mod->ofs_y = C2D_Clamp(ofs_y, 0, PAGEHEIGHT * mod->zoom - SCREENHEIGHT);
+}
+
+void set_screenmodifier_zoom(struct ScreenModifier * mod, float zoom)
+{
+   float zoom_ratio = zoom / mod->zoom;
+   u16 center_x = SCREENWIDTH >> 1;
+   u16 center_y = SCREENHEIGHT >> 1;
+   u16 new_ofsx = zoom_ratio * (mod->ofs_x + center_x) - center_x;
+   u16 new_ofsy = zoom_ratio * (mod->ofs_y + center_y) - center_y;
+   mod->zoom = zoom;
+   set_screenmodifier_ofs(mod, new_ofsx, new_ofsy);
+}
+
 void update_screenmodifier(struct ScreenModifier * mod, circlePosition pos)
 {
-   mod->ofs_x = calc_pagepos(pos.dx, mod->ofs_x, PAGEWIDTH * mod->zoom - SCREENWIDTH);
-   mod->ofs_y = calc_pagepos(-pos.dy, mod->ofs_y, PAGEHEIGHT * mod->zoom - SCREENHEIGHT);
+   set_screenmodifier_ofs(mod, calc_pagepos(pos.dx, mod->ofs_x), calc_pagepos(-pos.dy, mod->ofs_y));
 }
+
 
 
 
@@ -411,7 +428,7 @@ int main(int argc, char** argv)
       }
       if(kUp & KEY_TOUCH) end_frame = current_frame;
 
-      if(zoom_power != last_zoom_power) screen_mod.zoom = pow(2, zoom_power);
+      if(zoom_power != last_zoom_power) set_screenmodifier_zoom(&screen_mod, pow(2, zoom_power));
 
       if(kDown & ~(KEY_TOUCH) || !current_frame)
       {
