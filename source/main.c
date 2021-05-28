@@ -23,6 +23,8 @@
 #define CPAD_PAGECURVE 3.2f
 
 #define MAX_STROKE_LINES 5000
+#define MAX_ZOOM 3
+#define MIN_ZOOM -2
 
 #define TOOL_PENCIL 0
 #define TOOL_ERASER 0
@@ -110,8 +112,8 @@ float calc_pagepos(s16 d, float existing_pos, u32 max_pos)
 
 void update_screenmodifier(struct ScreenModifier * mod, circlePosition pos)
 {
-   mod->ofs_x = calc_pagepos(pos.dx, mod->ofs_x, PAGEWIDTH - SCREENWIDTH);
-   mod->ofs_y = calc_pagepos(-pos.dy, mod->ofs_y, PAGEHEIGHT - SCREENHEIGHT);
+   mod->ofs_x = calc_pagepos(pos.dx, mod->ofs_x, PAGEWIDTH * mod->zoom - SCREENWIDTH);
+   mod->ofs_y = calc_pagepos(-pos.dy, mod->ofs_y, PAGEHEIGHT * mod->zoom - SCREENHEIGHT);
 }
 
 
@@ -142,10 +144,10 @@ void draw_lines(const struct LinePackage * linepack, const struct ScreenModifier
 
    for(int i = 0; i < linepack->line_count; i++)
    {
-      float old_x = C2D_Clamp(lines[i].x1 + mod->ofs_x, PAGE_EDGEBUF + width_ofs, PAGEWIDTH - 1);
-      float old_y = C2D_Clamp(lines[i].y1 + mod->ofs_y, PAGE_EDGEBUF + width_ofs, PAGEHEIGHT - 1);
-      float real_x = C2D_Clamp(lines[i].x2 + mod->ofs_x, PAGE_EDGEBUF + width_ofs, PAGEWIDTH - 1);
-      float real_y = C2D_Clamp(lines[i].y2 + mod->ofs_y, PAGE_EDGEBUF + width_ofs, PAGEHEIGHT - 1);
+      float old_x = C2D_Clamp(lines[i].x1, PAGE_EDGEBUF + width_ofs, PAGEWIDTH - 1);
+      float old_y = C2D_Clamp(lines[i].y1, PAGE_EDGEBUF + width_ofs, PAGEHEIGHT - 1);
+      float real_x = C2D_Clamp(lines[i].x2, PAGE_EDGEBUF + width_ofs, PAGEWIDTH - 1);
+      float real_y = C2D_Clamp(lines[i].y2, PAGE_EDGEBUF + width_ofs, PAGEHEIGHT - 1);
       //For some reason, I can't just draw a line, because the system won't draw
       //it if the target is cleared with transparency. But drawing a rect first
       //fixes that, so... guess that's just part of the style of the thing.
@@ -168,8 +170,8 @@ void draw_scrollbars(const struct ScreenModifier * mod)
    C2D_DrawRectSolid(SCREENWIDTH - SCROLL_WIDTH, 0, 0.5f, 
          SCROLL_WIDTH, SCREENHEIGHT, SCROLL_BG);
 
-   u16 sofs_x = (float)mod->ofs_x / PAGEWIDTH * SCREENWIDTH;
-   u16 sofs_y = (float)mod->ofs_y / PAGEHEIGHT * SCREENHEIGHT;
+   u16 sofs_x = (float)mod->ofs_x / PAGEWIDTH / mod->zoom * SCREENWIDTH;
+   u16 sofs_y = (float)mod->ofs_y / PAGEHEIGHT / mod->zoom * SCREENHEIGHT;
 
    //bottom and right scrollbar bar
    C2D_DrawRectSolid(sofs_x, SCREENHEIGHT - SCROLL_WIDTH, 0.5f, 
@@ -250,16 +252,14 @@ int main(int argc, char** argv)
    C3D_RenderTarget* screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
    //weird byte order? 16 bits of color are at top
-   const u32 layer_color = full_to_half(C2D_Color32(0,0,0,0)); //128,128,128,255));
+   const u32 layer_color = full_to_half(C2D_Color32(0,0,0,0));
+   const u32 screen_color = C2D_Color32(90,90,90,255);
    const u32 bg_color = C2D_Color32(255,255,255,255);
-   //const u32 bg_color = C2D_Color32f(0.0,0.0,0.00,1.0);
 
    const u32 color_a = C2D_Color32f(1,0,0,1.0f);
    const u32 color_b = C2D_Color32f(1,1,0,1.0f);
    const u32 color_x = C2D_Color32f(0,0,1,1.0f);
    const u32 color_y = C2D_Color32f(0,1,0,1.0f);
-
-   //const u32* color_selected = &color_a;
 
    const Tex3DS_SubTexture subtex = {
       PAGEWIDTH, PAGEHEIGHT,
@@ -281,6 +281,8 @@ int main(int argc, char** argv)
    u32 current_frame = 0;
    u32 start_frame = 0;
    u32 end_frame = 0;
+   s8 zoom_power = 0;
+   s8 last_zoom_power = 0;
 
    //u8 tool = 0;
 
@@ -297,7 +299,6 @@ int main(int argc, char** argv)
    printf("Press SELECT to change layers\n");
    printf("C-pad to scroll up/down\n");
    printf("\nPress START to quit.\n");
-   printf("STARTING COLOR: %08lx\n", layer_color);
 
 #ifdef DEBUG_RUNTESTS
    run_tests();
@@ -317,6 +318,17 @@ int main(int argc, char** argv)
       else if(kDown & KEY_B) pending.color = full_to_truehalf(color_b);
       else if(kDown & KEY_X) pending.color = full_to_truehalf(color_x);
       else if(kDown & KEY_Y) pending.color = full_to_truehalf(color_y);
+
+      if(kDown & KEY_DUP && zoom_power < MAX_ZOOM)
+         zoom_power++;
+      if(kDown & KEY_DDOWN && zoom_power > MIN_ZOOM)
+         zoom_power--;
+
+      if(zoom_power != last_zoom_power)
+      {
+         screen_mod.zoom = pow(2, zoom_power);
+         printf("Zoom changed to %.2f\n", screen_mod.zoom);
+      }
       
       if(kDown & KEY_SELECT)
       {
@@ -330,7 +342,7 @@ int main(int argc, char** argv)
          start_frame = current_frame;
          //start_touch = current_touch;
          //Just throw away last touch from last time, we don't care
-         last_touch = current_touch;
+         //last_touch = current_touch;
       }
       if(kUp & KEY_TOUCH) {
          end_frame = current_frame;
@@ -360,10 +372,20 @@ int main(int argc, char** argv)
          {
             //This is for a stroke, do different things if we have different tools!
             struct SimpleLine * line = pending.lines + pending.line_count;
-            line->x1 = last_touch.px;
-            line->y1 = last_touch.py;
-            line->x2 = current_touch.px;
-            line->y2 = current_touch.py;
+
+            line->x2 = current_touch.px / screen_mod.zoom + screen_mod.ofs_x / screen_mod.zoom;
+            line->y2 = current_touch.py / screen_mod.zoom + screen_mod.ofs_y / screen_mod.zoom;
+
+            if(pending.line_count == 0)
+            {
+               line->x1 = line->x2;
+               line->y1 = line->y2;
+            }
+            else
+            {
+               line->x1 = pending.lines[pending.line_count - 1].x2;
+               line->y1 = pending.lines[pending.line_count - 1].y2;
+            }
 
             pending.lines = line; //Force the pending line to only show the end
             u16 oldcount = pending.line_count;
@@ -383,8 +405,10 @@ int main(int argc, char** argv)
          pending.line_count = 0;
       }
 
-      C2D_TargetClear(screen, bg_color);
+      C2D_TargetClear(screen, screen_color);
       C2D_SceneBegin(screen);
+      C2D_DrawRectSolid(-screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f,
+            PAGEWIDTH * screen_mod.zoom, PAGEHEIGHT * screen_mod.zoom, bg_color); //The bg color
       for(int i = 0; i < PAGECOUNT; i++)
       {
          C2D_DrawImageAt(pages[i].image, -screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f, 
@@ -394,6 +418,7 @@ int main(int argc, char** argv)
       C3D_FrameEnd(0);
 
       last_touch = current_touch;
+      last_zoom_power = zoom_power;
       current_frame++;
    }
 
