@@ -17,11 +17,14 @@
 #define CPAD_PAGECURVE 3.2f
 
 #define MAX_STROKE_LINES 5000
-#define MAX_ZOOM 3
 #define MIN_ZOOM -2
+#define MAX_ZOOM 3
+#define MIN_WIDTH 1
+#define MAX_WIDTH 64
 
 #define TOOL_PENCIL 0
-#define TOOL_ERASER 0
+#define TOOL_ERASER 1
+#define TOOL_COUNT 2
 
 #define LINESTYLE_STROKE 0
 
@@ -34,11 +37,15 @@
 #define SCROLL_BAR C2D_Color32f(0.5,0.5,0.5,1)
 
 #define PALETTE_COLORS 64
-#define PALETTE_SWATCHWIDTH 20
+#define PALETTE_SWATCHWIDTH 18
 #define PALETTE_SWATCHMARGIN 2
-#define PALETTE_SELECTED_COLOR C2D_Color32f(1,0,0,1);
-#define PALETTE_BG C2D_Color32f(0.3,0.3,0.3,1);
+#define PALETTE_SELECTED_COLOR C2D_Color32f(1,0,0,1)
+#define PALETTE_BG C2D_Color32f(0.3,0.3,0.3,1)
 #define PALETTE_STARTINDEX 1
+#define PALETTE_MINISIZE 10
+#define PALETTE_MINIPADDING 1
+#define PALETTE_OFSX 10
+#define PALETTE_OFSY 10
 
 
 // The base palette definition

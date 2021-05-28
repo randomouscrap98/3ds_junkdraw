@@ -10,7 +10,7 @@
 #include "constants.h"
 
 //#define DEBUG_COORD
-#define DEBUG_RUNTESTS
+//#define DEBUG_RUNTESTS
 
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
@@ -104,10 +104,11 @@ void update_screenmodifier(struct ScreenModifier * mod, circlePosition pos)
 
 
 
-// -- DRAWING UTILS --
+// -- Stroke/line utilities --
 
 //A line doesn't contain all the data needed to draw itself. That would be a
 //line package
+
 struct SimpleLine {
    u16 x1, y1, x2, y2;
 };
@@ -120,6 +121,33 @@ struct LinePackage {
    struct SimpleLine * lines;
    u16 line_count;
 };
+
+struct SimpleLine * add_stroke(struct LinePackage * pending, 
+      const touchPosition * pos, const struct ScreenModifier * mod)
+{
+   //This is for a stroke, do different things if we have different tools!
+   struct SimpleLine * line = pending->lines + pending->line_count;
+
+   line->x2 = pos->px / mod->zoom + mod->ofs_x / mod->zoom;
+   line->y2 = pos->py / mod->zoom + mod->ofs_y / mod->zoom;
+
+   if(pending->line_count == 0)
+   {
+      line->x1 = line->x2;
+      line->y1 = line->y2;
+   }
+   else
+   {
+      line->x1 = pending->lines[pending->line_count - 1].x2;
+      line->y1 = pending->lines[pending->line_count - 1].y2;
+   }
+
+   return line;
+}
+
+
+
+// -- DRAWING UTILS --
 
 void draw_centeredrect(float x, float y, u16 width, u32 color)
 {
@@ -179,9 +207,59 @@ void draw_scrollbars(const struct ScreenModifier * mod)
 
 void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index)
 {
-   
+   C2D_DrawRectSolid(0, 0, 0.5f, SCREENWIDTH, SCREENHEIGHT, PALETTE_BG);
+
+   u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
+   for(u16 i = 0; i < palette_size; i++)
+   {
+      //TODO: an implicit 8 wide thing
+      u16 x = i & 7;
+      u16 y = i >> 3;
+
+      if(i == selected_index)
+      {
+         C2D_DrawRectSolid(
+            PALETTE_OFSX + x * shift, 
+            PALETTE_OFSY + y * shift, 0.5f, 
+            shift, shift, PALETTE_SELECTED_COLOR);
+      }
+
+      C2D_DrawRectSolid(
+         PALETTE_OFSX + x * shift + PALETTE_SWATCHMARGIN, 
+         PALETTE_OFSY + y * shift + PALETTE_SWATCHMARGIN, 0.5f, 
+         PALETTE_SWATCHWIDTH, PALETTE_SWATCHWIDTH, half_to_full(palette[i]));
+   }
 }
 
+
+
+// -- CONTROL UTILS --
+
+struct ToolData {
+   u8 width;
+   u16 color;
+   u8 style;
+};
+
+void fill_defaulttools(struct ToolData * tool_data, u16 default_color)
+{
+   tool_data[TOOL_PENCIL].width = 2;
+   tool_data[TOOL_PENCIL].color = default_color;
+   tool_data[TOOL_PENCIL].style = LINESTYLE_STROKE;
+   tool_data[TOOL_ERASER].width = 4;
+   tool_data[TOOL_ERASER].color = 0;
+   tool_data[TOOL_ERASER].style = LINESTYLE_STROKE;
+}
+
+void update_paletteindex(const touchPosition * pos, u8 * index)
+{
+   u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
+   u16 xind = (pos->px - PALETTE_OFSX) / shift;
+   u16 yind = (pos->py - PALETTE_OFSY) / shift;
+   u16 new_index = (yind << 3) + xind;
+   if(new_index >= 0 && new_index < PALETTE_COLORS)
+      *index = new_index;
+}
 
 
 // -- LAYER UTILS --
@@ -286,21 +364,20 @@ int main(int argc, char** argv)
    s8 zoom_power = 0;
    s8 last_zoom_power = 0;
 
-   //u8 tool = 0;
+   u8 current_tool = 0;
+   struct ToolData tool_data[TOOL_COUNT];
+   fill_defaulttools(tool_data, palette[palette_index]);
 
    struct LinePackage pending;
    struct SimpleLine * pending_lines = malloc(MAX_STROKE_LINES * sizeof(struct SimpleLine));
    pending.lines = pending_lines; //Use the stack for my pending stroke
    pending.line_count = 0;
-   pending.style = LINESTYLE_STROKE;
-   pending.width = 2;
    pending.layer = PAGECOUNT - 1; //Always start on the top page
-   pending.color = palette[palette_index];
 
-   printf("Press ABXY to change color\n");
-   printf("Press SELECT to change layers\n");
-   printf("C-pad to scroll up/down\n");
-   printf("\nPress START to quit.\n");
+   printf("     L - change color\n");
+   printf("SELECT - change layers\n");
+   printf(" C-PAD - scroll canvas\n");
+   printf(" START - quit.\n\n");
 
 #ifdef DEBUG_RUNTESTS
    run_tests();
@@ -317,24 +394,37 @@ int main(int argc, char** argv)
 
       // Respond to user input
       if(kDown & KEY_START) break;
+      if(kDown & KEY_L) palette_active = !palette_active;
       if(kDown & KEY_DUP && zoom_power < MAX_ZOOM) zoom_power++;
       if(kDown & KEY_DDOWN && zoom_power > MIN_ZOOM) zoom_power--;
-      if(kDown & KEY_TOUCH) start_frame = current_frame;
+      if(kDown & KEY_DRIGHT && tool_data[current_tool].width < MAX_WIDTH) tool_data[current_tool].width++;
+      if(kDown & KEY_DLEFT && tool_data[current_tool].width > MIN_WIDTH) tool_data[current_tool].width--;
+      if(kDown & KEY_SELECT) pending.layer = (pending.layer + 1) % PAGECOUNT;
+      if(kDown & KEY_A) current_tool = TOOL_PENCIL;
+      if(kDown & KEY_B) current_tool = TOOL_ERASER;
+      if(kDown & KEY_TOUCH)
+      {
+         start_frame = current_frame;
+         pending.color = tool_data[current_tool].color;
+         pending.style = tool_data[current_tool].style;
+         pending.width = tool_data[current_tool].width;
+      }
       if(kUp & KEY_TOUCH) end_frame = current_frame;
-      if(kDown & KEY_SELECT)
+
+      if(zoom_power != last_zoom_power) screen_mod.zoom = pow(2, zoom_power);
+
+      if(kDown & ~(KEY_TOUCH) || !current_frame)
       {
-         pending.layer = (pending.layer + 1) % PAGECOUNT;
-         printf("Changing to layer %d\n", pending.layer);
+         printf("\x1b[30;1HW:%02d L:%d Z:%03.2f T:%d C:%#06x",
+               tool_data[current_tool].width, 
+               pending.layer,
+               screen_mod.zoom,
+               current_tool,
+               tool_data[current_tool].color
+         );
       }
 
-      if(zoom_power != last_zoom_power)
-      {
-         screen_mod.zoom = pow(2, zoom_power);
-         printf("Zoom changed to %.2f\n", screen_mod.zoom);
-      }
-      
-
-      touching = (!palette_active && page_initialized && (kHeld & KEY_TOUCH) > 0);
+      touching = (kHeld & KEY_TOUCH) > 0;
 
       update_screenmodifier(&screen_mod, pos);
 
@@ -348,38 +438,32 @@ int main(int argc, char** argv)
          page_initialized = true;
       }
 
-      if(touching)
+      if(touching && page_initialized)
       {
-         C2D_SceneBegin(pages[pending.layer].target);
-
-         if(pending.line_count < MAX_STROKE_LINES)
+         if(palette_active)
          {
-            //This is for a stroke, do different things if we have different tools!
-            struct SimpleLine * line = pending.lines + pending.line_count;
+            update_paletteindex(&current_touch, &palette_index);
+            tool_data[current_tool].color = palette[palette_index];
+         }
+         else
+         {
+            C2D_SceneBegin(pages[pending.layer].target);
 
-            line->x2 = current_touch.px / screen_mod.zoom + screen_mod.ofs_x / screen_mod.zoom;
-            line->y2 = current_touch.py / screen_mod.zoom + screen_mod.ofs_y / screen_mod.zoom;
-
-            if(pending.line_count == 0)
+            if(pending.line_count < MAX_STROKE_LINES)
             {
-               line->x1 = line->x2;
-               line->y1 = line->y2;
-            }
-            else
-            {
-               line->x1 = pending.lines[pending.line_count - 1].x2;
-               line->y1 = pending.lines[pending.line_count - 1].y2;
-            }
+               //This is for a stroke, do different things if we have different tools!
+               struct SimpleLine * line = add_stroke(&pending, &current_touch, &screen_mod);
 
-            pending.lines = line; //Force the pending line to only show the end
-            u16 oldcount = pending.line_count;
-            pending.line_count = 1;
+               pending.lines = line; //Force the pending line to only show the end
+               u16 oldcount = pending.line_count;
+               pending.line_count = 1;
 
-            //Draw ONLY the current line
-            draw_lines(&pending, &screen_mod);
-            //Reset pending lines to proper thing
-            pending.lines = pending_lines;
-            pending.line_count = oldcount + 1;
+               //Draw ONLY the current line
+               draw_lines(&pending, &screen_mod);
+               //Reset pending lines to proper thing
+               pending.lines = pending_lines;
+               pending.line_count = oldcount + 1;
+            }
          }
       }
 
@@ -394,7 +478,7 @@ int main(int argc, char** argv)
 
       if(palette_active)
       {
-
+         draw_colorpicker(palette, PALETTE_COLORS, palette_index);
       }
       else
       {
@@ -405,6 +489,12 @@ int main(int argc, char** argv)
             C2D_DrawImageAt(pages[i].image, -screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f, 
                   NULL, screen_mod.zoom, screen_mod.zoom);
          }
+         //The selected color thing
+         C2D_DrawRectSolid(0, 0, 0.5f, PALETTE_MINISIZE, PALETTE_MINISIZE, PALETTE_BG);
+         C2D_DrawRectSolid(PALETTE_MINIPADDING, PALETTE_MINIPADDING, 0.5f, 
+               PALETTE_MINISIZE - PALETTE_MINIPADDING * 2, 
+               PALETTE_MINISIZE - PALETTE_MINIPADDING * 2, 
+               half_to_full(palette[palette_index])); 
          draw_scrollbars(&screen_mod);
       }
 
