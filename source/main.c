@@ -7,33 +7,7 @@
 #include <string.h>
 #include <math.h>
 
-#define SCREENWIDTH 320
-#define SCREENHEIGHT 240
-
-#define PAGEWIDTH 1024
-#define PAGEHEIGHT 1024
-#define PAGEFORMAT GPU_RGBA5551
-#define PAGE_EDGEBUF 8
-#define PAGECOUNT 2
-
-#define CPAD_DEADZONE 40
-#define CPAD_THEORETICALMAX 160
-#define CPAD_PAGECONST 1
-#define CPAD_PAGEMULT 0.02f
-#define CPAD_PAGECURVE 3.2f
-
-#define MAX_STROKE_LINES 5000
-#define MAX_ZOOM 3
-#define MIN_ZOOM -2
-
-#define TOOL_PENCIL 0
-#define TOOL_ERASER 0
-
-#define LINESTYLE_STROKE 0
-
-#define SCROLL_WIDTH 3
-#define SCROLL_BG C2D_Color32f(0.8,0.8,0.8,1)
-#define SCROLL_BAR C2D_Color32f(0.5,0.5,0.5,1)
+#include "constants.h"
 
 //#define DEBUG_COORD
 #define DEBUG_RUNTESTS
@@ -47,6 +21,12 @@
 
 
 // -- SIMPLE UTILS --
+
+//Take an rgb WITHOUT alpha and convert to 3ds full color (with alpha)
+u32 rgb_to_full(u32 rgb)
+{
+   return 0xFF000000 | ((rgb >> 16) & 0x0000FF) | (rgb & 0x00FF00) | ((rgb << 16) & 0xFF0000);
+}
 
 u32 full_to_half(u32 val)
 {
@@ -79,6 +59,12 @@ u32 half_to_full(u16 val)
          ((val & 0x0007) << 13) | ((val & 0xc000) >> 3) |  //Green is split
          (val & 0x00f8)                      //Red is easy, already in the right place
       );
+}
+
+void convert_palette(u32 * original, u16 * destination, u16 size)
+{
+   for(int i = 0; i < size; i++)
+      destination[i] = full_to_truehalf(rgb_to_full(original[i]));
 }
 
 
@@ -156,9 +142,7 @@ void custom_drawline(const struct SimpleLine * line, u16 width, u32 color)
    float yang = sin(ang);
 
    for(float i = 0; i <= dist; i+=0.5)
-   {
       draw_centeredrect(line->x1+xang*i, line->y1+yang*i, width, color);
-   }
 }
 
 //Assumes you're already on the appropriate page you want and all that
@@ -169,21 +153,7 @@ void draw_lines(const struct LinePackage * linepack, const struct ScreenModifier
    struct SimpleLine * lines = linepack->lines;
 
    for(int i = 0; i < linepack->line_count; i++)
-   {
       custom_drawline(&lines[i], linepack->width, color);
-      //float old_x = C2D_Clamp(lines[i].x1, PAGE_EDGEBUF + width_ofs, PAGEWIDTH - 1);
-      //float old_y = C2D_Clamp(lines[i].y1, PAGE_EDGEBUF + width_ofs, PAGEHEIGHT - 1);
-      //float real_x = C2D_Clamp(lines[i].x2, PAGE_EDGEBUF + width_ofs, PAGEWIDTH - 1);
-      //float real_y = C2D_Clamp(lines[i].y2, PAGE_EDGEBUF + width_ofs, PAGEHEIGHT - 1);
-      ////For some reason, I can't just draw a line, because the system won't draw
-      ////it if the target is cleared with transparency. But drawing a rect first
-      ////fixes that, so... guess that's just part of the style of the thing.
-      //C2D_DrawRectSolid(real_x - width_ofs, real_y - width_ofs, 0.5f, 
-      //      linepack->width, linepack->width, color);
-      //C2D_DrawLine(old_x, old_y, color, real_x, real_y, color, linepack->width, 0.5f);
-      //TODO: doesn't take into account the type yet! Some types (like
-      //rectangle) draw something other than lines!
-   }
 }
 
 void draw_scrollbars(const struct ScreenModifier * mod)
@@ -205,6 +175,11 @@ void draw_scrollbars(const struct ScreenModifier * mod)
          SCREENWIDTH * SCREENWIDTH / (float)PAGEWIDTH / mod->zoom, SCROLL_WIDTH, SCROLL_BAR);
    C2D_DrawRectSolid(SCREENWIDTH - SCROLL_WIDTH, sofs_y, 0.5f, 
          SCROLL_WIDTH, SCREENHEIGHT * SCREENHEIGHT / (float)PAGEHEIGHT / mod->zoom, SCROLL_BAR);
+}
+
+void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index)
+{
+   
 }
 
 
@@ -279,14 +254,13 @@ int main(int argc, char** argv)
    C3D_RenderTarget* screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
    //weird byte order? 16 bits of color are at top
-   const u32 layer_color = full_to_half(C2D_Color32(0,0,0,0));
-   const u32 screen_color = C2D_Color32(90,90,90,255);
-   const u32 bg_color = C2D_Color32(255,255,255,255);
+   const u32 screen_color = SCREEN_COLOR;
+   const u32 bg_color = CANVAS_BG_COLOR;
+   const u32 layer_color = full_to_half(CANVAS_LAYER_COLOR);
 
-   const u32 color_a = C2D_Color32f(1,0,0,1.0f);
-   const u32 color_b = C2D_Color32f(1,1,0,1.0f);
-   const u32 color_x = C2D_Color32f(0,0,1,1.0f);
-   const u32 color_y = C2D_Color32f(0,1,0,1.0f);
+   u16 palette [PALETTE_COLORS];
+   convert_palette(base_palette, palette, PALETTE_COLORS);
+   u8 palette_index = PALETTE_STARTINDEX;
 
    const Tex3DS_SubTexture subtex = {
       PAGEWIDTH, PAGEHEIGHT,
@@ -300,11 +274,12 @@ int main(int argc, char** argv)
 
    struct ScreenModifier screen_mod = {0,0,1}; 
 
-   touchPosition current_touch;
-   //touchPosition last_touch = current_touch; //Why? compiler warning shush
-   //touchPosition start_touch;
    bool touching = false;
    bool page_initialized = false;
+   bool palette_active = false;
+
+   circlePosition pos;
+   touchPosition current_touch;
    u32 current_frame = 0;
    u32 start_frame = 0;
    u32 end_frame = 0;
@@ -320,7 +295,7 @@ int main(int argc, char** argv)
    pending.style = LINESTYLE_STROKE;
    pending.width = 2;
    pending.layer = PAGECOUNT - 1; //Always start on the top page
-   pending.color = full_to_truehalf(color_a);
+   pending.color = palette[palette_index];
 
    printf("Press ABXY to change color\n");
    printf("Press SELECT to change layers\n");
@@ -337,19 +312,20 @@ int main(int argc, char** argv)
       u32 kDown = hidKeysDown();
       u32 kUp = hidKeysUp();
       u32 kHeld = hidKeysHeld();
+      hidTouchRead(&current_touch);
+		hidCircleRead(&pos);
 
       // Respond to user input
       if(kDown & KEY_START) break;
-
-      if(kDown & KEY_A) pending.color = full_to_truehalf(color_a);
-      else if(kDown & KEY_B) pending.color = full_to_truehalf(color_b);
-      else if(kDown & KEY_X) pending.color = full_to_truehalf(color_x);
-      else if(kDown & KEY_Y) pending.color = full_to_truehalf(color_y);
-
-      if(kDown & KEY_DUP && zoom_power < MAX_ZOOM)
-         zoom_power++;
-      if(kDown & KEY_DDOWN && zoom_power > MIN_ZOOM)
-         zoom_power--;
+      if(kDown & KEY_DUP && zoom_power < MAX_ZOOM) zoom_power++;
+      if(kDown & KEY_DDOWN && zoom_power > MIN_ZOOM) zoom_power--;
+      if(kDown & KEY_TOUCH) start_frame = current_frame;
+      if(kUp & KEY_TOUCH) end_frame = current_frame;
+      if(kDown & KEY_SELECT)
+      {
+         pending.layer = (pending.layer + 1) % PAGECOUNT;
+         printf("Changing to layer %d\n", pending.layer);
+      }
 
       if(zoom_power != last_zoom_power)
       {
@@ -357,28 +333,9 @@ int main(int argc, char** argv)
          printf("Zoom changed to %.2f\n", screen_mod.zoom);
       }
       
-      if(kDown & KEY_SELECT)
-      {
-         pending.layer = (pending.layer + 1) % PAGECOUNT;
-         printf("Changing to layer %d\n", pending.layer);
-      }
 
-      hidTouchRead(&current_touch);
+      touching = (!palette_active && page_initialized && (kHeld & KEY_TOUCH) > 0);
 
-      if(kDown & KEY_TOUCH) {
-         start_frame = current_frame;
-         //start_touch = current_touch;
-         //Just throw away last touch from last time, we don't care
-         //last_touch = current_touch;
-      }
-      if(kUp & KEY_TOUCH) {
-         end_frame = current_frame;
-      }
-
-      touching = (page_initialized && (kHeld & KEY_TOUCH) > 0);
-
-      circlePosition pos;
-		hidCircleRead(&pos);
       update_screenmodifier(&screen_mod, pos);
 
       // Render the scene
@@ -434,14 +391,23 @@ int main(int argc, char** argv)
 
       C2D_TargetClear(screen, screen_color);
       C2D_SceneBegin(screen);
-      C2D_DrawRectSolid(-screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f,
-            PAGEWIDTH * screen_mod.zoom, PAGEHEIGHT * screen_mod.zoom, bg_color); //The bg color
-      for(int i = 0; i < PAGECOUNT; i++)
+
+      if(palette_active)
       {
-         C2D_DrawImageAt(pages[i].image, -screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f, 
-               NULL, screen_mod.zoom, screen_mod.zoom);
+
       }
-      draw_scrollbars(&screen_mod);
+      else
+      {
+         C2D_DrawRectSolid(-screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f,
+               PAGEWIDTH * screen_mod.zoom, PAGEHEIGHT * screen_mod.zoom, bg_color); //The bg color
+         for(int i = 0; i < PAGECOUNT; i++)
+         {
+            C2D_DrawImageAt(pages[i].image, -screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f, 
+                  NULL, screen_mod.zoom, screen_mod.zoom);
+         }
+         draw_scrollbars(&screen_mod);
+      }
+
       C3D_FrameEnd(0);
 
       //last_touch = current_touch;
