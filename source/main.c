@@ -135,25 +135,52 @@ struct LinePackage {
    u16 line_count;
 };
 
+void draw_centeredrect(float x, float y, u16 width, u32 color)
+{
+   float ofs = width / 2.0;
+   x = round(x - ofs);
+   y = round(y - ofs);
+   if(x < PAGE_EDGEBUF || y < PAGE_EDGEBUF) return;
+   C2D_DrawRectSolid(x, y, 0.5f, width, width, color);
+}
+
+//Draw a line using a custom line drawing system (required like this because of
+//javascript's general inability to draw non anti-aliased lines)
+void custom_drawline(const struct SimpleLine * line, u16 width, u32 color)
+{
+   float xdiff = line->x2 - line->x1;
+   float ydiff = line->y2 - line->y1;
+   float dist = sqrt(xdiff * xdiff + ydiff * ydiff);
+   float ang = atan(ydiff/(xdiff?xdiff:0.0001))+(xdiff<0?M_PI:0);
+   float xang = cos(ang);
+   float yang = sin(ang);
+
+   for(float i = 0; i <= dist; i+=0.5)
+   {
+      draw_centeredrect(line->x1+xang*i, line->y1+yang*i, width, color);
+   }
+}
+
 //Assumes you're already on the appropriate page you want and all that
 void draw_lines(const struct LinePackage * linepack, const struct ScreenModifier * mod)
 {
-   u16 width_ofs = linepack->width / 2;
+   //u16 width_ofs = linepack->width / 2;
    u32 color = half_to_full(linepack->color);
    struct SimpleLine * lines = linepack->lines;
 
    for(int i = 0; i < linepack->line_count; i++)
    {
-      float old_x = C2D_Clamp(lines[i].x1, PAGE_EDGEBUF + width_ofs, PAGEWIDTH - 1);
-      float old_y = C2D_Clamp(lines[i].y1, PAGE_EDGEBUF + width_ofs, PAGEHEIGHT - 1);
-      float real_x = C2D_Clamp(lines[i].x2, PAGE_EDGEBUF + width_ofs, PAGEWIDTH - 1);
-      float real_y = C2D_Clamp(lines[i].y2, PAGE_EDGEBUF + width_ofs, PAGEHEIGHT - 1);
-      //For some reason, I can't just draw a line, because the system won't draw
-      //it if the target is cleared with transparency. But drawing a rect first
-      //fixes that, so... guess that's just part of the style of the thing.
-      C2D_DrawRectSolid(real_x - width_ofs, real_y - width_ofs, 0.5f, 
-            linepack->width, linepack->width, color);
-      C2D_DrawLine(old_x, old_y, color, real_x, real_y, color, linepack->width, 0.5f);
+      custom_drawline(&lines[i], linepack->width, color);
+      //float old_x = C2D_Clamp(lines[i].x1, PAGE_EDGEBUF + width_ofs, PAGEWIDTH - 1);
+      //float old_y = C2D_Clamp(lines[i].y1, PAGE_EDGEBUF + width_ofs, PAGEHEIGHT - 1);
+      //float real_x = C2D_Clamp(lines[i].x2, PAGE_EDGEBUF + width_ofs, PAGEWIDTH - 1);
+      //float real_y = C2D_Clamp(lines[i].y2, PAGE_EDGEBUF + width_ofs, PAGEHEIGHT - 1);
+      ////For some reason, I can't just draw a line, because the system won't draw
+      ////it if the target is cleared with transparency. But drawing a rect first
+      ////fixes that, so... guess that's just part of the style of the thing.
+      //C2D_DrawRectSolid(real_x - width_ofs, real_y - width_ofs, 0.5f, 
+      //      linepack->width, linepack->width, color);
+      //C2D_DrawLine(old_x, old_y, color, real_x, real_y, color, linepack->width, 0.5f);
       //TODO: doesn't take into account the type yet! Some types (like
       //rectangle) draw something other than lines!
    }
@@ -274,7 +301,7 @@ int main(int argc, char** argv)
    struct ScreenModifier screen_mod = {0,0,1}; 
 
    touchPosition current_touch;
-   touchPosition last_touch = current_touch; //Why? compiler warning shush
+   //touchPosition last_touch = current_touch; //Why? compiler warning shush
    //touchPosition start_touch;
    bool touching = false;
    bool page_initialized = false;
@@ -417,7 +444,7 @@ int main(int argc, char** argv)
       draw_scrollbars(&screen_mod);
       C3D_FrameEnd(0);
 
-      last_touch = current_touch;
+      //last_touch = current_touch;
       last_zoom_power = zoom_power;
       current_frame++;
    }
