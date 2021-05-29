@@ -382,9 +382,11 @@ void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index)
 //Saved data for a tool. Each tool may (if it so desires) have different
 //colors, widths, etc.
 struct ToolData {
-   u8 width;
+   s8 width;
    u16 color;
    u8 style;
+   bool color_settable;
+   //u8 color_redirect;
 };
 
 //Fill tools with default values for the start of the program.
@@ -393,9 +395,12 @@ void fill_defaulttools(struct ToolData * tool_data, u16 default_color)
    tool_data[TOOL_PENCIL].width = 2;
    tool_data[TOOL_PENCIL].color = default_color;
    tool_data[TOOL_PENCIL].style = LINESTYLE_STROKE;
+   tool_data[TOOL_PENCIL].color_settable = true;
+   //tool_data[TOOL_PENCIL].color_redirect = TOOL_PENCIL;
    tool_data[TOOL_ERASER].width = 4;
    tool_data[TOOL_ERASER].color = 0;
    tool_data[TOOL_ERASER].style = LINESTYLE_STROKE;
+   tool_data[TOOL_ERASER].color_settable = false;
 }
 
 //Given a touch position (presumably on the color palette), update the selected
@@ -463,47 +468,31 @@ int test_transparenthalftofull()
 
 int test_inttochars_single(u32 num, u8 chars)
 {
-   //char container[10];
-   //char * ptr = malloc(10 * sizeof(char)); //container;
-   char ptr[10]; // = malloc(10 * sizeof(char)); //container;
+   char ptr[10];
    char * rptr = NULL;
-
-   //if(ptr == NULL)
-   //{
-   //   printf("FAILED TO ALLOCATE MEMORY %ld, %d\n", num, chars);
-   //   return 1;
-   //}
 
    rptr = int_to_chars(num, chars, ptr);
 
    if(rptr != (ptr + chars))
    {
       printf("Resulting pointer not correct for %ld, %d\n", num, chars);
-      //free(ptr);
       return 1;
    }
 
-   //u32 result = chars_to_int(ptr, chars);
+   u32 result = chars_to_int(ptr, chars);
 
-   //if(result != num)
-   //{
-   //   printf("IntToChars not transparent for: %ld, %d (got %ld)\n", num, chars, result);
-   //   //free(ptr);
-   //   return 1;
-   //}
+   if(result != num)
+   {
+      printf("IntToChars not transparent for: %ld, %d (got %ld)\n", num, chars, result);
+      return 1;
+   }
 
    printf(".");
-   //free(ptr);
    return 0;
 }
 
 int test_inttochars()
 {
-   //First, simple simple SIMPLE test
-   //char container[10];
-   //char * ptr = container;
-   //char * rptr = ptr;
-
    //Arbitrary values
    if(test_inttochars_single(47, 1)) return 1;
    if(test_inttochars_single(105, 2)) return 1;
@@ -522,11 +511,33 @@ int test_inttochars()
    return 0;
 }
 
+int test_signedtospecial()
+{
+   s32 vals[10] = { -1, 55, -128, 600, -1029, 4096, 0, 1, 32, -32 };
+
+   for(int i = 0; i < 10; i++)
+   {
+      u32 result = signed_to_special(vals[i]);
+      s32 back = special_to_signed(result);
+
+      if(back != vals[i])
+      {
+         printf("Special/signed not transparent for %ld\n", vals[i]);
+         return 1;
+      }
+
+      printf(".");
+   }
+
+   return 0;
+}
+
 void run_tests()
 {
    printf("Running tests; only errors will be displayed\n");
    if(test_transparenthalftofull()) return; 
    if(test_inttochars()) return; 
+   if(test_signedtospecial()) return; 
    printf("\nAll tests passed\n");
 }
 
@@ -611,8 +622,8 @@ int main(int argc, char** argv)
       if(kDown & KEY_L) palette_active = !palette_active;
       if(kDown & KEY_DUP && zoom_power < MAX_ZOOM) zoom_power++;
       if(kDown & KEY_DDOWN && zoom_power > MIN_ZOOM) zoom_power--;
-      if(kDown & KEY_DRIGHT && tool_data[current_tool].width < MAX_WIDTH) tool_data[current_tool].width++;
-      if(kDown & KEY_DLEFT && tool_data[current_tool].width > MIN_WIDTH) tool_data[current_tool].width--;
+      if(kDown & KEY_DRIGHT) tool_data[current_tool].width += (kHeld & KEY_R ? 5 : 1);
+      if(kDown & KEY_DLEFT) tool_data[current_tool].width -= (kHeld & KEY_R ? 5 : 1);
       if(kDown & KEY_SELECT) pending.layer = (pending.layer + 1) % PAGECOUNT;
       if(kDown & KEY_A) current_tool = TOOL_PENCIL;
       if(kDown & KEY_B) current_tool = TOOL_ERASER;
@@ -627,6 +638,7 @@ int main(int argc, char** argv)
 
       //Update zoom separately, since the update is always the same
       if(zoom_power != last_zoom_power) set_screenmodifier_zoom(&screen_mod, pow(2, zoom_power));
+      tool_data[current_tool].width = C2D_Clamp(tool_data[current_tool].width, MIN_WIDTH, MAX_WIDTH);
 
       if(kDown & ~(KEY_TOUCH) || !current_frame)
       {
@@ -659,8 +671,11 @@ int main(int argc, char** argv)
       {
          if(palette_active)
          {
-            update_paletteindex(&current_touch, &palette_index);
-            tool_data[current_tool].color = palette[palette_index];
+            if(tool_data[current_tool].color_settable)
+            {
+               update_paletteindex(&current_touch, &palette_index);
+               tool_data[current_tool].color = palette[palette_index];
+            }
          }
          else
          {
