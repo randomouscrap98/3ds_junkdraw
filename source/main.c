@@ -29,6 +29,10 @@ u32 rgb_to_full(u32 rgb)
    return 0xFF000000 | ((rgb >> 16) & 0x0000FF) | (rgb & 0x00FF00) | ((rgb << 16) & 0xFF0000);
 }
 
+//Convert a citro2D rgba to a weird shifted 16bit thing that Citro2D needed for proper 
+//clearing. I assume it's because of byte ordering in the 3DS and Citro not
+//properly converting the color for that one instance. TODO: ask about that bug
+//if anyone ever gets back to you on that forum.
 u32 full_to_half(u32 val)
 {
    //Format: 0b AAAAAAAA BBBBBBBB GGGGGGGG RRRRRRRR
@@ -44,11 +48,15 @@ u32 full_to_half(u32 val)
       ) << 16; //first 2 bytes are trash
 }
 
+//Convert a citro2D rgba to a proper 16 bit color (but with the opposite byte
+//ordering preserved)
 u16 full_to_truehalf(u32 val)
 {
    return full_to_half(val) >> 16;
 }
 
+//Convert a proper 16 bit citro2d color (with the opposite byte ordering
+//preserved) to a citro2D rgba
 u32 half_to_full(u16 val)
 {
    //Half : 0b                   GGBBBBBA RRRRRGGG
@@ -62,6 +70,8 @@ u32 half_to_full(u16 val)
       );
 }
 
+//Convert a whole palette from regular RGB (no alpha) to true 16 bit values
+//used for in-memory palettes (and written drawing data)
 void convert_palette(u32 * original, u16 * destination, u16 size)
 {
    for(int i = 0; i < size; i++)
@@ -72,6 +82,7 @@ void convert_palette(u32 * original, u16 * destination, u16 size)
 
 // -- SCREEN UTILS? --
 
+//Represents a transformation of the screen
 struct ScreenModifier
 {
    float ofs_x;
@@ -96,12 +107,17 @@ float calc_pagepos(s16 d, float existing_pos)
    }
 }
 
+//Easy way to set the screen offset (translation) safely for the given screen
+//modifier. Clamps the values appropriately
 void set_screenmodifier_ofs(struct ScreenModifier * mod, u16 ofs_x, u16 ofs_y)
 {
    mod->ofs_x = C2D_Clamp(ofs_x, 0, PAGEWIDTH * mod->zoom - SCREENWIDTH);
    mod->ofs_y = C2D_Clamp(ofs_y, 0, PAGEHEIGHT * mod->zoom - SCREENHEIGHT);
 }
 
+//Easy way to set the screen zoom while preserving the center of the screen.
+//So, the image should not appear to shift too much while zooming. The offsets
+//WILL be modified after this function is completed!
 void set_screenmodifier_zoom(struct ScreenModifier * mod, float zoom)
 {
    float zoom_ratio = zoom / mod->zoom;
@@ -113,6 +129,7 @@ void set_screenmodifier_zoom(struct ScreenModifier * mod, float zoom)
    set_screenmodifier_ofs(mod, new_ofsx, new_ofsy);
 }
 
+//Update screen translation based on cpad input
 void update_screenmodifier(struct ScreenModifier * mod, circlePosition pos)
 {
    set_screenmodifier_ofs(mod, calc_pagepos(pos.dx, mod->ofs_x), calc_pagepos(-pos.dy, mod->ofs_y));
@@ -120,16 +137,16 @@ void update_screenmodifier(struct ScreenModifier * mod, circlePosition pos)
 
 
 
-
 // -- Stroke/line utilities --
 
 //A line doesn't contain all the data needed to draw itself. That would be a
 //line package
-
 struct SimpleLine {
    u16 x1, y1, x2, y2;
 };
 
+// A basic representation of a collection of lines. Doesn't understand "tools"
+// or any of that, it JUST has the information required to draw the lines.
 struct LinePackage {
    u8 style;
    u16 color;
@@ -139,6 +156,8 @@ struct LinePackage {
    u16 line_count;
 };
 
+//Add another stroke to a line collection (that represents a stroke). Works for
+//the first stroke too.
 struct SimpleLine * add_stroke(struct LinePackage * pending, 
       const touchPosition * pos, const struct ScreenModifier * mod)
 {
@@ -166,6 +185,7 @@ struct SimpleLine * add_stroke(struct LinePackage * pending,
 
 // -- DRAWING UTILS --
 
+//Draw a rectangle centered and pixel aligned around the given point.
 void draw_centeredrect(float x, float y, u16 width, u32 color)
 {
    float ofs = width / 2.0;
@@ -176,7 +196,8 @@ void draw_centeredrect(float x, float y, u16 width, u32 color)
 }
 
 //Draw a line using a custom line drawing system (required like this because of
-//javascript's general inability to draw non anti-aliased lines)
+//javascript's general inability to draw non anti-aliased lines, and I want the
+//strokes saved by this program to be 100% accurately reproducible on javascript)
 void custom_drawline(const struct SimpleLine * line, u16 width, u32 color)
 {
    float xdiff = line->x2 - line->x1;
@@ -190,17 +211,27 @@ void custom_drawline(const struct SimpleLine * line, u16 width, u32 color)
       draw_centeredrect(line->x1+xang*i, line->y1+yang*i, width, color);
 }
 
+//Draw the collection of lines given. 
 //Assumes you're already on the appropriate page you want and all that
 void draw_lines(const struct LinePackage * linepack, const struct ScreenModifier * mod)
 {
-   //u16 width_ofs = linepack->width / 2;
    u32 color = half_to_full(linepack->color);
+
+   //This was me trying to figure out what's going on with transparency
+   //if(!(color & 0xFF000000))
+   //{
+   //   color = color | 0xAA000000;
+   //   printf(".");
+   //}
+
    struct SimpleLine * lines = linepack->lines;
 
    for(int i = 0; i < linepack->line_count; i++)
       custom_drawline(&lines[i], linepack->width, color);
 }
 
+//Draw the scrollbars on the sides of the screen for the given screen
+//modification (translation AND zoom affect the scrollbars)
 void draw_scrollbars(const struct ScreenModifier * mod)
 {
    //Need to draw an n-thickness scrollbar on the right and bottom. Assumes
@@ -222,6 +253,8 @@ void draw_scrollbars(const struct ScreenModifier * mod)
          SCROLL_WIDTH, SCREENHEIGHT * SCREENHEIGHT / (float)PAGEHEIGHT / mod->zoom, SCROLL_BAR);
 }
 
+//Draw (JUST draw) the entire color picker area, which may include other
+//stateful controls
 void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index)
 {
    C2D_DrawRectSolid(0, 0, 0.5f, SCREENWIDTH, SCREENHEIGHT, PALETTE_BG);
@@ -252,12 +285,15 @@ void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index)
 
 // -- CONTROL UTILS --
 
+//Saved data for a tool. Each tool may (if it so desires) have different
+//colors, widths, etc.
 struct ToolData {
    u8 width;
    u16 color;
    u8 style;
 };
 
+//Fill tools with default values for the start of the program.
 void fill_defaulttools(struct ToolData * tool_data, u16 default_color)
 {
    tool_data[TOOL_PENCIL].width = 2;
@@ -268,6 +304,8 @@ void fill_defaulttools(struct ToolData * tool_data, u16 default_color)
    tool_data[TOOL_ERASER].style = LINESTYLE_STROKE;
 }
 
+//Given a touch position (presumably on the color palette), update the selected
+//palette index. 
 void update_paletteindex(const touchPosition * pos, u8 * index)
 {
    u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
@@ -279,8 +317,10 @@ void update_paletteindex(const touchPosition * pos, u8 * index)
 }
 
 
+
 // -- LAYER UTILS --
 
+//All the data associated with a single layer. TODO: still called "page"
 struct PageData {
    Tex3DS_SubTexture subtex;     //Simple structures
    C3D_Tex texture;
@@ -288,6 +328,7 @@ struct PageData {
    C3D_RenderTarget * target;    //Actual data?
 };
 
+//Create a LAYER from an off-screen texture.
 void create_page(struct PageData * result, Tex3DS_SubTexture subtex)
 {
    result->subtex = subtex;
@@ -297,12 +338,12 @@ void create_page(struct PageData * result, Tex3DS_SubTexture subtex)
    result->image.subtex = &(result->subtex);
 }
 
+//Clean up a layer created by create_page
 void delete_page(struct PageData page)
 {
    C3D_RenderTargetDelete(page.target);
    C3D_TexDelete(&page.texture);
 }
-
 
 
 
@@ -428,6 +469,7 @@ int main(int argc, char** argv)
       }
       if(kUp & KEY_TOUCH) end_frame = current_frame;
 
+      //Update zoom separately, since the update is always the same
       if(zoom_power != last_zoom_power) set_screenmodifier_zoom(&screen_mod, pow(2, zoom_power));
 
       if(kDown & ~(KEY_TOUCH) || !current_frame)
@@ -448,6 +490,7 @@ int main(int argc, char** argv)
       // Render the scene
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
+      //Apparently (not sure), all clearing should be done within our main loop?
       if(!page_initialized)
       {
          for(int i = 0; i < PAGECOUNT; i++)
@@ -455,6 +498,7 @@ int main(int argc, char** argv)
          page_initialized = true;
       }
 
+      //The touch screen is used for several things
       if(touching && page_initialized)
       {
          if(palette_active)
@@ -493,6 +537,7 @@ int main(int argc, char** argv)
       C2D_TargetClear(screen, screen_color);
       C2D_SceneBegin(screen);
 
+      //Draw different things based on what's active on the touchscreen.
       if(palette_active)
       {
          draw_colorpicker(palette, PALETTE_COLORS, palette_index);
@@ -517,7 +562,6 @@ int main(int argc, char** argv)
 
       C3D_FrameEnd(0);
 
-      //last_touch = current_touch;
       last_zoom_power = zoom_power;
       current_frame++;
    }
