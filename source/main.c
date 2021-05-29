@@ -10,7 +10,7 @@
 #include "constants.h"
 
 //#define DEBUG_COORD
-//#define DEBUG_RUNTESTS
+#define DEBUG_RUNTESTS
 
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
@@ -76,6 +76,100 @@ void convert_palette(u32 * original, u16 * destination, u16 size)
 {
    for(int i = 0; i < size; i++)
       destination[i] = full_to_truehalf(rgb_to_full(original[i]));
+}
+
+
+
+// -- DATA CONVERT UTILS --
+#define DCV_START 48
+#define DCV_BITSPER 6
+#define DCV_VARIBITSPER 5
+#define DCV_MAXVAL(x) ((1 << (x * DCV_BITSPER)) - 1)
+#define DCV_VARIMAXVAL(x) ((1 << (x * DCV_VARIBITSPER)) - 1)
+#define DCV_VARISTEP (1 << DCV_VARIBITSPER) 
+#define DCV_VARIMAXSCAN 7
+
+//Container needs at least 'chars' amount of space to store this int
+char * int_to_chars(u32 num, const u8 chars, char * container)
+{
+   //WARN: clamping rather than ignoring! Hope this is ok
+	num = C2D_Clamp(num, 0, DCV_MAXVAL(chars)); 
+
+   //Place each converted character, Little Endian
+	for(int i = 0; i < chars; i++)
+      container[i] = DCV_START + ((num >> (i * DCV_BITSPER)) & DCV_MAXVAL(1));
+
+   //Return the next place you can start placing characters (so you can
+   //continue reusing this function)
+	return container + chars;
+}
+
+//Container should always be the start of where you want to read the int.
+//The container should have at least count available. You can increment
+//container by count afterwards (always)
+u32 chars_to_int(const char * container, const u8 count)
+{
+   u32 result = 0;
+   for(int i = 0; i < count; i++)
+      result += ((container[i] - DCV_START) << (i * DCV_BITSPER));
+   return result;
+}
+
+//A dumb form of 2's compliment that doesn't carry the leading 1's
+s32 special_to_signed(u32 special)
+{
+   if(special & 1)
+      return ((special >> 1) * -1) -1;
+   else
+      return special >> 1;
+}
+
+u32 signed_to_special(s32 value)
+{
+   if(value >= 0)
+      return value << 1;
+   else
+      return ((value << 1) * -1) - 1;
+}
+
+//Container needs at LEAST 8 bytes free to store a variable width int
+char * int_to_varwidth(u32 value, char * container)
+{
+   u8 c = 0;
+   u8 i = 0;
+
+   do 
+   {
+      c = value & DCV_VARIMAXVAL(1);
+      value = value >> DCV_VARIBITSPER;
+      if(value) c |= DCV_VARISTEP; //Continue on, set the uppermost bit
+      container[i++] = DCV_START + c;
+   } 
+   while(value);
+
+   //Return the NEXT place you can place values (just like the other func)
+   return container + i;
+}
+
+//Read a variable width value from the given container. Stops if it goes too
+//far though, which may give bad values
+u32 varwidth_to_int(char * container, u8 * read_count)
+{
+   u8 c = 0;
+   u8 i = 0;
+   u32 result = 0;
+
+   do 
+   {
+      c = container[i] - DCV_START;
+      result += (c & DCV_VARIMAXVAL(1)) << (DCV_VARIBITSPER * i);
+      i++;
+   } 
+   while(c & DCV_VARISTEP && (i < DCV_VARIMAXSCAN)); //Keep going while the high bit is set
+
+   *read_count = i;
+
+   return result;
 }
 
 
@@ -367,10 +461,72 @@ int test_transparenthalftofull()
    return 0;
 }
 
+int test_inttochars_single(u32 num, u8 chars)
+{
+   //char container[10];
+   //char * ptr = malloc(10 * sizeof(char)); //container;
+   char ptr[10]; // = malloc(10 * sizeof(char)); //container;
+   char * rptr = NULL;
+
+   //if(ptr == NULL)
+   //{
+   //   printf("FAILED TO ALLOCATE MEMORY %ld, %d\n", num, chars);
+   //   return 1;
+   //}
+
+   rptr = int_to_chars(num, chars, ptr);
+
+   if(rptr != (ptr + chars))
+   {
+      printf("Resulting pointer not correct for %ld, %d\n", num, chars);
+      //free(ptr);
+      return 1;
+   }
+
+   //u32 result = chars_to_int(ptr, chars);
+
+   //if(result != num)
+   //{
+   //   printf("IntToChars not transparent for: %ld, %d (got %ld)\n", num, chars, result);
+   //   //free(ptr);
+   //   return 1;
+   //}
+
+   printf(".");
+   //free(ptr);
+   return 0;
+}
+
+int test_inttochars()
+{
+   //First, simple simple SIMPLE test
+   //char container[10];
+   //char * ptr = container;
+   //char * rptr = ptr;
+
+   //Arbitrary values
+   if(test_inttochars_single(47, 1)) return 1;
+   if(test_inttochars_single(105, 2)) return 1;
+   if(test_inttochars_single(6000, 3)) return 1;
+   if(test_inttochars_single(303030, 4)) return 1;
+   if(test_inttochars_single(17891234, 5)) return 1;
+
+   //Particular values
+   if(test_inttochars_single(0x3F, 1)) return 1; //All bits set 6 bits
+   if(test_inttochars_single(0x40, 2)) return 1; //One above needing 1 byte
+   if(test_inttochars_single(0xFFF, 2)) return 1; //All bits set 12 bits
+   if(test_inttochars_single(0x1000, 3)) return 1; //One above needing 2 bytes
+   if(test_inttochars_single(0x3FFFF, 3)) return 1; //All bits set 18 bits
+   if(test_inttochars_single(0x40000, 4)) return 1; //One above needing 3 bytes
+
+   return 0;
+}
+
 void run_tests()
 {
    printf("Running tests; only errors will be displayed\n");
    if(test_transparenthalftofull()) return; 
+   if(test_inttochars()) return; 
    printf("\nAll tests passed\n");
 }
 
