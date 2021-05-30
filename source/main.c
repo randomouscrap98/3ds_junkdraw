@@ -1,6 +1,6 @@
 #include <3ds.h>
 #include <citro3d.h>
-#include <citro2d.h>
+#include "../include/citro2d.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +8,6 @@
 #include <math.h>
 
 #include "constants.h"
-//#include "hacks.h"
 
 //#define DEBUG_COORD
 #define DEBUG_DATAPRINT
