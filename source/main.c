@@ -8,7 +8,6 @@
 #include <math.h>
 
 #include "constants.h"
-//#include "hacks.h"
 
 //#define DEBUG_COORD
 #define DEBUG_DATAPRINT
@@ -403,13 +402,6 @@ void draw_lines(const struct LinePackage * linepack, const struct ScreenModifier
 {
    u32 color = half_to_full(linepack->color);
 
-   //This was me trying to figure out what's going on with transparency
-   //if(!(color & 0xFF000000))
-   //{
-   //   color = color | 0xAA000000;
-   //   printf(".");
-   //}
-
    struct SimpleLine * lines = linepack->lines;
 
    for(int i = 0; i < linepack->line_count; i++)
@@ -574,6 +566,7 @@ char * write_to_mem(char * stroke_data, char * stroke_end, char * mem, char * me
 }
 
 
+
 // -- TESTS --
 
 #ifdef DEBUG_RUNTESTS
@@ -589,9 +582,6 @@ int main(int argc, char** argv)
    gfxInitDefault();
    C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
    C2D_Init(C2D_DEFAULT_MAX_OBJECTS);
-
-	//C2Di_Context* ctx = C2Di_GetContext();
-	//C3D_ProcTexCombiner(&ctx->ptBlend, true, GPU_PT_U, GPU_PT_U);
    C2D_Prepare();
 
    consoleInit(GFX_TOP, NULL);
