@@ -10,7 +10,15 @@
 #include "constants.h"
 
 //#define DEBUG_COORD
+#define DEBUG_DATAPRINT
+#define DEBUG_PRINT
 #define DEBUG_RUNTESTS
+
+#ifdef DEBUG_PRINT
+#define LOGDBG(f_, ...) printf((f_), ## __VA_ARGS__)
+#else
+#define LOGDBG(f_, ...)
+#endif
 
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
@@ -147,6 +155,9 @@ char * int_to_varwidth(u32 value, char * container)
    } 
    while(value);
 
+   if(i >= DCV_VARIMAXSCAN)
+      LOGDBG("WARN: variable width create too long: %d\n",i);
+
    //Return the NEXT place you can place values (just like the other func)
    return container + i;
 }
@@ -166,6 +177,9 @@ u32 varwidth_to_int(char * container, u8 * read_count)
       i++;
    } 
    while(c & DCV_VARISTEP && (i < DCV_VARIMAXSCAN)); //Keep going while the high bit is set
+
+   if(i >= DCV_VARIMAXSCAN)
+      LOGDBG("WARN: variable width read too long: %d\n",i);
 
    *read_count = i;
 
@@ -246,6 +260,7 @@ struct LinePackage {
    u16 color;
    u8 layer;
    u8 width;
+   u16 page;
    struct SimpleLine * lines;
    u16 line_count;
 };
@@ -273,6 +288,82 @@ struct SimpleLine * add_stroke(struct LinePackage * pending,
    }
 
    return line;
+}
+
+//A true macro, as in just dump code into the function later. Used ONLY for 
+//convert_lines, hence "CVL"
+#define CVL_LINECHECK if(container_size - (ptr - container) < DCV_VARIMAXSCAN) { \
+   LOGDBG("ERROR: ran out of space in line conversion: original size: %ld\n",container_size); \
+   return NULL; }
+
+//Convert lines into data, but if it doesn't fit, return a null pointer.
+//Returned pointer points to end + 1 in container
+char * convert_lines(struct LinePackage * lines, char * container, u32 container_size)
+{
+   char * ptr = container;
+
+   if(lines->line_count < 1)
+   {
+      LOGDBG("WARN: NO LINES TO CONVERT!\n");
+      return NULL;
+   }
+
+   //This is a check that will need to be performed a lot
+   CVL_LINECHECK
+
+   //NOTE: the data is JUST the info for the lines, it's not "wrapped" into a
+   //package or anything. So for instance, the length of the data is not
+   //included at the start, as it may be stored in the final product
+
+   //Dump page
+   ptr = int_to_varwidth(lines->page, ptr);
+   CVL_LINECHECK
+
+   //1 byte style/layer, 1 byte width, 3 bytes color
+   //3 bits of line style, 1 bit (for now) of layers, 2 unused
+   ptr = int_to_chars((lines->style & 0x7) | (lines->layer << 3),1,ptr); 
+   //6 bits of line width (minus 1)
+   ptr = int_to_chars(lines->width - 1,1,ptr); 
+   //16 bits of color (2 unused)
+   ptr = int_to_chars(lines->color,3,ptr); 
+
+   CVL_LINECHECK
+
+   //Now for strokes, we store the first point, then move along the rest of the
+   //points doing an offset storage
+   if(lines->style == LINESTYLE_STROKE)
+   {
+      //Dump first point, save point data for later
+      u16 x = lines->lines[0].x1;
+      u16 y = lines->lines[0].y1;
+      ptr = int_to_chars(x, 2, ptr);
+      ptr = int_to_chars(y, 2, ptr);
+
+      //Now compute distances between this point and previous, store those as
+      //variable width values. This can save a significant amount for most
+      //types of drawing.
+      for(u16 i = 0; i < lines->line_count; i++)
+      {
+         CVL_LINECHECK
+
+         if(x == lines->lines[i].x2 && y == lines->lines[i].y2)
+            continue; //Don't need to store stationary lines
+
+         ptr = int_to_varwidth(signed_to_special(lines->lines[i].x2 - x), ptr);
+         ptr = int_to_varwidth(signed_to_special(lines->lines[i].y2 - y), ptr);
+
+         x = lines->lines[i].x2;
+         y = lines->lines[i].y2;
+      }
+   }
+   else
+   {
+      //We DON'T support this! 
+      LOGDBG("ERR: UNSUPPORTED STROKE: %d\n", lines->style);
+      return NULL;
+   }
+
+   return ptr;
 }
 
 
@@ -446,6 +537,42 @@ void delete_page(struct PageData page)
 
 
 
+// -- DATA TRANSFER UTILS --
+
+char * write_to_mem(char * stroke_data, char * stroke_end, char * mem, char * mem_end)
+{
+   u32 real_size = (stroke_end - stroke_data);
+   u32 test_size = DCV_VARIMAXSCAN + real_size;
+   u32 mem_free = MAX_DRAW_DATA - (mem_end - mem);
+   char * new_end = mem_end;
+
+   //Oops, the size of the data is more than the leftover space in draw_data!
+   if(test_size > mem_free)
+   {
+      LOGDBG("ERR: Couldn't store lines! Required: %ld, has: %ld\n",
+            test_size, mem_free);
+   }
+   else
+   {
+      //First, write the ACTUAL size (not the safe size used in the
+      //calculations), then just memcopy the cvl into the draw_data
+      new_end = int_to_varwidth(real_size, new_end);
+
+      //Next, just memcpy
+      memcpy(new_end, stroke_data, sizeof(char) * real_size);
+      new_end += real_size;
+
+      //no need to free or anything, we're reusing the stroke buffer
+#ifdef DEBUG_DATAPRINT
+      *stroke_end = '\0';
+      printf("S:%ld MF:%ld D:%s\n", real_size, mem_free, stroke_data);
+#endif
+   }
+
+   return new_end;
+}
+
+
 // -- TESTS --
 
 #ifdef DEBUG_RUNTESTS
@@ -508,6 +635,12 @@ int main(int argc, char** argv)
    pending.lines = pending_lines; //Use the stack for my pending stroke
    pending.line_count = 0;
    pending.layer = PAGECOUNT - 1; //Always start on the top page
+   pending.page = 0;
+
+   char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
+   char * stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
+   char * draw_data_end = draw_data;
+   char * draw_pointer = draw_data;
 
    printf("     L - change color\n");
    printf("SELECT - change layers\n");
@@ -552,6 +685,7 @@ int main(int argc, char** argv)
 
       if(kDown & ~(KEY_TOUCH) || !current_frame)
       {
+         //TODO: make this nicer looking
          printf("\x1b[30;1HW:%02d L:%d Z:%03.2f T:%d C:%#06x",
                tool_data[current_tool].width, 
                pending.layer,
@@ -589,6 +723,8 @@ int main(int argc, char** argv)
          }
          else
          {
+            //Keep this outside the if statement below so it can be used for
+            //background drawing too (draw commands from other people)
             C2D_SceneBegin(pages[pending.layer].target);
 
             if(pending.line_count < MAX_STROKE_LINES)
@@ -609,9 +745,20 @@ int main(int argc, char** argv)
          }
       }
 
-      //TODO: Here, you would NORMALLY save the line or whatever
-      if(end_frame == current_frame)
+      //TODO: Eventually, change this to put the data in different places?
+      if(end_frame == current_frame && pending.line_count > 0)
       {
+         char * cvl_end = convert_lines(&pending, stroke_data, MAX_STROKE_DATA);
+
+         if(cvl_end == NULL)
+         {
+            LOGDBG("ERR: Couldn't convert lines!\n");
+         }
+         else
+         {
+            draw_data_end = write_to_mem(stroke_data, cvl_end, draw_data, draw_data_end);
+         }
+
          pending.line_count = 0;
       }
 
@@ -648,6 +795,8 @@ int main(int argc, char** argv)
    }
 
    free(pending_lines);
+   free(draw_data);
+   free(stroke_data);
 
    for(int i = 0; i < PAGECOUNT; i++)
       delete_page(pages[i]);
