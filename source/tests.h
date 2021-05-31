@@ -4,14 +4,15 @@
 int test_transparenthalftofull()
 {
    //It's such a small space, literally just run the gamut of 16 bit colors
-   for(u32 col = 0; col <= 0xFFFF; col++)
+   for(u32 i = 0; i <= 0xFFFF; i++)
    {
-      u32 full = half_to_full(col);
-      u32 half = full_to_half(full);
-      if((col & 0xFFF) == 0xFFF) printf(".");
-      if((col << 16) != half)
+      u16 col = i;
+      u32 full = rgba16c_to_rgba32c(col);
+      u16 half = rgba32c_to_rgba16c(full);
+      if((col & 0xFFF) == 0xFFF) printf("."); //tracker
+      if(col != half) //(col << 16) != half)
       {
-         printf("ERR: Expected %08lx, got %08lx, full: %08lx\n", col << 16, half, full);
+         printf("ERR: Expected %04x, got %04x, full: %08lx\n", col, half, full);
          return 1;
       }
    }

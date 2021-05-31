@@ -7,18 +7,18 @@
 #include <string.h>
 #include <math.h>
 
-#include "constants.h"
+// MUST define all these debug things before importing libraries, 
+// as THEY use  them. 
 
 //#define DEBUG_COORD
 #define DEBUG_DATAPRINT
 #define DEBUG_PRINT
 #define DEBUG_RUNTESTS
 
-#ifdef DEBUG_PRINT
-#define LOGDBG(f_, ...) printf((f_), ## __VA_ARGS__)
-#else
-#define LOGDBG(f_, ...)
-#endif
+#include "myutils.h"
+#include "dcv.h"
+#include "constants.h"
+
 
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
@@ -26,165 +26,8 @@
 //   MUST have the proper 16 bit format....
 // - ClearTarget with a transparent color seems to make the color stick using
 //   DrawLine unless a DrawRect (or perhaps other) call is performed.
+//    THIS IS FIXED IN A LATER REVISION
 // - Can't fill with transparency to clear.... 
-
-
-// -- SIMPLE UTILS --
-
-//Take an rgb WITHOUT alpha and convert to 3ds full color (with alpha)
-u32 rgb_to_full(u32 rgb)
-{
-   return 0xFF000000 | ((rgb >> 16) & 0x0000FF) | (rgb & 0x00FF00) | ((rgb << 16) & 0xFF0000);
-}
-
-//Convert a citro2D rgba to a weird shifted 16bit thing that Citro2D needed for proper 
-//clearing. I assume it's because of byte ordering in the 3DS and Citro not
-//properly converting the color for that one instance. TODO: ask about that bug
-//if anyone ever gets back to you on that forum.
-u32 full_to_half(u32 val)
-{
-   //Format: 0b AAAAAAAA BBBBBBBB GGGGGGGG RRRRRRRR
-   //Half  : 0b GGBBBBBA RRRRRGGG 00000000 00000000
-   u8 green = (val & 0x0000FF00) >> 11; //crush last three bits
-
-   return 
-      (
-         (val & 0xFF000000 ? 0x0100 : 0) |   //Alpha is lowest bit on upper byte
-         (val & 0x000000F8) |                //Red is slightly nice because it's already in the right position
-         ((green & 0x1c) >> 2) | ((green & 0x03) << 14) | //Green is split between bytes
-         ((val & 0x00F80000) >> 10)          //Blue is just shifted and crushed
-      ) << 16; //first 2 bytes are trash
-}
-
-//Convert a citro2D rgba to a proper 16 bit color (but with the opposite byte
-//ordering preserved)
-u16 full_to_truehalf(u32 val)
-{
-   return full_to_half(val) >> 16;
-}
-
-//Convert a proper 16 bit citro2d color (with the opposite byte ordering
-//preserved) to a citro2D rgba
-u32 half_to_full(u16 val)
-{
-   //Half : 0b                   GGBBBBBA RRRRRGGG
-   //Full : 0b AAAAAAAA BBBBBBBB GGGGGGGG RRRRRRRR
-   return
-      (
-         (val & 0x0100 ? 0xFF000000 : 0)  |  //Alpha always 255 or 0
-         ((val & 0x3E00) << 10) |            //Blue just shift a lot
-         ((val & 0x0007) << 13) | ((val & 0xc000) >> 3) |  //Green is split
-         (val & 0x00f8)                      //Red is easy, already in the right place
-      );
-}
-
-//Convert a whole palette from regular RGB (no alpha) to true 16 bit values
-//used for in-memory palettes (and written drawing data)
-void convert_palette(u32 * original, u16 * destination, u16 size)
-{
-   for(int i = 0; i < size; i++)
-      destination[i] = full_to_truehalf(rgb_to_full(original[i]));
-}
-
-
-
-// -- DATA CONVERT UTILS --
-#define DCV_START 48
-#define DCV_BITSPER 6
-#define DCV_VARIBITSPER 5
-#define DCV_MAXVAL(x) ((1 << (x * DCV_BITSPER)) - 1)
-#define DCV_VARIMAXVAL(x) ((1 << (x * DCV_VARIBITSPER)) - 1)
-#define DCV_VARISTEP (1 << DCV_VARIBITSPER) 
-#define DCV_VARIMAXSCAN 7
-
-//Container needs at least 'chars' amount of space to store this int
-char * int_to_chars(u32 num, const u8 chars, char * container)
-{
-   //WARN: clamping rather than ignoring! Hope this is ok
-	num = C2D_Clamp(num, 0, DCV_MAXVAL(chars)); 
-
-   //Place each converted character, Little Endian
-	for(int i = 0; i < chars; i++)
-      container[i] = DCV_START + ((num >> (i * DCV_BITSPER)) & DCV_MAXVAL(1));
-
-   //Return the next place you can start placing characters (so you can
-   //continue reusing this function)
-	return container + chars;
-}
-
-//Container should always be the start of where you want to read the int.
-//The container should have at least count available. You can increment
-//container by count afterwards (always)
-u32 chars_to_int(const char * container, const u8 count)
-{
-   u32 result = 0;
-   for(int i = 0; i < count; i++)
-      result += ((container[i] - DCV_START) << (i * DCV_BITSPER));
-   return result;
-}
-
-//A dumb form of 2's compliment that doesn't carry the leading 1's
-s32 special_to_signed(u32 special)
-{
-   if(special & 1)
-      return ((special >> 1) * -1) -1;
-   else
-      return special >> 1;
-}
-
-u32 signed_to_special(s32 value)
-{
-   if(value >= 0)
-      return value << 1;
-   else
-      return ((value << 1) * -1) - 1;
-}
-
-//Container needs at LEAST 8 bytes free to store a variable width int
-char * int_to_varwidth(u32 value, char * container)
-{
-   u8 c = 0;
-   u8 i = 0;
-
-   do 
-   {
-      c = value & DCV_VARIMAXVAL(1);
-      value = value >> DCV_VARIBITSPER;
-      if(value) c |= DCV_VARISTEP; //Continue on, set the uppermost bit
-      container[i++] = DCV_START + c;
-   } 
-   while(value);
-
-   if(i >= DCV_VARIMAXSCAN)
-      LOGDBG("WARN: variable width create too long: %d\n",i);
-
-   //Return the NEXT place you can place values (just like the other func)
-   return container + i;
-}
-
-//Read a variable width value from the given container. Stops if it goes too
-//far though, which may give bad values
-u32 varwidth_to_int(char * container, u8 * read_count)
-{
-   u8 c = 0;
-   u8 i = 0;
-   u32 result = 0;
-
-   do 
-   {
-      c = container[i] - DCV_START;
-      result += (c & DCV_VARIMAXVAL(1)) << (DCV_VARIBITSPER * i);
-      i++;
-   } 
-   while(c & DCV_VARISTEP && (i < DCV_VARIMAXSCAN)); //Keep going while the high bit is set
-
-   if(i >= DCV_VARIMAXSCAN)
-      LOGDBG("WARN: variable width read too long: %d\n",i);
-
-   *read_count = i;
-
-   return result;
-}
 
 
 
@@ -400,7 +243,7 @@ void custom_drawline(const struct SimpleLine * line, u16 width, u32 color)
 //Assumes you're already on the appropriate page you want and all that
 void draw_lines(const struct LinePackage * linepack, const struct ScreenModifier * mod)
 {
-   u32 color = half_to_full(linepack->color);
+   u32 color = rgba16c_to_rgba32c(linepack->color);
 
    struct SimpleLine * lines = linepack->lines;
 
@@ -455,7 +298,7 @@ void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index)
       C2D_DrawRectSolid(
          PALETTE_OFSX + x * shift + PALETTE_SWATCHMARGIN, 
          PALETTE_OFSY + y * shift + PALETTE_SWATCHMARGIN, 0.5f, 
-         PALETTE_SWATCHWIDTH, PALETTE_SWATCHWIDTH, half_to_full(palette[i]));
+         PALETTE_SWATCHWIDTH, PALETTE_SWATCHWIDTH, rgba16c_to_rgba32c(palette[i]));
    }
 }
 
@@ -590,7 +433,7 @@ int main(int argc, char** argv)
    //weird byte order? 16 bits of color are at top
    const u32 screen_color = SCREEN_COLOR;
    const u32 bg_color = CANVAS_BG_COLOR;
-   const u32 layer_color = full_to_half(CANVAS_LAYER_COLOR);
+   const u32 layer_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
 
    u16 palette [PALETTE_COLORS];
    convert_palette(base_palette, palette, PALETTE_COLORS);
@@ -783,7 +626,7 @@ int main(int argc, char** argv)
          C2D_DrawRectSolid(PALETTE_MINIPADDING, PALETTE_MINIPADDING, 0.5f, 
                PALETTE_MINISIZE - PALETTE_MINIPADDING * 2, 
                PALETTE_MINISIZE - PALETTE_MINIPADDING * 2, 
-               half_to_full(palette[palette_index])); 
+               rgba16c_to_rgba32c(palette[palette_index])); 
          draw_scrollbars(&screen_mod);
       }
 
