@@ -11,6 +11,8 @@
 #define LOGDBG(f_, ...)
 #endif
 
+#define MAX_MENU_ITEMS 20
+
 // GENERAL STUFF
 u32 u32_clamp(u32 num, u32 minimum, u32 maximum);
 
@@ -21,5 +23,7 @@ u16 rgba32c_to_rgba16c(u32 val);
 u32 rgba16c_to_rgba32c(u16 val);
 void convert_palette(u32 * original, u16 * destination, u16 size);
 
+// MENU STUFF
+s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_btns);
 
 #endif

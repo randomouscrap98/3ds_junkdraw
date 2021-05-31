@@ -1,4 +1,5 @@
 #include "myutils.h"
+#include "string.h"
 
 
 
@@ -78,4 +79,58 @@ void convert_palette(u32 * original, u16 * destination, u16 size)
 }
 
 
+
+// ----------------
+// -- MENU UTILS --
+// ----------------
+
+//Menu items must be packed together, separated by \0. Last item needs two \0
+//after. CONTROL WILL BE GIVEN FULLY TO THIS MENU UNTIL IT FINISHES!
+s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_buttons)
+{
+   s8 menu_on = 0;
+   u8 menu_num = 0;
+   const char * menu_str[MAX_MENU_ITEMS];
+   menu_str[0] = menu_items;
+
+   while(menu_num < MAX_MENU_ITEMS && *menu_str[menu_num] != 0)
+   {
+      menu_str[menu_num + 1] = menu_str[menu_num] + strlen(menu_str[menu_num]) + 1;
+      menu_num++;
+   }
+
+   //I want to see how inefficient printf is, so I'm doing this awful on purpose 
+   while(aptMainLoop())
+   {
+      gspWaitForVBlank();
+      hidScanInput();
+      u32 kDown = hidKeysDown();
+      if(kDown & KEY_A) break;
+      if(kDown & exit_buttons) { menu_on = -1; break; }
+      if(kDown & KEY_UP) menu_on = (menu_on - 1 + menu_num) % menu_num;
+      if(kDown & KEY_DOWN) menu_on = (menu_on + 1) % menu_num;
+
+      //Print title, 1 over
+      printf("\x1b[%d;1H\x1b[0m %-49s", top, title);
+      printf("%-50s","");
+
+      //Print menu. When you get to the selected item, do a different bg
+      for(u8 i = 0; i < menu_num; i++)
+      {
+         if(menu_on == i)
+            printf("\x1b[%d;1H\x1b[47m\x1b[30m  %-48s", top + 2 + i, menu_str[i]);
+         else
+            printf("\x1b[%d;1H\x1b[0m  %-48s", top + 2 + i, menu_str[i]);
+      }
+
+      //Trailing space
+      printf("\n");
+   }
+
+   //Clear the menu area
+   for(u8 i = 0; i < 3 + menu_num; i++)
+      printf("\x1b[%d;1H\x1b[0m%-50s", top + i, "");
+
+   return menu_on;
+}
 

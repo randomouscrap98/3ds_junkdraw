@@ -410,6 +410,20 @@ char * write_to_mem(char * stroke_data, char * stroke_end, char * mem, char * me
 
 
 
+// -- MENU/PRINT STUFF --
+
+void print_controls()
+{
+   printf("     L - change color        R - general modifier\n");
+   printf(" LF/RT - line width     UP/DWN - zoom\n");
+   printf("SELECT - change layers   START - menu\n");
+   printf("  ABXY - change tools    C-PAD - scroll canvas\n");
+   printf("--------------------------------------------------");
+   //printf("                                                  ");
+}
+
+
+
 // -- TESTS --
 
 #ifdef DEBUG_RUNTESTS
@@ -478,10 +492,7 @@ int main(int argc, char** argv)
    char * draw_data_end = draw_data;
    char * draw_pointer = draw_data;
 
-   printf("     L - change color\n");
-   printf("SELECT - change layers\n");
-   printf(" C-PAD - scroll canvas\n");
-   printf(" START - quit.\n\n");
+   print_controls();
 
 #ifdef DEBUG_RUNTESTS
    run_tests();
@@ -497,7 +508,6 @@ int main(int argc, char** argv)
 		hidCircleRead(&pos);
 
       // Respond to user input
-      if(kDown & KEY_START) break;
       if(kDown & KEY_L) palette_active = !palette_active;
       if(kDown & KEY_DUP && zoom_power < MAX_ZOOM) zoom_power++;
       if(kDown & KEY_DDOWN && zoom_power > MIN_ZOOM) zoom_power--;
@@ -506,6 +516,12 @@ int main(int argc, char** argv)
       if(kDown & KEY_SELECT) pending.layer = (pending.layer + 1) % PAGECOUNT;
       if(kDown & KEY_A) current_tool = TOOL_PENCIL;
       if(kDown & KEY_B) current_tool = TOOL_ERASER;
+      if(kDown & KEY_START) 
+      {
+         u8 selected = easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, KEY_B | KEY_START);
+         if(selected == MAINMENU_EXIT)
+            break;
+      }
       if(kDown & KEY_TOUCH)
       {
          //start_frame = current_frame;
