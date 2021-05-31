@@ -609,7 +609,6 @@ int main(int argc, char** argv)
    struct ScreenModifier screen_mod = {0,0,1}; 
 
    bool touching = false;
-   bool page_initialized = false;
    bool palette_active = false;
 
    circlePosition pos;
@@ -697,15 +696,14 @@ int main(int argc, char** argv)
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
       //Apparently (not sure), all clearing should be done within our main loop?
-      if(!page_initialized)
+      //Clear on the first frame
+      if(current_frame == 0)
       {
          for(int i = 0; i < PAGECOUNT; i++)
             C2D_TargetClear(pages[i].target, layer_color); 
-         page_initialized = true;
       }
-
-      //The touch screen is used for several things
-      if(touching && page_initialized)
+      //Ignore first frame touches
+      else if(touching)
       {
          if(palette_active)
          {
@@ -720,6 +718,9 @@ int main(int argc, char** argv)
             //Keep this outside the if statement below so it can be used for
             //background drawing too (draw commands from other people)
             C2D_SceneBegin(pages[pending.layer].target);
+
+            //C2D_Flush(); //There shouldn't be anything to flush
+            C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
 
             if(pending.line_count < MAX_STROKE_LINES)
             {
@@ -736,6 +737,10 @@ int main(int argc, char** argv)
                pending.lines = pending_lines;
                pending.line_count = oldcount + 1;
             }
+
+            C2D_Flush();
+            C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, 
+                  GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
          }
       }
 
