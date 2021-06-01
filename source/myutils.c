@@ -7,15 +7,6 @@
 // -- GENERAL UTILS --
 // -------------------
 
-u32 u32_clamp(u32 x, u32 mn, u32 mx)
-{
-   return x <= mn ? mn : x >= mx ? mx : x;
-}
-
-float float_clamp(float x, float mn, float mx)
-{
-   return x <= mn ? mn : x >= mx ? mx : x;
-}
 
 
 
@@ -92,6 +83,7 @@ s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_butto
    u8 menu_num = 0;
    const char * menu_str[MAX_MENU_ITEMS];
    menu_str[0] = menu_items;
+   bool has_title = (title != NULL && strlen(title));
 
    while(menu_num < MAX_MENU_ITEMS && *menu_str[menu_num] != 0)
    {
@@ -111,26 +103,40 @@ s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_butto
       if(kDown & KEY_DOWN) menu_on = (menu_on + 1) % menu_num;
 
       //Print title, 1 over
-      printf("\x1b[%d;1H\x1b[0m %-49s", top, title);
-      printf("%-50s","");
+      if(has_title)
+      {
+         printf("\x1b[%d;1H\x1b[0m %-49s", top, title);
+         printf("%-50s","");
+      }
 
       //Print menu. When you get to the selected item, do a different bg
       for(u8 i = 0; i < menu_num; i++)
       {
+         u8 menutop = top + (has_title ? 2 : 0) + i;
          if(menu_on == i)
-            printf("\x1b[%d;1H\x1b[47m\x1b[30m  %-48s", top + 2 + i, menu_str[i]);
+            printf("\x1b[%d;1H\x1b[47m\x1b[30m  %-48s", menutop, menu_str[i]);
          else
-            printf("\x1b[%d;1H\x1b[0m  %-48s", top + 2 + i, menu_str[i]);
+            printf("\x1b[%d;1H\x1b[0m  %-48s", menutop, menu_str[i]);
       }
-
-      //Trailing space
-      printf("\n");
    }
 
    //Clear the menu area
-   for(u8 i = 0; i < 3 + menu_num; i++)
+   for(u8 i = 0; i < (has_title ? 2 : 0) + menu_num; i++)
       printf("\x1b[%d;1H\x1b[0m%-50s", top + i, "");
 
    return menu_on;
+}
+
+bool easy_confirm(const char * title, u8 top)
+{
+   return 1 == easy_menu(title, "No\0Yes\0", top, KEY_B);
+}
+
+bool easy_warn(const char * warn, const char * title, u8 top)
+{
+   printf("\x1b[%d;1H\x1b[31m\x1b[40m %-49s", top, warn);
+   bool value = easy_confirm(title, top + 1);
+   printf("\x1b[%d;1H%-50s",top, "");
+   return value;
 }
 

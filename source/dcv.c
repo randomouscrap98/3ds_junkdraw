@@ -10,7 +10,7 @@
 char * int_to_chars(u32 num, const u8 chars, char * container)
 {
    //WARN: clamping rather than ignoring! Hope this is ok
-	num = u32_clamp(num, 0, DCV_MAXVAL(chars)); 
+	num = UTILS_CLAMP(num, 0, DCV_MAXVAL(chars)); 
 
    //Place each converted character, Little Endian
 	for(int i = 0; i < chars; i++)

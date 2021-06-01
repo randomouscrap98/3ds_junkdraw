@@ -342,6 +342,13 @@ void update_paletteindex(const touchPosition * pos, u8 * index)
       *index = new_index;
 }
 
+void update_package_with_tool(struct LinePackage * pending, const struct ToolData * tool_data)
+{
+   pending->color = tool_data->color;
+   pending->style = tool_data->style;
+   pending->width = tool_data->width;
+}
+
 
 
 // -- LAYER UTILS --
@@ -401,7 +408,7 @@ char * write_to_mem(char * stroke_data, char * stroke_end, char * mem, char * me
       //no need to free or anything, we're reusing the stroke buffer
 #ifdef DEBUG_DATAPRINT
       *stroke_end = '\0';
-      printf("S:%ld MF:%ld D:%s\n", real_size, mem_free, stroke_data);
+      printf("\x1b[20;1HS: %-5ld MF: %-7ld\n%-300.300s", real_size, mem_free, stroke_data);
 #endif
    }
 
@@ -422,6 +429,19 @@ void print_controls()
    //printf("                                                  ");
 }
 
+void print_status(u8 width, u8 layer, float zoom, u8 tool, u16 color, u16 page)
+{
+   //TODO: make this nicer looking
+   printf("\x1b[30;1HW:%02d L:%d Z:%03.2f T:%d P:%d C:%#06x",
+         width, layer, zoom, tool, page, color);
+   //      tool_data[current_tool].width, 
+   //      pending.layer,
+   //      screen_mod.zoom,
+   //      current_tool,
+   //      tool_data[current_tool].color
+   //);
+}
+
 
 
 // -- TESTS --
@@ -433,6 +453,17 @@ void print_controls()
 
 
 // -- MAIN, OFC --
+
+// Some macros used ONLY for main (think lambdas)
+#define MAIN_UPDOWN(x) {   \
+   if(kHeld & KEY_R) {     \
+      pending.page = UTILS_CLAMP(pending.page + x, 0, MAX_PAGE);    \
+      draw_pointer = draw_data;     \
+      flush_layers = true;          \
+   } else {                \
+      zoom_power = UTILS_CLAMP(zoom_power + x, MIN_ZOOMPOWER, MAX_ZOOMPOWER);    \
+   } }
+
 
 int main(int argc, char** argv)
 {
@@ -467,6 +498,7 @@ int main(int argc, char** argv)
 
    bool touching = false;
    bool palette_active = false;
+   bool flush_layers = true;
 
    circlePosition pos;
    touchPosition current_touch;
@@ -509,8 +541,8 @@ int main(int argc, char** argv)
 
       // Respond to user input
       if(kDown & KEY_L) palette_active = !palette_active;
-      if(kDown & KEY_DUP && zoom_power < MAX_ZOOM) zoom_power++;
-      if(kDown & KEY_DDOWN && zoom_power > MIN_ZOOM) zoom_power--;
+      if(kDown & KEY_DUP) MAIN_UPDOWN(1)
+      if(kDown & KEY_DDOWN) MAIN_UPDOWN(-1)
       if(kDown & KEY_DRIGHT) tool_data[current_tool].width += (kHeld & KEY_R ? 5 : 1);
       if(kDown & KEY_DLEFT) tool_data[current_tool].width -= (kHeld & KEY_R ? 5 : 1);
       if(kDown & KEY_SELECT) pending.layer = (pending.layer + 1) % PAGECOUNT;
@@ -520,15 +552,12 @@ int main(int argc, char** argv)
       {
          u8 selected = easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, KEY_B | KEY_START);
          if(selected == MAINMENU_EXIT)
-            break;
+         {
+            if(draw_data_end == draw_data || easy_warn("WARN: UNSAVED DATA", "Really quit?", MAINMENU_TOP))
+               break;
+         }
       }
-      if(kDown & KEY_TOUCH)
-      {
-         //start_frame = current_frame;
-         pending.color = tool_data[current_tool].color;
-         pending.style = tool_data[current_tool].style;
-         pending.width = tool_data[current_tool].width;
-      }
+      if(kDown & KEY_TOUCH) update_package_with_tool(&pending, &tool_data[current_tool]);
       if(kUp & KEY_TOUCH) end_frame = current_frame;
 
       //Update zoom separately, since the update is always the same
@@ -537,14 +566,8 @@ int main(int argc, char** argv)
 
       if(kDown & ~(KEY_TOUCH) || !current_frame)
       {
-         //TODO: make this nicer looking
-         printf("\x1b[30;1HW:%02d L:%d Z:%03.2f T:%d C:%#06x",
-               tool_data[current_tool].width, 
-               pending.layer,
-               screen_mod.zoom,
-               current_tool,
-               tool_data[current_tool].color
-         );
+         print_status(tool_data[current_tool].width, pending.layer, screen_mod.zoom, 
+               current_tool, tool_data[current_tool].color, pending.page);
       }
 
       touching = (kHeld & KEY_TOUCH) > 0;
@@ -555,11 +578,11 @@ int main(int argc, char** argv)
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
       //Apparently (not sure), all clearing should be done within our main loop?
-      //Clear on the first frame
-      if(current_frame == 0)
+      if(flush_layers)
       {
          for(int i = 0; i < PAGECOUNT; i++)
             C2D_TargetClear(pages[i].target, layer_color); 
+         flush_layers = false;
       }
       //Ignore first frame touches
       else if(touching)

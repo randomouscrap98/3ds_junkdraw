@@ -14,7 +14,7 @@
 #define MAX_MENU_ITEMS 20
 
 // GENERAL STUFF
-u32 u32_clamp(u32 num, u32 minimum, u32 maximum);
+#define UTILS_CLAMP(x, mn, mx) (x <= mn ? mn : x >= mx ? mx : x)
 
 // COLOR STUFF
 u32 rgb24_to_rgba32c(u32 rgb);
@@ -25,5 +25,7 @@ void convert_palette(u32 * original, u16 * destination, u16 size);
 
 // MENU STUFF
 s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_btns);
+bool easy_confirm(const char * title, u8 top); 
+bool easy_warn(const char * warn, const char * title, u8 top);
 
 #endif

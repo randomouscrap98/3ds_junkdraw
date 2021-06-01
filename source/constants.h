@@ -19,10 +19,11 @@
 #define MAX_DRAW_DATA 5000000
 #define MAX_STROKE_LINES 5000
 #define MAX_STROKE_DATA MAX_STROKE_LINES << 3
-#define MIN_ZOOM -2
-#define MAX_ZOOM 3
+#define MIN_ZOOMPOWER -2
+#define MAX_ZOOMPOWER 3
 #define MIN_WIDTH 1
 #define MAX_WIDTH 64
+#define MAX_PAGE 0xFFFF
 
 #define TOOL_PENCIL 0
 #define TOOL_ERASER 1
