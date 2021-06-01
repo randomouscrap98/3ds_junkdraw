@@ -429,7 +429,6 @@ void print_controls()
    printf("SELECT - change layers   START - menu\n");
    printf("  ABXY - change tools    C-PAD - scroll canvas\n");
    printf("--------------------------------------------------");
-   //printf("                                                  ");
 }
 
 #define PSX1BLEN 30
@@ -454,33 +453,19 @@ void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color, u16 pag
    char activebg_x1b[PSX1BLEN];
    get_printmods(status_x1b, active_x1b, statusbg_x1b, activebg_x1b);
 
-   printf("\x1b[30;1H%s W:%s%02d%s L:",
-         status_x1b, active_x1b, width, status_x1b);
+   printf("\x1b[30;1H%s W:%s%02d%s L:", status_x1b, active_x1b, width, status_x1b);
    for(s8 i = PAGECOUNT - 1; i >= 0; i--)
-   {
       printf("%s ", i == layer ? activebg_x1b : statusbg_x1b);
-            //i == layer ? ' ' : '.');
-   }
    printf("%s Z:", status_x1b);
    for(s8 i = MIN_ZOOMPOWER; i <= MAX_ZOOMPOWER; i++)
-   {
       printf("%s%c", 
-            i == zoom_power ? activebg_x1b : active_x1b,
-            i == zoom_power ? ' ' : (i == 0 ? '+' : '.'));
-   }
+            i == zoom_power ? activebg_x1b : statusbg_x1b,
+            i == 0 ? '|' : ' ');
    printf("%s T:", status_x1b);
    for(u8 i = 0; i < TOOL_COUNT; i++)
-   {
-      //First is foreground, second is background
-      printf("\x1b[%dm\x1b[%dm%c", 
-            (i == tool ? 30 : STATUS_MAINCOLOR),
-            10 + (i == tool ? STATUS_ACTIVECOLOR : 30),
-            tool_chars[i]);
-   }
-   printf("\x1b[0m\x1b[%dm P:\x1b[%dm%03d", 
-         STATUS_MAINCOLOR, STATUS_ACTIVECOLOR, page + 1);
-   printf("\x1b[0m\x1b[%dm C:\x1b[%dm%#06x", 
-         STATUS_MAINCOLOR, STATUS_ACTIVECOLOR, color);
+      printf("%s%c", i == tool ? activebg_x1b : active_x1b, tool_chars[i]);
+   printf("%s P:%s%03d", status_x1b, active_x1b, page + 1);
+   printf("%s C:%s%#06x", status_x1b, active_x1b, color);
 }
 
 void print_time(bool showcolon)
@@ -491,7 +476,7 @@ void print_time(bool showcolon)
    time_t rawtime = time(NULL);
    struct tm * timeinfo = localtime(&rawtime);
 
-   printf("\x1b[30;45H%s%2d%c%2d", 
+   printf("\x1b[30;45H%s%02d%c%02d", 
          status_x1b, timeinfo->tm_hour, showcolon ? ':' : ' ', timeinfo->tm_min);
 }
 
