@@ -279,9 +279,11 @@ void draw_scrollbars(const struct ScreenModifier * mod)
 //stateful controls
 void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index)
 {
-   C2D_DrawRectSolid(0, 0, 0.5f, SCREENWIDTH, SCREENHEIGHT, PALETTE_BG);
-
    u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
+   C2D_DrawRectSolid(0, 0, 0.5f, 
+         8 * shift + (PALETTE_OFSX << 1), 
+         8 * shift + (PALETTE_OFSY << 1), PALETTE_BG);
+
    for(u16 i = 0; i < palette_size; i++)
    {
       //TODO: an implicit 8 wide thing
@@ -430,35 +432,43 @@ void print_controls()
    //printf("                                                  ");
 }
 
+#define PSX1BLEN 30
+
+void get_printmods(char * status_x1b, char * active_x1b, char * statusbg_x1b, char * activebg_x1b)
+{
+   //First is background, second is foreground (within string)
+   if(status_x1b != NULL) sprintf(status_x1b, "\x1b[40m\x1b[%dm", STATUS_MAINCOLOR);
+   if(active_x1b != NULL) sprintf(active_x1b, "\x1b[40m\x1b[%dm", STATUS_ACTIVECOLOR);
+   if(statusbg_x1b != NULL) sprintf(statusbg_x1b, "\x1b[%dm\x1b[30m", 10 + STATUS_MAINCOLOR);
+   if(activebg_x1b != NULL) sprintf(activebg_x1b, "\x1b[%dm\x1b[30m", 10 + STATUS_ACTIVECOLOR);
+}
+
 void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color, u16 page)
 {
    char tool_chars[TOOL_COUNT + 1];
    strcpy(tool_chars, TOOL_CHARS);
-   char status_x1b[40];
-   char active_x1b[40];
 
-   //First is background, second is foreground (within string)
-   sprintf(status_x1b, "\x1b[40m\x1b[%dm", STATUS_MAINCOLOR);
-   sprintf(active_x1b, "\x1b[%dm\x1b[30m", 10 + STATUS_ACTIVECOLOR);
+   char status_x1b[PSX1BLEN];
+   char active_x1b[PSX1BLEN];
+   char statusbg_x1b[PSX1BLEN];
+   char activebg_x1b[PSX1BLEN];
+   get_printmods(status_x1b, active_x1b, statusbg_x1b, activebg_x1b);
 
-   printf("\x1b[30;1H%s W:%s%02d", 
-         status_x1b, active_x1b, width);
-   printf("%s L:%s%s",
-         status_x1b, active_x1b, layer == 1 ? " ." : ". ");
-         layer == 0 ? '
-         STATUS_MAINCOLOR, 
-         10 + (layer == 1 ? STATUS_ACTIVECOLOR : STATUS_MAINCOLOR),
-         10 + (layer == 0 ? STATUS_ACTIVECOLOR : STATUS_MAINCOLOR));
-   printf("\x1b[40m\x1b[%dm Z:", STATUS_MAINCOLOR);
+   printf("\x1b[30;1H%s W:%s%02d%s L:",
+         status_x1b, active_x1b, width, status_x1b);
+   for(s8 i = PAGECOUNT - 1; i >= 0; i--)
+   {
+      printf("%s ", i == layer ? activebg_x1b : statusbg_x1b);
+            //i == layer ? ' ' : '.');
+   }
+   printf("%s Z:", status_x1b);
    for(s8 i = MIN_ZOOMPOWER; i <= MAX_ZOOMPOWER; i++)
    {
-      //First is foreground, second is background
-      printf("\x1b[%dm\x1b[%dm%s", 
-            (i == zoom_power ? 30 : STATUS_MAINCOLOR),
-            10 + (i == zoom_power ? STATUS_ACTIVECOLOR : 30),
-            i == 0 ? "*" : "-");
+      printf("%s%c", 
+            i == zoom_power ? activebg_x1b : active_x1b,
+            i == zoom_power ? ' ' : (i == 0 ? '+' : '.'));
    }
-   printf("\x1b[0m\x1b[%dm T:", STATUS_MAINCOLOR);
+   printf("%s T:", status_x1b);
    for(u8 i = 0; i < TOOL_COUNT; i++)
    {
       //First is foreground, second is background
@@ -471,6 +481,18 @@ void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color, u16 pag
          STATUS_MAINCOLOR, STATUS_ACTIVECOLOR, page + 1);
    printf("\x1b[0m\x1b[%dm C:\x1b[%dm%#06x", 
          STATUS_MAINCOLOR, STATUS_ACTIVECOLOR, color);
+}
+
+void print_time(bool showcolon)
+{
+   char status_x1b[PSX1BLEN];
+   get_printmods(status_x1b, NULL, NULL, NULL);
+
+   time_t rawtime = time(NULL);
+   struct tm * timeinfo = localtime(&rawtime);
+
+   printf("\x1b[30;45H%s%2d%c%2d", 
+         status_x1b, timeinfo->tm_hour, showcolon ? ':' : ' ', timeinfo->tm_min);
 }
 
 
@@ -604,6 +626,9 @@ int main(int argc, char** argv)
 
       update_screenmodifier(&screen_mod, pos);
 
+      if(!(current_frame % 30))
+         print_time(current_frame % 60);
+
       // Render the scene
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
@@ -676,28 +701,30 @@ int main(int argc, char** argv)
       C2D_TargetClear(screen, screen_color);
       C2D_SceneBegin(screen);
 
-      //Draw different things based on what's active on the touchscreen.
+      //Draw the pages
+      C2D_DrawRectSolid(-screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f,
+            PAGEWIDTH * screen_mod.zoom, PAGEHEIGHT * screen_mod.zoom, bg_color); //The bg color
+      for(int i = 0; i < PAGECOUNT; i++)
+      {
+         C2D_DrawImageAt(pages[i].image, -screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f, 
+               NULL, screen_mod.zoom, screen_mod.zoom);
+      }
+      draw_scrollbars(&screen_mod);
+
+      //The selected color thing
       if(palette_active)
       {
          draw_colorpicker(palette, PALETTE_COLORS, palette_index);
       }
       else
       {
-         C2D_DrawRectSolid(-screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f,
-               PAGEWIDTH * screen_mod.zoom, PAGEHEIGHT * screen_mod.zoom, bg_color); //The bg color
-         for(int i = 0; i < PAGECOUNT; i++)
-         {
-            C2D_DrawImageAt(pages[i].image, -screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f, 
-                  NULL, screen_mod.zoom, screen_mod.zoom);
-         }
-         //The selected color thing
          C2D_DrawRectSolid(0, 0, 0.5f, PALETTE_MINISIZE, PALETTE_MINISIZE, PALETTE_BG);
          C2D_DrawRectSolid(PALETTE_MINIPADDING, PALETTE_MINIPADDING, 0.5f, 
                PALETTE_MINISIZE - PALETTE_MINIPADDING * 2, 
                PALETTE_MINISIZE - PALETTE_MINIPADDING * 2, 
                rgba16c_to_rgba32c(palette[palette_index])); 
-         draw_scrollbars(&screen_mod);
       }
+
 
       C3D_FrameEnd(0);
 
