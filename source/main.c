@@ -104,7 +104,7 @@ struct LinePackage {
    u16 color;
    u8 layer;
    u8 width;
-   u16 page;
+   //u16 page;
    struct SimpleLine * lines;
    u16 line_count;
 };
@@ -142,7 +142,7 @@ struct SimpleLine * add_stroke(struct LinePackage * pending,
 
 //Convert lines into data, but if it doesn't fit, return a null pointer.
 //Returned pointer points to end + 1 in container
-char * convert_lines(struct LinePackage * lines, char * container, u32 container_size)
+char * convert_lines_to_data(struct LinePackage * lines, char * container, u32 container_size)
 {
    char * ptr = container;
 
@@ -160,8 +160,8 @@ char * convert_lines(struct LinePackage * lines, char * container, u32 container
    //included at the start, as it may be stored in the final product
 
    //Dump page
-   ptr = int_to_varwidth(lines->page, ptr);
-   CVL_LINECHECK
+   //ptr = int_to_varwidth(lines->page, ptr);
+   //CVL_LINECHECK
 
    //1 byte style/layer, 1 byte width, 3 bytes color
    //3 bits of line style, 1 bit (for now) of layers, 2 unused
@@ -208,6 +208,21 @@ char * convert_lines(struct LinePackage * lines, char * container, u32 container
    }
 
    return ptr;
+}
+
+//Package needs to have a 'lines' array already assigned with enough space to
+//hold the largest stroke. Data needs to start precisely where you want it.
+//Parsed data is all stored in the given package. A partial parse may result 
+//in a partially modified package. Converts a single chunk of line data.
+//Returns the next position in the data to start reading a chunk
+char * convert_data_to_lines(struct LinePackage * package, char * data, u32 data_length)
+{
+   package->line_count = 0;
+
+   return NULL;
+   //char * endptr = data;
+   //package->page = varwidth_to_int(lines->page, ptr);
+   //First, parse the length
 }
 
 
@@ -281,8 +296,9 @@ void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index)
 {
    u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
    C2D_DrawRectSolid(0, 0, 0.5f, 
-         8 * shift + (PALETTE_OFSX << 1), 
-         8 * shift + (PALETTE_OFSY << 1), PALETTE_BG);
+         8 * shift + (PALETTE_OFSX << 1) + PALETTE_SWATCHMARGIN, 
+         8 * shift + (PALETTE_OFSY << 1) + PALETTE_SWATCHMARGIN, 
+         PALETTE_BG);
 
    for(u16 i = 0; i < palette_size; i++)
    {
@@ -357,7 +373,7 @@ void update_package_with_tool(struct LinePackage * pending, const struct ToolDat
 // -- LAYER UTILS --
 
 //All the data associated with a single layer. TODO: still called "page"
-struct PageData {
+struct LayerData {
    Tex3DS_SubTexture subtex;     //Simple structures
    C3D_Tex texture;
    C2D_Image image;
@@ -365,7 +381,7 @@ struct PageData {
 };
 
 //Create a LAYER from an off-screen texture.
-void create_page(struct PageData * result, Tex3DS_SubTexture subtex)
+void create_layer(struct LayerData * result, Tex3DS_SubTexture subtex)
 {
    result->subtex = subtex;
    C3D_TexInitVRAM(&(result->texture), subtex.width, subtex.height, PAGEFORMAT);
@@ -375,7 +391,7 @@ void create_page(struct PageData * result, Tex3DS_SubTexture subtex)
 }
 
 //Clean up a layer created by create_page
-void delete_page(struct PageData page)
+void delete_layer(struct LayerData page)
 {
    C3D_RenderTargetDelete(page.target);
    C3D_TexDelete(&page.texture);
@@ -385,9 +401,15 @@ void delete_page(struct PageData page)
 
 // -- DATA TRANSFER UTILS --
 
-char * write_to_mem(char * stroke_data, char * stroke_end, char * mem, char * mem_end)
+char * write_to_mem(char * stroke_data, u16 page, char * stroke_end, char * mem, char * mem_end)
 {
-   u32 real_size = (stroke_end - stroke_data);
+   //This is kind of wasteful, but it's just to know how much space the page
+   //will take up. We don't REALLY need a variable width page, but...
+   char page_temp[DCV_VARIMAXSCAN];
+   char * page_temp_end = int_to_varwidth(page, page_temp);
+
+   u32 stroke_size = (stroke_end - stroke_data);
+   u32 real_size = stroke_size + (page_temp_end - page_temp);
    u32 test_size = DCV_VARIMAXSCAN + real_size;
    u32 mem_free = MAX_DRAW_DATA - (mem_end - mem);
    char * new_end = mem_end;
@@ -404,14 +426,17 @@ char * write_to_mem(char * stroke_data, char * stroke_end, char * mem, char * me
       //calculations), then just memcopy the cvl into the draw_data
       new_end = int_to_varwidth(real_size, new_end);
 
-      //Next, just memcpy
-      memcpy(new_end, stroke_data, sizeof(char) * real_size);
-      new_end += real_size;
+      //Next, redo the page variable width conversion and store it (it's ok)
+      new_end = int_to_varwidth(page, new_end);
+
+      //Finally, memcopy the whole stroke chunk
+      memcpy(new_end, stroke_data, sizeof(char) * stroke_size);
+      new_end += stroke_size;
 
       //no need to free or anything, we're reusing the stroke buffer
 #ifdef DEBUG_DATAPRINT
-      *stroke_end = '\0';
-      printf("\x1b[20;1HS: %-5ld MF: %-7ld\n%-300.300s", real_size, mem_free, stroke_data);
+      *new_end = '\0'; //Will this be an issue??
+      printf("\x1b[20;1HS: %-5ld MF: %-7ld\n%-300.300s", stroke_size, mem_free, mem_end);
 #endif
    }
 
@@ -495,7 +520,7 @@ void print_time(bool showcolon)
 // Some macros used ONLY for main (think lambdas)
 #define MAIN_UPDOWN(x) {   \
    if(kHeld & KEY_R) {     \
-      pending.page = UTILS_CLAMP(pending.page + x, 0, MAX_PAGE);    \
+      current_page = UTILS_CLAMP(current_page + x, 0, MAX_PAGE);    \
       draw_pointer = draw_data;     \
       flush_layers = true;          \
    } else {                \
@@ -526,10 +551,10 @@ int main(int argc, char** argv)
       0.0f, 1.0f, 1.0f, 0.0f
    };
 
-   struct PageData pages[PAGECOUNT];
+   struct LayerData layers[PAGECOUNT];
 
    for(int i = 0; i < PAGECOUNT; i++)
-      create_page(pages + i, subtex);
+      create_layer(layers + i, subtex);
 
    struct ScreenModifier screen_mod = {0,0,1}; 
 
@@ -544,6 +569,7 @@ int main(int argc, char** argv)
    u32 end_frame = 0;
    s8 zoom_power = 0;
    s8 last_zoom_power = 0;
+   u16 current_page = 0;
 
    u8 current_tool = 0;
    struct ToolData tool_data[TOOL_COUNT];
@@ -551,10 +577,10 @@ int main(int argc, char** argv)
 
    struct LinePackage pending;
    struct SimpleLine * pending_lines = malloc(MAX_STROKE_LINES * sizeof(struct SimpleLine));
-   pending.lines = pending_lines; //Use the stack for my pending stroke
+   pending.lines = pending_lines;
    pending.line_count = 0;
    pending.layer = PAGECOUNT - 1; //Always start on the top page
-   pending.page = 0;
+   //pending.page = 0;
 
    char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
    char * stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
@@ -604,7 +630,7 @@ int main(int argc, char** argv)
       if(kDown & ~(KEY_TOUCH) || !current_frame)
       {
          print_status(tool_data[current_tool].width, pending.layer, zoom_power, 
-               current_tool, tool_data[current_tool].color, pending.page);
+               current_tool, tool_data[current_tool].color, current_page);
       }
 
       touching = (kHeld & KEY_TOUCH) > 0;
@@ -621,7 +647,7 @@ int main(int argc, char** argv)
       if(flush_layers)
       {
          for(int i = 0; i < PAGECOUNT; i++)
-            C2D_TargetClear(pages[i].target, layer_color); 
+            C2D_TargetClear(layers[i].target, layer_color); 
          flush_layers = false;
       }
       //Ignore first frame touches
@@ -639,7 +665,7 @@ int main(int argc, char** argv)
          {
             //Keep this outside the if statement below so it can be used for
             //background drawing too (draw commands from other people)
-            C2D_SceneBegin(pages[pending.layer].target);
+            C2D_SceneBegin(layers[pending.layer].target);
 
             //C2D_Flush(); //There shouldn't be anything to flush
             C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
@@ -669,7 +695,7 @@ int main(int argc, char** argv)
       //TODO: Eventually, change this to put the data in different places?
       if(end_frame == current_frame && pending.line_count > 0)
       {
-         char * cvl_end = convert_lines(&pending, stroke_data, MAX_STROKE_DATA);
+         char * cvl_end = convert_lines_to_data(&pending, stroke_data, MAX_STROKE_DATA);
 
          if(cvl_end == NULL)
          {
@@ -677,7 +703,7 @@ int main(int argc, char** argv)
          }
          else
          {
-            draw_data_end = write_to_mem(stroke_data, cvl_end, draw_data, draw_data_end);
+            draw_data_end = write_to_mem(stroke_data, current_page, cvl_end, draw_data, draw_data_end);
          }
 
          pending.line_count = 0;
@@ -686,12 +712,12 @@ int main(int argc, char** argv)
       C2D_TargetClear(screen, screen_color);
       C2D_SceneBegin(screen);
 
-      //Draw the pages
+      //Draw the layers
       C2D_DrawRectSolid(-screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f,
             PAGEWIDTH * screen_mod.zoom, PAGEHEIGHT * screen_mod.zoom, bg_color); //The bg color
       for(int i = 0; i < PAGECOUNT; i++)
       {
-         C2D_DrawImageAt(pages[i].image, -screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f, 
+         C2D_DrawImageAt(layers[i].image, -screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f, 
                NULL, screen_mod.zoom, screen_mod.zoom);
       }
       draw_scrollbars(&screen_mod);
@@ -722,7 +748,7 @@ int main(int argc, char** argv)
    free(stroke_data);
 
    for(int i = 0; i < PAGECOUNT; i++)
-      delete_page(pages[i]);
+      delete_layer(layers[i]);
 
    C2D_Fini();
    C3D_Fini();
