@@ -140,6 +140,70 @@ int test_inttovarwidth()
    return 0;
 }
 
+bool test_linearr_eq(struct SimpleLine * l1, struct SimpleLine * l2, u16 cnt)
+{
+   for(u16 i = 0; i < cnt; i++)
+      if(l1[i].x1 != l2[i].x1 || l1[i].y1 != l2[i].y1 ||
+         l1[i].x2 != l2[i].x2 || l1[i].y2 != l2[i].y2)
+         return false;
+
+   return true;
+}
+
+#define TST_CVLDAT 200
+#define TST_CVLEQ(x,y) if(!(x.line_count == y.line_count) && \
+      x.layer == y.layer && x.color == y.color && x.width == y.width && \
+      x.style == y.style && test_linearr_eq(x.lines, y.lines, x.line_count)) { \
+   printf("ConvertLines the lines did not match: (%d,%d,%d,%d) / (%d,%d,%d,%d)\n", \
+         x.lines[0].x1, x.lines[0].y1, x.lines[0].x2, x.lines[0].y2, \
+         y.lines[0].x1, y.lines[0].y1, y.lines[0].x2, y.lines[0].y2); \
+   return 1; }
+
+#define TST_CVLTST \
+   endptr = convert_lines_to_data(&package1, data, TST_CVLDAT); \
+   if(endptr == NULL) return 1; \
+   endptr2 = convert_data_to_lines(&package2, data, endptr - data); \
+   if(endptr2 == NULL) return 1; \
+   TST_CVLEQ(package1, package2) \
+   printf(".");
+
+int test_convertlines()
+{
+   struct SimpleLine lines1[50];
+   struct SimpleLine lines2[50];
+   struct LinePackage package1;
+   struct LinePackage package2;
+   package1.lines = lines1;
+   package2.lines = lines2;
+   char data[TST_CVLDAT];
+   char * endptr;
+   char * endptr2;
+
+   //First, the absolute most basic thing. One line.
+   package1.line_count = 1;
+   package1.layer = 1;
+   package1.color = rgba32c_to_rgba16c(C2D_Color32(218, 128, 45, 255));
+   package1.width = 35;
+   package1.style = LINESTYLE_STROKE;
+   lines1[0].x1 = 9;
+   lines1[0].y1 = 14;
+   lines1[0].x2 = 40;
+   lines1[0].y2 = 100;
+
+   TST_CVLTST
+
+   //Now a simple test: stroke that doesn't move
+   lines1[0].x1 = lines1[0].x2 = 508;
+   lines1[0].y1 = lines2[0].y2 = 747;
+
+   TST_CVLTST
+
+   //TODO: Add more tests
+
+
+   return 0;
+}
+
 void run_tests()
 {
    printf("Running tests; only errors will be displayed\n");
@@ -147,6 +211,7 @@ void run_tests()
    if(test_inttochars()) return; 
    if(test_signedtospecial()) return; 
    if(test_inttovarwidth()) return; 
+   if(test_convertlines()) return; 
    printf("\nAll tests passed\n");
 }
 

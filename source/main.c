@@ -101,8 +101,8 @@ struct SimpleLine {
 // or any of that, it JUST has the information required to draw the lines.
 struct LinePackage {
    u8 style;
-   u16 color;
    u8 layer;
+   u16 color;
    u8 width;
    //u16 page;
    struct SimpleLine * lines;
@@ -159,10 +159,6 @@ char * convert_lines_to_data(struct LinePackage * lines, char * container, u32 c
    //package or anything. So for instance, the length of the data is not
    //included at the start, as it may be stored in the final product
 
-   //Dump page
-   //ptr = int_to_varwidth(lines->page, ptr);
-   //CVL_LINECHECK
-
    //1 byte style/layer, 1 byte width, 3 bytes color
    //3 bits of line style, 1 bit (for now) of layers, 2 unused
    ptr = int_to_chars((lines->style & 0x7) | (lines->layer << 3),1,ptr); 
@@ -203,12 +199,18 @@ char * convert_lines_to_data(struct LinePackage * lines, char * container, u32 c
    else
    {
       //We DON'T support this! 
-      LOGDBG("ERR: UNSUPPORTED STROKE: %d\n", lines->style);
+      LOGDBG("ERR: L2D UNSUPPORTED STROKE: %d\n", lines->style);
       return NULL;
    }
 
    return ptr;
 }
+
+//A true macro, as in just dump code into the function later. Used ONLY for 
+//convert_data, hence "CVD"
+#define CVD_LINECHECK(x,msg) if((data_length - (endptr - data)) < x) { \
+   LOGDBG("ERROR: Not enough data to parse line! %s\n",msg); \
+   return NULL; }
 
 //Package needs to have a 'lines' array already assigned with enough space to
 //hold the largest stroke. Data needs to start precisely where you want it.
@@ -217,12 +219,69 @@ char * convert_lines_to_data(struct LinePackage * lines, char * container, u32 c
 //Returns the next position in the data to start reading a chunk
 char * convert_data_to_lines(struct LinePackage * package, char * data, u32 data_length)
 {
+   char * endptr = data;
    package->line_count = 0;
 
-   return NULL;
-   //char * endptr = data;
-   //package->page = varwidth_to_int(lines->page, ptr);
-   //First, parse the length
+   //If data is so short that it can't even parse the preamble, quit
+   CVD_LINECHECK(5,"PREAMBLE")
+
+   u32 temp = chars_to_int(endptr, 1);
+   package->style = temp & 0x7;
+   package->layer = (temp >> 3) & 0x1; 
+   package->width = chars_to_int(endptr + 1, 1) + 1;
+   package->color = chars_to_int(endptr + 2, 3);
+   endptr += 5;
+
+   if(package->style == LINESTYLE_STROKE)
+   {
+      CVD_LINECHECK(4,"STROKE FIRST POINT")
+
+      //First point is regular simple 4 byte data point.
+      u16 x = chars_to_int(endptr += 2, 2);
+      u16 y = chars_to_int(endptr += 2, 2);
+
+      u8 scanned = 0;
+
+      //This could be VERY VERY UNSAFE!!
+      while((endptr - data) < data_length)
+      {
+         struct SimpleLine * line = package->lines + package->line_count;
+
+         //Store current end as first point
+         line->x1 = x; line->y1 = y;
+         //Read next endpoint
+         x = x + special_to_signed(varwidth_to_int(endptr, &scanned)); 
+         endptr += scanned;
+         y = y + special_to_signed(varwidth_to_int(endptr, &scanned)); 
+         endptr += scanned;
+         //The end of us is the next endpoint
+         line->x2 = x; line->y2 = y;
+
+         //We added another line
+         package->line_count++;
+
+         if(package->line_count > MAX_STROKE_LINES)
+         {
+            LOGDBG("ERR: got a stroke that's too long!");
+            return NULL;
+         }
+      }
+
+      //The special case where there's no additional strokes
+      if(package->line_count == 0)
+      {
+         package->lines[0].x1 = package->lines[0].x2 = x; 
+         package->lines[0].y1 = package->lines[0].y2 = y;
+      }
+   }
+   else
+   {
+      //We DON'T support this! 
+      LOGDBG("ERR: D2L UNSUPPORTED STROKE: %d\n", package->style);
+      return NULL;
+   }
+
+   return endptr;
 }
 
 
