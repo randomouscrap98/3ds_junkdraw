@@ -25,6 +25,8 @@
 #define MAX_WIDTH 64
 #define MAX_PAGE 0xFFFF
 
+#define DRAWDATA_ALIGNMENT '.'
+
 #define TOOL_PENCIL 0
 #define TOOL_ERASER 1
 #define TOOL_COUNT 2

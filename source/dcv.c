@@ -73,7 +73,7 @@ char * int_to_varwidth(u32 value, char * container)
 
 //Read a variable width value from the given container. Stops if it goes too
 //far though, which may give bad values
-u32 varwidth_to_int(char * container, u8 * read_count)
+u32 varwidth_to_int(const char * container, u8 * read_count)
 {
    u8 c = 0;
    u8 i = 0;

@@ -460,16 +460,10 @@ void delete_layer(struct LayerData page)
 
 // -- DATA TRANSFER UTILS --
 
-char * write_to_mem(char * stroke_data, u16 page, char * stroke_end, char * mem, char * mem_end)
+char * write_to_datamem(char * stroke_data, char * stroke_end, u16 page, char * mem, char * mem_end)
 {
-   //This is kind of wasteful, but it's just to know how much space the page
-   //will take up. We don't REALLY need a variable width page, but...
-   char page_temp[DCV_VARIMAXSCAN];
-   char * page_temp_end = int_to_varwidth(page, page_temp);
-
-   u32 stroke_size = (stroke_end - stroke_data);
-   u32 real_size = stroke_size + (page_temp_end - page_temp);
-   u32 test_size = DCV_VARIMAXSCAN + real_size;
+   u32 stroke_size = stroke_end - stroke_data;
+   u32 test_size = DCV_VARIMAXSCAN + stroke_size + 1; //Assume page may be max width
    u32 mem_free = MAX_DRAW_DATA - (mem_end - mem);
    char * new_end = mem_end;
 
@@ -481,11 +475,11 @@ char * write_to_mem(char * stroke_data, u16 page, char * stroke_end, char * mem,
    }
    else
    {
-      //First, write the ACTUAL size (not the safe size used in the
-      //calculations), then just memcopy the cvl into the draw_data
-      new_end = int_to_varwidth(real_size, new_end);
+      //FIRST, write the stroke identifier
+      *new_end = DRAWDATA_ALIGNMENT;
+      new_end++;
 
-      //Next, redo the page variable width conversion and store it (it's ok)
+      //Next, store the page 
       new_end = int_to_varwidth(page, new_end);
 
       //Finally, memcopy the whole stroke chunk
@@ -500,6 +494,69 @@ char * write_to_mem(char * stroke_data, u16 page, char * stroke_end, char * mem,
    }
 
    return new_end;
+}
+
+//Scan through memory until either we reach the end, the max scan is reached,
+//or we actually find the first occurence of a page that we want. Return 
+//the place where we stopped scanning.
+const char * datamem_scanstroke(const char * start, const char * end, const u32 max_scan, 
+                    const u16 page, const char ** stroke_start)
+{
+   const char * tempptr;
+   const char * scanptr = start;
+   *stroke_start = NULL;
+
+   if(scanptr >= end)
+   {
+      LOGDBG("WARN: called scanstroke at or past end of data! Diff: %d\n", end - scanptr);
+      return end;
+   }
+
+   //Perform a pre-check to realign ourselves if we're not aligned
+   if(*scanptr != DRAWDATA_ALIGNMENT)
+   {
+      LOGDBG("SCAN ERROR: OUT OF ALIGNMENT!, linear scanning for next stroke\n");
+      tempptr = memchr(scanptr, DRAWDATA_ALIGNMENT, end - scanptr);
+
+      if(tempptr == NULL)
+      {
+         LOGDBG("SCAN ERROR: NO MORE ALIGNMENT CHARS! Skipping all the way to end\n");
+         return end;
+      }
+      else
+      {
+         LOGDBG("SCAN SKIP: fast-forwarding %d characters to next alignment\n", tempptr - scanptr);
+         scanptr = tempptr;
+      }
+   }
+
+   u16 stroke_page;
+   u8 varwidth;
+
+   while(scanptr > end && (scanptr - start) < max_scan)
+   {
+      //Skip the alignment character (TODO: assuming it's 1 byte)
+      scanptr++;
+
+      //TODO: will crash if last character is the alignment char, or if there
+      //just aren't enough characters to read up the page.
+      stroke_page = varwidth_to_int(scanptr, &varwidth);
+      tempptr = scanptr + varwidth; //tmpptr points at the stroke start
+
+      //Move scanptr to the next stroke, always
+      scanptr = memchr(scanptr, DRAWDATA_ALIGNMENT, (end - scanptr));
+
+      //If no more strokes are found, we're at the end
+      if(scanptr == NULL) scanptr = end;
+
+      if(stroke_page == page)
+      {
+         *stroke_start = tempptr;
+         break;
+      }
+   }
+
+   return scanptr;
 }
 
 
@@ -762,7 +819,7 @@ int main(int argc, char** argv)
          }
          else
          {
-            draw_data_end = write_to_mem(stroke_data, current_page, cvl_end, draw_data, draw_data_end);
+            draw_data_end = write_to_datamem(stroke_data, cvl_end, current_page, draw_data, draw_data_end);
          }
 
          pending.line_count = 0;

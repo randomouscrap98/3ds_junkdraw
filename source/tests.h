@@ -198,6 +198,22 @@ int test_convertlines()
 
    TST_CVLTST
 
+   package1.line_count = 20;
+   package1.layer = 0;
+   package1.color = 0;
+   package1.width = 1;
+
+   u16 x = 40; u16 y = 40;
+   for(int i = 0; i < 20; i++)
+   {
+      lines1[i].x1 = x; lines1[i].y1 = y;
+      x = rand() & 0x3FF;
+      y = rand() & 0x3FF;
+      lines1[i].x2 = x; lines1[i].y2 = y;
+   }
+
+   TST_CVLTST
+
    //TODO: Add more tests
 
 

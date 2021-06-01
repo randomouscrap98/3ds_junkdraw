@@ -17,6 +17,6 @@ u32 chars_to_int(const char * container, const u8 count);
 s32 special_to_signed(u32 special);
 u32 signed_to_special(s32 value);
 char * int_to_varwidth(u32 value, char * container);
-u32 varwidth_to_int(char * container, u8 * read_count);
+u32 varwidth_to_int(const char * container, u8 * read_count);
 
 #endif
