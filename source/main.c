@@ -819,7 +819,14 @@ int main(int argc, char** argv)
          }
          else
          {
+            char * previous_end = draw_data_end;
             draw_data_end = write_to_datamem(stroke_data, cvl_end, current_page, draw_data, draw_data_end);
+            //An optimization: if draw_pointer was already at the end, don't
+            //need to RE-draw what we've already drawn, move it forward with
+            //the mem write. Note: there are instances where we WILL be drawing
+            //twice, but it's difficult to determine what has or has not been
+            //drawn when the pointer isn't at the end.
+            if(previous_end == draw_pointer) draw_pointer = draw_data_end;
          }
 
          pending.line_count = 0;
