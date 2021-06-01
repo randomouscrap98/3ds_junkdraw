@@ -28,6 +28,7 @@
 #define TOOL_PENCIL 0
 #define TOOL_ERASER 1
 #define TOOL_COUNT 2
+#define TOOL_CHARS "pe"
 
 #define LINESTYLE_STROKE 0
 
@@ -50,11 +51,13 @@
 #define PALETTE_OFSX 10
 #define PALETTE_OFSY 10
 
-
 #define MAINMENU_TOP 6
 #define MAINMENU_TITLE "Main menu:"
 #define MAINMENU_ITEMS "New\0Save\0Load\0Host Local\0Connect Local\0Exit App\0"
 #define MAINMENU_EXIT 5
+
+#define STATUS_MAINCOLOR 36
+#define STATUS_ACTIVECOLOR 37
 
 
 // The base palette definition

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 
 // MUST define all these debug things before importing libraries, 
 // as THEY use  them. 
@@ -429,17 +430,47 @@ void print_controls()
    //printf("                                                  ");
 }
 
-void print_status(u8 width, u8 layer, float zoom, u8 tool, u16 color, u16 page)
+void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color, u16 page)
 {
-   //TODO: make this nicer looking
-   printf("\x1b[30;1HW:%02d L:%d Z:%03.2f T:%d P:%d C:%#06x",
-         width, layer, zoom, tool, page, color);
-   //      tool_data[current_tool].width, 
-   //      pending.layer,
-   //      screen_mod.zoom,
-   //      current_tool,
-   //      tool_data[current_tool].color
-   //);
+   char tool_chars[TOOL_COUNT + 1];
+   strcpy(tool_chars, TOOL_CHARS);
+   char status_x1b[40];
+   char active_x1b[40];
+
+   //First is background, second is foreground (within string)
+   sprintf(status_x1b, "\x1b[40m\x1b[%dm", STATUS_MAINCOLOR);
+   sprintf(active_x1b, "\x1b[%dm\x1b[30m", 10 + STATUS_ACTIVECOLOR);
+
+   printf("\x1b[30;1H%s W:%s%02d", 
+         status_x1b, active_x1b, width);
+   printf("%s L:%s%s",
+         status_x1b, active_x1b, layer == 1 ? " ." : ". ");
+         layer == 0 ? '
+         STATUS_MAINCOLOR, 
+         10 + (layer == 1 ? STATUS_ACTIVECOLOR : STATUS_MAINCOLOR),
+         10 + (layer == 0 ? STATUS_ACTIVECOLOR : STATUS_MAINCOLOR));
+   printf("\x1b[40m\x1b[%dm Z:", STATUS_MAINCOLOR);
+   for(s8 i = MIN_ZOOMPOWER; i <= MAX_ZOOMPOWER; i++)
+   {
+      //First is foreground, second is background
+      printf("\x1b[%dm\x1b[%dm%s", 
+            (i == zoom_power ? 30 : STATUS_MAINCOLOR),
+            10 + (i == zoom_power ? STATUS_ACTIVECOLOR : 30),
+            i == 0 ? "*" : "-");
+   }
+   printf("\x1b[0m\x1b[%dm T:", STATUS_MAINCOLOR);
+   for(u8 i = 0; i < TOOL_COUNT; i++)
+   {
+      //First is foreground, second is background
+      printf("\x1b[%dm\x1b[%dm%c", 
+            (i == tool ? 30 : STATUS_MAINCOLOR),
+            10 + (i == tool ? STATUS_ACTIVECOLOR : 30),
+            tool_chars[i]);
+   }
+   printf("\x1b[0m\x1b[%dm P:\x1b[%dm%03d", 
+         STATUS_MAINCOLOR, STATUS_ACTIVECOLOR, page + 1);
+   printf("\x1b[0m\x1b[%dm C:\x1b[%dm%#06x", 
+         STATUS_MAINCOLOR, STATUS_ACTIVECOLOR, color);
 }
 
 
@@ -463,7 +494,6 @@ void print_status(u8 width, u8 layer, float zoom, u8 tool, u16 color, u16 page)
    } else {                \
       zoom_power = UTILS_CLAMP(zoom_power + x, MIN_ZOOMPOWER, MAX_ZOOMPOWER);    \
    } }
-
 
 int main(int argc, char** argv)
 {
@@ -566,7 +596,7 @@ int main(int argc, char** argv)
 
       if(kDown & ~(KEY_TOUCH) || !current_frame)
       {
-         print_status(tool_data[current_tool].width, pending.layer, screen_mod.zoom, 
+         print_status(tool_data[current_tool].width, pending.layer, zoom_power, 
                current_tool, tool_data[current_tool].color, pending.page);
       }
 
