@@ -239,8 +239,9 @@ char * convert_data_to_lines(struct LinePackage * package, char * data, char * d
       CVD_LINECHECK(4,"STROKE FIRST POINT")
 
       //First point is regular simple 4 byte data point.
-      u16 x = chars_to_int(endptr += 2, 2);
-      u16 y = chars_to_int(endptr += 2, 2);
+      u16 x = chars_to_int(endptr, 2);
+      u16 y = chars_to_int(endptr + 2, 2);
+      endptr += 4;
 
       u8 scanned = 0;
 
@@ -290,14 +291,46 @@ char * convert_data_to_lines(struct LinePackage * package, char * data, char * d
 
 // -- DRAWING UTILS --
 
+
+//Some (hopefully temporary) globals to overcome some unforeseen limits
+#define MY_C2DOBJLIMIT C2D_DEFAULT_MAX_OBJECTS
+#define MY_C2DOBJLIMITSAFETY MY_C2DOBJLIMIT - 100
+u32 _drw_cmd_cnt = 0;
+
+void MY_FLUSH()
+{
+   C2D_Flush();
+   _drw_cmd_cnt = 0;
+}
+
+void MY_FLUSHCHECK()
+{
+   if(_drw_cmd_cnt > MY_C2DOBJLIMITSAFETY)
+   {
+      LOGDBG("FLUSHING %ld DRAW CMDS PREMATURELY\n", _drw_cmd_cnt);
+      MY_FLUSH();
+   }
+}
+
+void MY_SOLIDRECT(float x, float y, float depth, float width, float height, u32 color)
+{
+   C2D_DrawRectSolid(x, y, depth, width, height, color);
+   _drw_cmd_cnt++;
+   MY_FLUSHCHECK();
+}
+
+float cr_lx = -1;
+float cr_ly = -1;
+
 //Draw a rectangle centered and pixel aligned around the given point.
 void draw_centeredrect(float x, float y, u16 width, u32 color)
 {
    float ofs = width / 2.0;
    x = round(x - ofs);
    y = round(y - ofs);
-   if(x < PAGE_EDGEBUF || y < PAGE_EDGEBUF) return;
-   C2D_DrawRectSolid(x, y, 0.5f, width, width, color);
+   if(x < PAGE_EDGEBUF || y < PAGE_EDGEBUF || (cr_lx == x && cr_ly == y)) return;
+   MY_SOLIDRECT(x, y, 0.5f, width, width, color);
+   cr_lx = x; cr_ly = y;
 }
 
 //Draw a line using a custom line drawing system (required like this because of
@@ -509,7 +542,7 @@ char * write_to_datamem(char * stroke_data, char * stroke_end, u16 page, char * 
 //or we actually find the first occurence of a page that we want. Return 
 //the place where we stopped scanning.
 char * datamem_scanstroke(char * start, char * end, const u32 max_scan, 
-                    const u16 page, char ** stroke_start)
+              const u16 page, char ** stroke_start)
 {
    char * tempptr;
    char * scanptr = start;
@@ -542,7 +575,7 @@ char * datamem_scanstroke(char * start, char * end, const u32 max_scan,
    u16 stroke_page;
    u8 varwidth;
 
-   while(scanptr > end && (scanptr - start) < max_scan)
+   while(scanptr < end && (scanptr - start) < max_scan)
    {
       //Skip the alignment character (TODO: assuming it's 1 byte)
       scanptr++;
@@ -615,13 +648,16 @@ void scandata_free(struct ScanDrawData * data)
 
 //Draw and track a certain number of lines from the given scandata.
 u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount, 
-      struct LayerData * layers, u8 layer_count, u8 start_layer)
+      struct LayerData * layers, u8 layer_count)//, u8 last_layer)
 {
    u32 current_drawcount = 0;
 
    //Only draw if there's something to start the whole thing
-   if(scandata->current_package != NULL)
+   if(scandata->current_package != NULL && 
+         scandata->current_package != scandata->last_package)
    {
+      u8 last_layer = (scandata->last_package - 1)->layer;
+
       struct LinePackage * stopped_on = NULL;
        
       //Loop over layers
@@ -630,8 +666,8 @@ u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount,
          //This is the end of the line, we stopped somewhere
          if(stopped_on != NULL) break;
 
-         //Calculate actual layer (start_layer produces shifted window)
-         u8 layer_i = (i + start_layer) % layer_count;
+         //Calculate actual layer (last_layer produces shifted window)
+         u8 layer_i = (i + last_layer + 1) % layer_count;
 
          //Don't want to call this too often, so do as much as possible PER
          //layer instead of jumping around
@@ -670,11 +706,11 @@ u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount,
       scandata->current_package = stopped_on;
 
       //OH, we're at the end! Can reset the lines and such
-      if(scandata->current_package == NULL)
-      {
-         scandata->last_package = scandata->packages;
-         scandata->last_line = scandata->all_lines;
-      }
+      //if(scandata->current_package == NULL)
+      //{
+      //   scandata->last_package = scandata->packages;
+      //   scandata->last_line = scandata->all_lines;
+      //}
    }
 
    return current_drawcount;
@@ -696,9 +732,16 @@ char * scandata_parse(struct ScanDrawData * scandata, char * drawdata,
    //-the scandata pointers are all at the start
    //-there's nothing in the scandata
 
+   if(scandata->current_package != NULL)
+      LOGDBG("WARN: Tried to scan_dataparse without an empty buffer!\n");
+
+   //Reset all the data based on assumptions
+   scandata->last_package = scandata->packages;
+   scandata->last_line = scandata->all_lines;
+
    //Is there a possibility it will scan past the end? Can we do comparisons
    //like this on pointers? I'm pretty sure you can, they point to the same array
-   while(stroke_pointer < drawdata_end && 
+   while(parse_pointer < drawdata_end && 
          (scandata->last_line - scandata->all_lines) < line_scancount && 
          scan_remaining > 0)
    {
@@ -729,6 +772,10 @@ char * scandata_parse(struct ScanDrawData * scandata, char * drawdata,
       scandata->last_line += scandata->last_package->line_count;
       scandata->last_package++;
    }
+
+   //Only set a current_package if there's something there
+   if(scandata->last_package > scandata->packages)
+      scandata->current_package = scandata->packages;
 
    return parse_pointer;
 }
@@ -885,6 +932,7 @@ int main(int argc, char** argv)
    char * stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
    char * draw_data_end = draw_data;
    char * draw_pointer = draw_data;
+   char * saved_last = draw_data;
 
    print_controls();
 
@@ -915,7 +963,7 @@ int main(int argc, char** argv)
          u8 selected = easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, KEY_B | KEY_START);
          if(selected == MAINMENU_EXIT)
          {
-            if(draw_data_end == draw_data || easy_warn("WARN: UNSAVED DATA", "Really quit?", MAINMENU_TOP))
+            if(saved_last == draw_data_end || easy_warn("WARN: UNSAVED DATA", "Really quit?", MAINMENU_TOP))
                break;
          }
       }
@@ -942,6 +990,10 @@ int main(int argc, char** argv)
       // Render the scene
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
+      // -- LAYER DRAW SECTION --
+      //C2D_Flush(); //There shouldn't be anything to flush
+      C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
+
       //Apparently (not sure), all clearing should be done within our main loop?
       if(flush_layers)
       {
@@ -966,9 +1018,6 @@ int main(int argc, char** argv)
             //background drawing too (draw commands from other people)
             C2D_SceneBegin(layers[pending.layer].target);
 
-            //C2D_Flush(); //There shouldn't be anything to flush
-            C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
-
             if(pending.line_count < MAX_STROKE_LINES)
             {
                //This is for a stroke, do different things if we have different tools!
@@ -977,11 +1026,28 @@ int main(int argc, char** argv)
                draw_lines(&pending, pending.line_count - 1, pending.line_count);
             }
 
-            C2D_Flush();
-            C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, 
-                  GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
          }
       }
+
+      //Just always try to draw whatever is leftover in the buffer
+      if(draw_pointer < draw_data_end)
+      {
+         //LOGDBG("SCANNING FOR PAGE %d\n", current_page);
+         u32 maxdraw = MAX_FRAMELINES;
+         maxdraw -= scandata_draw(&scandata, maxdraw, layers, PAGECOUNT); //, 0);
+         draw_pointer = scandata_parse(&scandata, draw_pointer, draw_data_end,
+               maxdraw, current_page);
+         scandata_draw(&scandata, maxdraw, layers, PAGECOUNT); //, 0);
+         //LOGDBG("CENTERED RECTS: %ld\n", centered_rects);
+         //centered_rects = 0;
+      }
+
+      MY_FLUSH();
+      //C2D_Flush();
+
+      // -- OTHER DRAW SECTION --
+      C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, 
+            GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
 
       //TODO: Eventually, change this to put the data in different places?
       if(end_frame == current_frame && pending.line_count > 0)
