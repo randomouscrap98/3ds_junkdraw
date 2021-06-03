@@ -15,6 +15,7 @@
 #define DEBUG_DATAPRINT
 #define DEBUG_PRINT
 #define DEBUG_RUNTESTS
+#define DEBUG_PRINT_SPECIAL "\x1b[18;1H\x1b[33m"
 
 #include "myutils.h"
 #include "dcv.h"
@@ -29,7 +30,6 @@
 //   DrawLine unless a DrawRect (or perhaps other) call is performed.
 //    THIS IS FIXED IN A LATER REVISION
 // - Can't fill with transparency to clear.... 
-
 
 
 // -- SCREEN UTILS? --
@@ -293,7 +293,7 @@ char * convert_data_to_lines(struct LinePackage * package, char * data, char * d
 
 
 //Some (hopefully temporary) globals to overcome some unforeseen limits
-#define MY_C2DOBJLIMIT C2D_DEFAULT_MAX_OBJECTS
+#define MY_C2DOBJLIMIT 16384
 #define MY_C2DOBJLIMITSAFETY MY_C2DOBJLIMIT - 100
 u32 _drw_cmd_cnt = 0;
 
@@ -704,13 +704,6 @@ u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount,
 
       //At the end, only set package to NULL if we got all the way through.
       scandata->current_package = stopped_on;
-
-      //OH, we're at the end! Can reset the lines and such
-      //if(scandata->current_package == NULL)
-      //{
-      //   scandata->last_package = scandata->packages;
-      //   scandata->last_line = scandata->all_lines;
-      //}
    }
 
    return current_drawcount;
@@ -780,13 +773,6 @@ char * scandata_parse(struct ScanDrawData * scandata, char * drawdata,
    return parse_pointer;
 }
 
-//void idk()
-//{
-//   //Flush remaining lines if any
-//   line_scancount -= scandata_draw_track(scandata, line_scancount, 
-//      struct LayerData * layers, u8 layer_count, u8 start_layer);
-//}
-
 
 
 // -- MENU/PRINT STUFF --
@@ -798,6 +784,11 @@ void print_controls()
    printf("SELECT - change layers   START - menu\n");
    printf("  ABXY - change tools    C-PAD - scroll canvas\n");
    printf("--------------------------------------------------");
+}
+
+void print_framing()
+{
+   printf("\x1b[29;1H--------------------------------------------------");
 }
 
 #define PSX1BLEN 30
@@ -864,7 +855,7 @@ void print_time(bool showcolon)
 // Some macros used ONLY for main (think lambdas)
 #define MAIN_UPDOWN(x) {   \
    if(kHeld & KEY_R) {     \
-      current_page = UTILS_CLAMP(current_page + x, 0, MAX_PAGE);    \
+      current_page = UTILS_CLAMP(current_page + x * ((kHeld&KEY_L)?10:1), 0, MAX_PAGE);    \
       draw_pointer = draw_data;     \
       flush_layers = true;          \
    } else {                \
@@ -875,7 +866,7 @@ int main(int argc, char** argv)
 {
    gfxInitDefault();
    C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
-   C2D_Init(C2D_DEFAULT_MAX_OBJECTS);
+   C2D_Init(MY_C2DOBJLIMIT);
    C2D_Prepare();
 
    consoleInit(GFX_TOP, NULL);
@@ -909,7 +900,6 @@ int main(int argc, char** argv)
    circlePosition pos;
    touchPosition current_touch;
    u32 current_frame = 0;
-   //u32 start_frame = 0;
    u32 end_frame = 0;
    s8 zoom_power = 0;
    s8 last_zoom_power = 0;
@@ -940,6 +930,8 @@ int main(int argc, char** argv)
    run_tests();
 #endif
 
+   print_framing();
+
    while(aptMainLoop())
    {
       hidScanInput();
@@ -950,7 +942,7 @@ int main(int argc, char** argv)
 		hidCircleRead(&pos);
 
       // Respond to user input
-      if(kDown & KEY_L) palette_active = !palette_active;
+      if(kDown & KEY_L && !(kHeld & KEY_R)) palette_active = !palette_active;
       if(kDown & KEY_DUP) MAIN_UPDOWN(1)
       if(kDown & KEY_DDOWN) MAIN_UPDOWN(-1)
       if(kDown & KEY_DRIGHT) tool_data[current_tool].width += (kHeld & KEY_R ? 5 : 1);
@@ -991,7 +983,6 @@ int main(int argc, char** argv)
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
       // -- LAYER DRAW SECTION --
-      //C2D_Flush(); //There shouldn't be anything to flush
       C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
 
       //Apparently (not sure), all clearing should be done within our main loop?
@@ -1032,18 +1023,14 @@ int main(int argc, char** argv)
       //Just always try to draw whatever is leftover in the buffer
       if(draw_pointer < draw_data_end)
       {
-         //LOGDBG("SCANNING FOR PAGE %d\n", current_page);
          u32 maxdraw = MAX_FRAMELINES;
-         maxdraw -= scandata_draw(&scandata, maxdraw, layers, PAGECOUNT); //, 0);
+         maxdraw -= scandata_draw(&scandata, maxdraw, layers, PAGECOUNT);
          draw_pointer = scandata_parse(&scandata, draw_pointer, draw_data_end,
                maxdraw, current_page);
-         scandata_draw(&scandata, maxdraw, layers, PAGECOUNT); //, 0);
-         //LOGDBG("CENTERED RECTS: %ld\n", centered_rects);
-         //centered_rects = 0;
+         scandata_draw(&scandata, maxdraw, layers, PAGECOUNT); 
       }
 
       MY_FLUSH();
-      //C2D_Flush();
 
       // -- OTHER DRAW SECTION --
       C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, 

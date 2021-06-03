@@ -6,7 +6,11 @@
 #include <stdio.h>
 
 #ifdef DEBUG_PRINT
-#define LOGDBG(f_, ...) printf((f_), ## __VA_ARGS__)
+#ifdef DEBUG_PRINT_SPECIAL
+#define LOGDBG(f_, ...) {printf(DEBUG_PRINT_SPECIAL);printf((f_), ## __VA_ARGS__);}
+#else
+#define LOGDBG(f_, ...) printf((f_), ## __VA_ARGS__);
+#endif
 #else
 #define LOGDBG(f_, ...)
 #endif
