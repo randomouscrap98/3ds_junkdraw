@@ -41,9 +41,9 @@ GRAPHICS	:=	gfx
 ROMFS		:=	romfs
 GFXBUILD	:=	$(ROMFS)/gfx
 
-APP_TITLE := "Junk Draw"
-APP_DESCRIPTION := "Draw quick simple art, with friends if you want"
-APP_AUTHOR := "randomouscrap98"
+APP_TITLE := Junk Draw
+APP_DESCRIPTION := Draw basic art (with friends if you want)
+APP_AUTHOR := randomouscrap98
 
 #---------------------------------------------------------------------------------
 # options for code generation
