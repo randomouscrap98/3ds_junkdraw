@@ -24,6 +24,8 @@
 #define MIN_WIDTH 1
 #define MAX_WIDTH 64
 #define MAX_PAGE 0xFFFF
+#define MAX_FRAMELINES 1000
+#define MAX_DRAWDATA_SCAN 100000
 
 #define DRAWDATA_ALIGNMENT '.'
 

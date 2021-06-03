@@ -104,7 +104,6 @@ struct LinePackage {
    u8 layer;
    u16 color;
    u8 width;
-   //u16 page;
    struct SimpleLine * lines;
    u16 line_count;
 };
@@ -130,6 +129,9 @@ struct SimpleLine * add_stroke(struct LinePackage * pending,
       line->x1 = pending->lines[pending->line_count - 1].x2;
       line->y1 = pending->lines[pending->line_count - 1].y2;
    }
+
+   //Added a line
+   pending->line_count++;
 
    return line;
 }
@@ -314,16 +316,23 @@ void custom_drawline(const struct SimpleLine * line, u16 width, u32 color)
       draw_centeredrect(line->x1+xang*i, line->y1+yang*i, width, color);
 }
 
-//Draw the collection of lines given. 
+//Draw the collection of lines given, starting at the given line and ending
+//before the other given line (first inclusive, last exclusive)
 //Assumes you're already on the appropriate page you want and all that
-void draw_lines(const struct LinePackage * linepack, const struct ScreenModifier * mod)
+void draw_lines(const struct LinePackage * linepack, u16 pack_start, u16 pack_end)
 {
    u32 color = rgba16c_to_rgba32c(linepack->color);
 
-   struct SimpleLine * lines = linepack->lines;
+   if(pack_end > linepack->line_count)
+      pack_end = linepack->line_count;
 
-   for(int i = 0; i < linepack->line_count; i++)
-      custom_drawline(&lines[i], linepack->width, color);
+   for(u16 i = pack_start; i < pack_end; i++)
+      custom_drawline(&linepack->lines[i], linepack->width, color);
+}
+
+void draw_all_lines(const struct LinePackage * linepack)
+{
+   draw_lines(linepack, 0, linepack->line_count);
 }
 
 //Draw the scrollbars on the sides of the screen for the given screen
@@ -499,11 +508,11 @@ char * write_to_datamem(char * stroke_data, char * stroke_end, u16 page, char * 
 //Scan through memory until either we reach the end, the max scan is reached,
 //or we actually find the first occurence of a page that we want. Return 
 //the place where we stopped scanning.
-const char * datamem_scanstroke(const char * start, const char * end, const u32 max_scan, 
-                    const u16 page, const char ** stroke_start)
+char * datamem_scanstroke(char * start, char * end, const u32 max_scan, 
+                    const u16 page, char ** stroke_start)
 {
-   const char * tempptr;
-   const char * scanptr = start;
+   char * tempptr;
+   char * scanptr = start;
    *stroke_start = NULL;
 
    if(scanptr >= end)
@@ -558,6 +567,129 @@ const char * datamem_scanstroke(const char * start, const char * end, const u32 
 
    return scanptr;
 }
+
+
+
+// -- BIG SCAN DRAW SYSTEM --
+
+struct ScanDrawData 
+{
+   struct LinePackage * packages;
+   struct SimpleLine * all_lines;
+
+   //Status trackers
+   struct LinePackage * current_package;
+   struct LinePackage * last_package;
+   struct SimpleLine * last_line;
+};
+
+void scandata_initialize(struct ScanDrawData * data)
+{
+   //At MOST, we should have a maximum of the maximum allowed lines to read, as
+   //each stroke NEEDS one line
+   data->packages = malloc(sizeof(struct LinePackage) * MAX_FRAMELINES);
+   //But for ALL lines put together, the last line we scan COULD be as big as
+   //the maximum stroke by accident, so always include additional space
+   data->all_lines = malloc(sizeof(struct SimpleLine) * (MAX_FRAMELINES + MAX_STROKE_LINES));
+   data->current_package = NULL;
+   data->last_package = data->packages;
+   data->last_line = data->all_lines;
+}
+
+void scandata_free(struct ScanDrawData * data)
+{
+   free(data->packages);
+   free(data->all_lines);
+}
+
+//Draw and track a certain number of lines from the given scandata.
+u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount, 
+      struct LayerData * layers, u8 layer_count, u8 start_layer)
+{
+   u32 current_drawcount = 0;
+
+   //Only draw if there's something to start the whole thing
+   if(scandata->current_package != NULL)
+   {
+      struct LinePackage * stopped_on = NULL;
+       
+      //Loop over layers
+      for(u8 i = 0; i < layer_count; i++)
+      {
+         //This is the end of the line, we stopped somewhere
+         if(stopped_on != NULL) break;
+
+         //Calculate actual layer (start_layer produces shifted window)
+         u8 layer_i = (i + start_layer) % layer_count;
+
+         //Don't want to call this too often, so do as much as possible PER
+         //layer instead of jumping around
+         C2D_SceneBegin(layers[layer_i].target);
+
+         //Scan over every package
+         for(struct LinePackage * p = scandata->current_package; 
+               p != scandata->last_package; p++)
+         {
+            //Just entirely skip data for layers we're not focusing on yet.
+            if(p->layer != layer_i) continue;
+
+            u16 packagedrawlines = p->line_count;
+            u32 leftover_drawcount = line_drawcount - current_drawcount;
+
+            //If this is going to be the last package we're drawing, track
+            //where we stopped and don't draw ALL the lines.
+            if(packagedrawlines > leftover_drawcount)
+            {
+               //This is where we stopped. 
+               stopped_on = p;
+               packagedrawlines = leftover_drawcount;
+            }
+
+            draw_lines(p, 0, packagedrawlines);
+            line_drawcount += packagedrawlines;
+
+            //If we didn't draw ALL the lines, move the line pointer forward.
+            //We know that the line pointers in these packages points to a flat array
+            if(packagedrawlines != p->line_count)
+               p->lines += packagedrawlines;
+         }
+      }
+
+      //At the end, only set package to NULL if we got all the way through.
+      scandata->current_package = stopped_on;
+   }
+
+   return current_drawcount;
+}
+
+//Scan the data up to a certain amount, parse the data, and draw it. Kind of
+//doing too much, but whatever, this is a small program. Return the location we
+//scanned up to.
+char * scandata_parse(struct ScanDrawData * scandata, char * drawdata, 
+      char * drawdata_end, u32 line_scancount, const u16 page)
+{
+   char * parse_pointer = drawdata;
+   char * stroke_pointer = NULL;
+
+   parse_pointer = datamem_scanstroke(parse_pointer, drawdata_end, 
+         MAX_DRAWDATA_SCAN, page, &stroke_pointer);
+
+   //HAH, nothing left to do!
+   //if(line_scancount <= 0) return parse_pointer;
+
+   //First, see if we have leftover stuff to draw. If so, do it up to a certain
+   //amount. Assume the package has already been modified to point to the next
+   //place to draw.
+
+   return parse_pointer;
+}
+
+//void idk()
+//{
+//   //Flush remaining lines if any
+//   line_scancount -= scandata_draw_track(scandata, line_scancount, 
+//      struct LayerData * layers, u8 layer_count, u8 start_layer);
+//}
 
 
 
@@ -789,17 +921,18 @@ int main(int argc, char** argv)
             if(pending.line_count < MAX_STROKE_LINES)
             {
                //This is for a stroke, do different things if we have different tools!
-               struct SimpleLine * line = add_stroke(&pending, &current_touch, &screen_mod);
-
-               pending.lines = line; //Force the pending line to only show the end
-               u16 oldcount = pending.line_count;
-               pending.line_count = 1;
+               add_stroke(&pending, &current_touch, &screen_mod);
 
                //Draw ONLY the current line
-               draw_lines(&pending, &screen_mod);
+               draw_lines(&pending, pending.line_count - 1, pending.line_count);
+
+               //pending.lines = line; //Force the pending line to only show the end
+               //u16 oldcount = pending.line_count;
+               //pending.line_count = 1;
+
                //Reset pending lines to proper thing
-               pending.lines = pending_lines;
-               pending.line_count = oldcount + 1;
+               //pending.lines = pending_lines;
+               //pending.line_count = oldcount + 1;
             }
 
             C2D_Flush();
