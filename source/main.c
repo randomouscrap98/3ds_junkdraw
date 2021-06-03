@@ -289,35 +289,49 @@ char * convert_data_to_lines(struct LinePackage * package, char * data, char * d
 
 
 
-// -- DRAWING UTILS --
+// -- LAYER UTILS --
 
+//All the data associated with a single layer. TODO: still called "page"
+struct LayerData {
+   Tex3DS_SubTexture subtex;     //Simple structures
+   C3D_Tex texture;
+   C2D_Image image;
+   C3D_RenderTarget * target;    //Actual data?
+};
+
+//Create a LAYER from an off-screen texture.
+void create_layer(struct LayerData * result, Tex3DS_SubTexture subtex)
+{
+   result->subtex = subtex;
+   C3D_TexInitVRAM(&(result->texture), subtex.width, subtex.height, LAYER_FORMAT);
+   result->target = C3D_RenderTargetCreateFromTex(&(result->texture), GPU_TEXFACE_2D, 0, -1);
+   result->image.tex = &(result->texture);
+   result->image.subtex = &(result->subtex);
+}
+
+//Clean up a layer created by create_page
+void delete_layer(struct LayerData page)
+{
+   C3D_RenderTargetDelete(page.target);
+   C3D_TexDelete(&page.texture);
+}
+
+
+
+// -- DRAWING UTILS --
 
 //Some (hopefully temporary) globals to overcome some unforeseen limits
 #define MY_C2DOBJLIMIT 16384
 #define MY_C2DOBJLIMITSAFETY MY_C2DOBJLIMIT - 100
 u32 _drw_cmd_cnt = 0;
 
-void MY_FLUSH()
-{
-   C2D_Flush();
-   _drw_cmd_cnt = 0;
-}
-
-void MY_FLUSHCHECK()
-{
-   if(_drw_cmd_cnt > MY_C2DOBJLIMITSAFETY)
-   {
-      LOGDBG("FLUSHING %ld DRAW CMDS PREMATURELY\n", _drw_cmd_cnt);
-      MY_FLUSH();
-   }
-}
-
-void MY_SOLIDRECT(float x, float y, float depth, float width, float height, u32 color)
-{
-   C2D_DrawRectSolid(x, y, depth, width, height, color);
-   _drw_cmd_cnt++;
-   MY_FLUSHCHECK();
-}
+#define MY_FLUSH() { C2D_Flush(); _drw_cmd_cnt = 0; }
+#define MY_FLUSHCHECK() if(_drw_cmd_cnt > MY_C2DOBJLIMITSAFETY) { \
+   LOGDBG("FLUSHING %ld DRAW CMDS PREMATURELY\n", _drw_cmd_cnt); \
+   MY_FLUSH(); }
+#define MY_SOLIDRECT(x,y,d,w,h,c) { \
+   C2D_DrawRectSolid(x, y, d, w, h, c); \
+   _drw_cmd_cnt++; MY_FLUSHCHECK(); }
 
 float cr_lx = -1;
 float cr_ly = -1;
@@ -393,8 +407,21 @@ void draw_scrollbars(const struct ScreenModifier * mod)
 
 //Draw (JUST draw) the entire color picker area, which may include other
 //stateful controls
-void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index)
+void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index, 
+      bool collapsed)
 {
+   //TODO: Maybe split this out?
+   if(collapsed)
+   {
+      C2D_DrawRectSolid(0, 0, 0.5f, PALETTE_MINISIZE, PALETTE_MINISIZE, PALETTE_BG);
+      C2D_DrawRectSolid(PALETTE_MINIPADDING, PALETTE_MINIPADDING, 0.5f, 
+            PALETTE_MINISIZE - PALETTE_MINIPADDING * 2, 
+            PALETTE_MINISIZE - PALETTE_MINIPADDING * 2, 
+            rgba16_to_rgba32c(palette[selected_index])); 
+
+      return;
+   }
+
    u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
    C2D_DrawRectSolid(0, 0, 0.5f, 
          8 * shift + (PALETTE_OFSX << 1) + PALETTE_SWATCHMARGIN, 
@@ -419,6 +446,18 @@ void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index)
          PALETTE_OFSX + x * shift + PALETTE_SWATCHMARGIN, 
          PALETTE_OFSY + y * shift + PALETTE_SWATCHMARGIN, 0.5f, 
          PALETTE_SWATCHWIDTH, PALETTE_SWATCHWIDTH, rgba16_to_rgba32c(palette[i]));
+   }
+}
+
+void draw_layers(const struct LayerData * layers, layer_num layer_count, 
+      const struct ScreenModifier * mod, u32 bg_color)
+{
+   C2D_DrawRectSolid(-mod->ofs_x, -mod->ofs_y, 0.5f,
+         LAYER_WIDTH * mod->zoom, LAYER_HEIGHT * mod->zoom, bg_color); //The bg color
+   for(layer_num i = 0; i < layer_count; i++)
+   {
+      C2D_DrawImageAt(layers[i].image, -mod->ofs_x, -mod->ofs_y, 0.5f, 
+            NULL, mod->zoom, mod->zoom);
    }
 }
 
@@ -467,35 +506,6 @@ void update_package_with_tool(struct LinePackage * pending, const struct ToolDat
    pending->color = tool_data->color;
    pending->style = tool_data->style;
    pending->width = tool_data->width;
-}
-
-
-
-// -- LAYER UTILS --
-
-//All the data associated with a single layer. TODO: still called "page"
-struct LayerData {
-   Tex3DS_SubTexture subtex;     //Simple structures
-   C3D_Tex texture;
-   C2D_Image image;
-   C3D_RenderTarget * target;    //Actual data?
-};
-
-//Create a LAYER from an off-screen texture.
-void create_layer(struct LayerData * result, Tex3DS_SubTexture subtex)
-{
-   result->subtex = subtex;
-   C3D_TexInitVRAM(&(result->texture), subtex.width, subtex.height, LAYER_FORMAT);
-   result->target = C3D_RenderTargetCreateFromTex(&(result->texture), GPU_TEXFACE_2D, 0, -1);
-   result->image.tex = &(result->texture);
-   result->image.subtex = &(result->subtex);
-}
-
-//Clean up a layer created by create_page
-void delete_layer(struct LayerData page)
-{
-   C3D_RenderTargetDelete(page.target);
-   C3D_TexDelete(&page.texture);
 }
 
 
@@ -862,6 +872,20 @@ void print_time(bool showcolon)
       zoom_power = UTILS_CLAMP(zoom_power + x, MIN_ZOOMPOWER, MAX_ZOOMPOWER);    \
    } }
 
+#define MAIN_NEWDRAW() { \
+   draw_data_end = draw_pointer = saved_last = draw_data; \
+   current_page = 0;          \
+   flush_layers = true;       \
+   save_filename[0] = '\0';   \
+   pending.lines = pending_lines; \
+   pending.line_count = 0;        \
+   pending.layer = LAYER_COUNT - 1; /*Always start on the top page */ \
+   current_frame = end_frame = 0; \
+}
+
+#define MAIN_UNSAVEDCHECK(x) \
+   (saved_last == draw_data_end || easy_warn("WARN: UNSAVED DATA", x, MAINMENU_TOP))
+
 int main(int argc, char** argv)
 {
    gfxInitDefault();
@@ -911,19 +935,20 @@ int main(int argc, char** argv)
 
    struct LinePackage pending;
    struct SimpleLine * pending_lines = malloc(MAX_STROKE_LINES * sizeof(struct SimpleLine));
-   pending.lines = pending_lines;
-   pending.line_count = 0;
-   pending.layer = LAYER_COUNT - 1; //Always start on the top page
 
    struct ScanDrawData scandata;
    scandata_initialize(&scandata, MAX_FRAMELINES);
 
+   char save_filename[MAX_FILENAME];
    char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
    char * stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
-   char * draw_data_end = draw_data;
-   char * draw_pointer = draw_data;
-   char * saved_last = draw_data;
+   char * draw_data_end;
+   char * draw_pointer;
+   char * saved_last;
 
+   MAIN_NEWDRAW();
+
+   hidSetRepeatParameters(BREPEAT_DELAY, BREPEAT_INTERVAL);
    print_controls();
 
 #ifdef DEBUG_RUNTESTS
@@ -936,6 +961,7 @@ int main(int argc, char** argv)
    {
       hidScanInput();
       u32 kDown = hidKeysDown();
+      u32 kRepeat = hidKeysDownRepeat();
       u32 kUp = hidKeysUp();
       u32 kHeld = hidKeysHeld();
       hidTouchRead(&current_touch);
@@ -943,10 +969,10 @@ int main(int argc, char** argv)
 
       // Respond to user input
       if(kDown & KEY_L && !(kHeld & KEY_R)) palette_active = !palette_active;
-      if(kDown & KEY_DUP) MAIN_UPDOWN(1)
-      if(kDown & KEY_DDOWN) MAIN_UPDOWN(-1)
-      if(kDown & KEY_DRIGHT) tool_data[current_tool].width += (kHeld & KEY_R ? 5 : 1);
-      if(kDown & KEY_DLEFT) tool_data[current_tool].width -= (kHeld & KEY_R ? 5 : 1);
+      if(kRepeat & KEY_DUP) MAIN_UPDOWN(1)
+      if(kRepeat & KEY_DDOWN) MAIN_UPDOWN(-1)
+      if(kRepeat & KEY_DRIGHT) tool_data[current_tool].width += (kHeld & KEY_R ? 5 : 1);
+      if(kRepeat & KEY_DLEFT) tool_data[current_tool].width -= (kHeld & KEY_R ? 5 : 1);
       if(kDown & KEY_SELECT) pending.layer = (pending.layer + 1) % LAYER_COUNT;
       if(kDown & KEY_A) current_tool = TOOL_PENCIL;
       if(kDown & KEY_B) current_tool = TOOL_ERASER;
@@ -955,8 +981,17 @@ int main(int argc, char** argv)
          u8 selected = easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, KEY_B | KEY_START);
          if(selected == MAINMENU_EXIT)
          {
-            if(saved_last == draw_data_end || easy_warn("WARN: UNSAVED DATA", "Really quit?", MAINMENU_TOP))
+            if(MAIN_UNSAVEDCHECK("Really quit?"))
                break;
+         }
+         else if(selected == MAINMENU_NEW)
+         {
+            if(MAIN_UNSAVEDCHECK("Are you sure you want to start anew?"))
+               MAIN_NEWDRAW();
+         }
+         else if(selected == MAINMENU_HOSTLOCAL || selected == MAINMENU_CONNECTLOCAL)
+         {
+            printf("\x1b[%d;2H\x1b[33mNot implemented yet\n", MAINMENU_TOP);
          }
       }
       if(kDown & KEY_TOUCH) update_package_with_tool(&pending, &tool_data[current_tool]);
@@ -966,7 +1001,7 @@ int main(int argc, char** argv)
       if(zoom_power != last_zoom_power) set_screenmodifier_zoom(&screen_mod, pow(2, zoom_power));
       tool_data[current_tool].width = C2D_Clamp(tool_data[current_tool].width, MIN_WIDTH, MAX_WIDTH);
 
-      if(kDown & ~(KEY_TOUCH) || !current_frame)
+      if(kRepeat & ~(KEY_TOUCH) || !current_frame)
       {
          print_status(tool_data[current_tool].width, pending.layer, zoom_power, 
                current_tool, tool_data[current_tool].color, current_page);
@@ -1063,30 +1098,9 @@ int main(int argc, char** argv)
       C2D_TargetClear(screen, screen_color);
       C2D_SceneBegin(screen);
 
-      //Draw the layers
-      C2D_DrawRectSolid(-screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f,
-            LAYER_WIDTH * screen_mod.zoom, LAYER_HEIGHT * screen_mod.zoom, bg_color); //The bg color
-      for(int i = 0; i < LAYER_COUNT; i++)
-      {
-         C2D_DrawImageAt(layers[i].image, -screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f, 
-               NULL, screen_mod.zoom, screen_mod.zoom);
-      }
+      draw_layers(layers, LAYER_COUNT, &screen_mod, bg_color);
       draw_scrollbars(&screen_mod);
-
-      //The selected color thing
-      if(palette_active)
-      {
-         draw_colorpicker(palette, PALETTE_COLORS, palette_index);
-      }
-      else
-      {
-         C2D_DrawRectSolid(0, 0, 0.5f, PALETTE_MINISIZE, PALETTE_MINISIZE, PALETTE_BG);
-         C2D_DrawRectSolid(PALETTE_MINIPADDING, PALETTE_MINIPADDING, 0.5f, 
-               PALETTE_MINISIZE - PALETTE_MINIPADDING * 2, 
-               PALETTE_MINISIZE - PALETTE_MINIPADDING * 2, 
-               rgba16_to_rgba32c(palette[palette_index])); 
-      }
-
+      draw_colorpicker(palette, PALETTE_COLORS, palette_index, !palette_active);
 
       C3D_FrameEnd(0);
 

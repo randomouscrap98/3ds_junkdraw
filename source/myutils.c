@@ -121,10 +121,11 @@ s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_butto
       gspWaitForVBlank();
       hidScanInput();
       u32 kDown = hidKeysDown();
+      u32 kRepeat = hidKeysDownRepeat();
       if(kDown & KEY_A) break;
       if(kDown & exit_buttons) { menu_on = -1; break; }
-      if(kDown & KEY_UP) menu_on = (menu_on - 1 + menu_num) % menu_num;
-      if(kDown & KEY_DOWN) menu_on = (menu_on + 1) % menu_num;
+      if(kRepeat & KEY_UP) menu_on = (menu_on - 1 + menu_num) % menu_num;
+      if(kRepeat & KEY_DOWN) menu_on = (menu_on + 1) % menu_num;
 
       //Print title, 1 over
       if(has_title)
