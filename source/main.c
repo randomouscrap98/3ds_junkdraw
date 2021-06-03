@@ -63,8 +63,8 @@ float calc_pagepos(s16 d, float existing_pos)
 //modifier. Clamps the values appropriately
 void set_screenmodifier_ofs(struct ScreenModifier * mod, u16 ofs_x, u16 ofs_y)
 {
-   mod->ofs_x = C2D_Clamp(ofs_x, 0, PAGEWIDTH * mod->zoom - SCREENWIDTH);
-   mod->ofs_y = C2D_Clamp(ofs_y, 0, PAGEHEIGHT * mod->zoom - SCREENHEIGHT);
+   mod->ofs_x = C2D_Clamp(ofs_x, 0, LAYER_WIDTH * mod->zoom - SCREENWIDTH);
+   mod->ofs_y = C2D_Clamp(ofs_y, 0, LAYER_HEIGHT * mod->zoom - SCREENHEIGHT);
 }
 
 //Easy way to set the screen zoom while preserving the center of the screen.
@@ -328,7 +328,7 @@ void draw_centeredrect(float x, float y, u16 width, u32 color)
    float ofs = width / 2.0;
    x = round(x - ofs);
    y = round(y - ofs);
-   if(x < PAGE_EDGEBUF || y < PAGE_EDGEBUF || (cr_lx == x && cr_ly == y)) return;
+   if(x < LAYER_EDGEBUF || y < LAYER_EDGEBUF || (cr_lx == x && cr_ly == y)) return;
    MY_SOLIDRECT(x, y, 0.5f, width, width, color);
    cr_lx = x; cr_ly = y;
 }
@@ -381,14 +381,14 @@ void draw_scrollbars(const struct ScreenModifier * mod)
    C2D_DrawRectSolid(SCREENWIDTH - SCROLL_WIDTH, 0, 0.5f, 
          SCROLL_WIDTH, SCREENHEIGHT, SCROLL_BG);
 
-   u16 sofs_x = (float)mod->ofs_x / PAGEWIDTH / mod->zoom * SCREENWIDTH;
-   u16 sofs_y = (float)mod->ofs_y / PAGEHEIGHT / mod->zoom * SCREENHEIGHT;
+   u16 sofs_x = (float)mod->ofs_x / LAYER_WIDTH / mod->zoom * SCREENWIDTH;
+   u16 sofs_y = (float)mod->ofs_y / LAYER_HEIGHT / mod->zoom * SCREENHEIGHT;
 
    //bottom and right scrollbar bar
    C2D_DrawRectSolid(sofs_x, SCREENHEIGHT - SCROLL_WIDTH, 0.5f, 
-         SCREENWIDTH * SCREENWIDTH / (float)PAGEWIDTH / mod->zoom, SCROLL_WIDTH, SCROLL_BAR);
+         SCREENWIDTH * SCREENWIDTH / (float)LAYER_WIDTH / mod->zoom, SCROLL_WIDTH, SCROLL_BAR);
    C2D_DrawRectSolid(SCREENWIDTH - SCROLL_WIDTH, sofs_y, 0.5f, 
-         SCROLL_WIDTH, SCREENHEIGHT * SCREENHEIGHT / (float)PAGEHEIGHT / mod->zoom, SCROLL_BAR);
+         SCROLL_WIDTH, SCREENHEIGHT * SCREENHEIGHT / (float)LAYER_HEIGHT / mod->zoom, SCROLL_BAR);
 }
 
 //Draw (JUST draw) the entire color picker area, which may include other
@@ -485,7 +485,7 @@ struct LayerData {
 void create_layer(struct LayerData * result, Tex3DS_SubTexture subtex)
 {
    result->subtex = subtex;
-   C3D_TexInitVRAM(&(result->texture), subtex.width, subtex.height, PAGEFORMAT);
+   C3D_TexInitVRAM(&(result->texture), subtex.width, subtex.height, LAYER_FORMAT);
    result->target = C3D_RenderTargetCreateFromTex(&(result->texture), GPU_TEXFACE_2D, 0, -1);
    result->image.tex = &(result->texture);
    result->image.subtex = &(result->subtex);
@@ -814,7 +814,7 @@ void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color, u16 pag
    get_printmods(status_x1b, active_x1b, statusbg_x1b, activebg_x1b);
 
    printf("\x1b[30;1H%s W:%s%02d%s L:", status_x1b, active_x1b, width, status_x1b);
-   for(s8 i = PAGECOUNT - 1; i >= 0; i--)
+   for(s8 i = LAYER_COUNT - 1; i >= 0; i--)
       printf("%s ", i == layer ? activebg_x1b : statusbg_x1b);
    printf("%s Z:", status_x1b);
    for(s8 i = MIN_ZOOMPOWER; i <= MAX_ZOOMPOWER; i++)
@@ -882,13 +882,13 @@ int main(int argc, char** argv)
    u8 palette_index = PALETTE_STARTINDEX;
 
    const Tex3DS_SubTexture subtex = {
-      PAGEWIDTH, PAGEHEIGHT,
+      LAYER_WIDTH, LAYER_HEIGHT,
       0.0f, 1.0f, 1.0f, 0.0f
    };
 
-   struct LayerData layers[PAGECOUNT];
+   struct LayerData layers[LAYER_COUNT];
 
-   for(int i = 0; i < PAGECOUNT; i++)
+   for(int i = 0; i < LAYER_COUNT; i++)
       create_layer(layers + i, subtex);
 
    struct ScreenModifier screen_mod = {0,0,1}; 
@@ -913,7 +913,7 @@ int main(int argc, char** argv)
    struct SimpleLine * pending_lines = malloc(MAX_STROKE_LINES * sizeof(struct SimpleLine));
    pending.lines = pending_lines;
    pending.line_count = 0;
-   pending.layer = PAGECOUNT - 1; //Always start on the top page
+   pending.layer = LAYER_COUNT - 1; //Always start on the top page
 
    struct ScanDrawData scandata;
    scandata_initialize(&scandata, MAX_FRAMELINES);
@@ -947,7 +947,7 @@ int main(int argc, char** argv)
       if(kDown & KEY_DDOWN) MAIN_UPDOWN(-1)
       if(kDown & KEY_DRIGHT) tool_data[current_tool].width += (kHeld & KEY_R ? 5 : 1);
       if(kDown & KEY_DLEFT) tool_data[current_tool].width -= (kHeld & KEY_R ? 5 : 1);
-      if(kDown & KEY_SELECT) pending.layer = (pending.layer + 1) % PAGECOUNT;
+      if(kDown & KEY_SELECT) pending.layer = (pending.layer + 1) % LAYER_COUNT;
       if(kDown & KEY_A) current_tool = TOOL_PENCIL;
       if(kDown & KEY_B) current_tool = TOOL_ERASER;
       if(kDown & KEY_START) 
@@ -988,7 +988,7 @@ int main(int argc, char** argv)
       //Apparently (not sure), all clearing should be done within our main loop?
       if(flush_layers)
       {
-         for(int i = 0; i < PAGECOUNT; i++)
+         for(int i = 0; i < LAYER_COUNT; i++)
             C2D_TargetClear(layers[i].target, layer_color); 
          flush_layers = false;
       }
@@ -1024,10 +1024,10 @@ int main(int argc, char** argv)
       if(draw_pointer < draw_data_end)
       {
          u32 maxdraw = MAX_FRAMELINES;
-         maxdraw -= scandata_draw(&scandata, maxdraw, layers, PAGECOUNT);
+         maxdraw -= scandata_draw(&scandata, maxdraw, layers, LAYER_COUNT);
          draw_pointer = scandata_parse(&scandata, draw_pointer, draw_data_end,
                maxdraw, current_page);
-         scandata_draw(&scandata, maxdraw, layers, PAGECOUNT); 
+         scandata_draw(&scandata, maxdraw, layers, LAYER_COUNT); 
       }
 
       MY_FLUSH();
@@ -1065,8 +1065,8 @@ int main(int argc, char** argv)
 
       //Draw the layers
       C2D_DrawRectSolid(-screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f,
-            PAGEWIDTH * screen_mod.zoom, PAGEHEIGHT * screen_mod.zoom, bg_color); //The bg color
-      for(int i = 0; i < PAGECOUNT; i++)
+            LAYER_WIDTH * screen_mod.zoom, LAYER_HEIGHT * screen_mod.zoom, bg_color); //The bg color
+      for(int i = 0; i < LAYER_COUNT; i++)
       {
          C2D_DrawImageAt(layers[i].image, -screen_mod.ofs_x, -screen_mod.ofs_y, 0.5f, 
                NULL, screen_mod.zoom, screen_mod.zoom);
@@ -1098,7 +1098,7 @@ int main(int argc, char** argv)
    free(draw_data);
    free(stroke_data);
 
-   for(int i = 0; i < PAGECOUNT; i++)
+   for(int i = 0; i < LAYER_COUNT; i++)
       delete_layer(layers[i]);
 
    scandata_free(&scandata);
