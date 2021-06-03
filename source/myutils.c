@@ -61,12 +61,36 @@ u32 rgba16c_to_rgba32c(u16 val)
       );
 }
 
+u16 rgba32c_to_rgba16(u32 val)
+{
+   //16 : 0b                   ARRRRRGG GGGBBBBB
+   //32 : 0b AAAAAAAA BBBBBBBB GGGGGGGG RRRRRRRR
+   return 
+      ((val & 0x80000000) >> 16) |
+      ((val & 0x00F80000) >> 19) | //Blue?
+      ((val & 0x0000F800) >> 6) | //green?
+      ((val & 0x000000F8) << 7)  //red?
+      ;
+}
+
+u32 rgba16_to_rgba32c(u16 val)
+{
+   //16 : 0b                   ARRRRRGG GGGBBBBB
+   //32 : 0b AAAAAAAA BBBBBBBB GGGGGGGG RRRRRRRR
+   return 
+      ((val & 0x8000) ? 0xFF000000 : 0) |
+      ((val & 0x001F) << 19) | //Blue?
+      ((val & 0x03E0) << 6) | //green?
+      ((val & 0x7C00) >> 7)  //red?
+      ;
+}
+
 //Convert a whole palette from regular RGB (no alpha) to true 16 bit values
 //used for in-memory palettes (and written drawing data)
 void convert_palette(u32 * original, u16 * destination, u16 size)
 {
    for(int i = 0; i < size; i++)
-      destination[i] = rgba32c_to_rgba16c(rgb24_to_rgba32c(original[i]));
+      destination[i] = rgba32c_to_rgba16(rgb24_to_rgba32c(original[i]));
 }
 
 

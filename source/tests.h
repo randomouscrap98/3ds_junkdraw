@@ -12,10 +12,42 @@ int test_transparenthalftofull()
       if((col & 0xFFF) == 0xFFF) printf("."); //tracker
       if(col != half) //(col << 16) != half)
       {
-         printf("ERR: Expected %04x, got %04x, full: %08lx\n", col, half, full);
+         printf("ERR: h2f Expected %04x, got %04x, full: %08lx\n", col, half, full);
          return 1;
       }
    }
+
+   return 0;
+}
+
+int test_transparent16to32()
+{
+   //It's such a small space, literally just run the gamut of 16 bit colors
+   for(u32 i = 0; i <= 0xFFFF; i++)
+   {
+      u16 col = i;
+      u32 full = rgba16_to_rgba32c(col);
+      u16 half = rgba32c_to_rgba16(full);
+      if((col & 0xFFF) == 0xFFF) printf("."); //tracker
+      if(col != half) //(col << 16) != half)
+      {
+         printf("ERR: 16-32 Expected %04x, got %04x, full: %08lx\n", col, half, full);
+         return 1;
+      }
+   }
+
+   return 0;
+}
+
+#define TST_16CF(c32,c16) if(rgba32c_to_rgba16(c32) != c16) { \
+   printf("ERR: 16cf Expected %04x, got %04x, full: %08lx\n", c16, rgba32c_to_rgba16(c32), c32); \
+   return 1; } else { printf("."); }
+
+int test_16bitcolorformat()
+{
+   TST_16CF(C2D_Color32(255,0,0,255), 0xFC00); //Red
+   TST_16CF(C2D_Color32(0,255,0,255), 0x83E0); //Blue
+   TST_16CF(C2D_Color32(0,0,255,255), 0x801F); //Green
 
    return 0;
 }
@@ -223,7 +255,9 @@ int test_convertlines()
 void run_tests()
 {
    printf("Running tests; only errors will be displayed\n");
+   if(test_transparent16to32()) return; 
    if(test_transparenthalftofull()) return; 
+   if(test_16bitcolorformat()) return; 
    if(test_inttochars()) return; 
    if(test_signedtospecial()) return; 
    if(test_inttovarwidth()) return; 

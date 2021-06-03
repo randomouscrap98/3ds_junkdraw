@@ -354,7 +354,7 @@ void custom_drawline(const struct SimpleLine * line, u16 width, u32 color)
 //Assumes you're already on the appropriate page you want and all that
 void draw_lines(const struct LinePackage * linepack, u16 pack_start, u16 pack_end)
 {
-   u32 color = rgba16c_to_rgba32c(linepack->color);
+   u32 color = rgba16_to_rgba32c(linepack->color);
 
    if(pack_end > linepack->line_count)
       pack_end = linepack->line_count;
@@ -418,7 +418,7 @@ void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index)
       C2D_DrawRectSolid(
          PALETTE_OFSX + x * shift + PALETTE_SWATCHMARGIN, 
          PALETTE_OFSY + y * shift + PALETTE_SWATCHMARGIN, 0.5f, 
-         PALETTE_SWATCHWIDTH, PALETTE_SWATCHWIDTH, rgba16c_to_rgba32c(palette[i]));
+         PALETTE_SWATCHWIDTH, PALETTE_SWATCHWIDTH, rgba16_to_rgba32c(palette[i]));
    }
 }
 
@@ -1084,7 +1084,7 @@ int main(int argc, char** argv)
          C2D_DrawRectSolid(PALETTE_MINIPADDING, PALETTE_MINIPADDING, 0.5f, 
                PALETTE_MINISIZE - PALETTE_MINIPADDING * 2, 
                PALETTE_MINISIZE - PALETTE_MINIPADDING * 2, 
-               rgba16c_to_rgba32c(palette[palette_index])); 
+               rgba16_to_rgba32c(palette[palette_index])); 
       }
 
 

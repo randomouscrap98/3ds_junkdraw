@@ -20,7 +20,7 @@
 #define MAX_STROKE_LINES 5000
 #define MAX_STROKE_DATA MAX_STROKE_LINES << 3
 #define MIN_ZOOMPOWER -2
-#define MAX_ZOOMPOWER 3
+#define MAX_ZOOMPOWER 4
 #define MIN_WIDTH 1
 #define MAX_WIDTH 64
 #define MAX_PAGE 0xFFFF
@@ -62,6 +62,10 @@
 
 #define STATUS_MAINCOLOR 36
 #define STATUS_ACTIVECOLOR 37
+
+typedef u16 page_num;
+typedef u8 layer_num;
+//typedef u16 stroke_num;
 
 
 // The base palette definition
