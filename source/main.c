@@ -210,7 +210,7 @@ char * convert_lines_to_data(struct LinePackage * lines, char * container, u32 c
 
 //A true macro, as in just dump code into the function later. Used ONLY for 
 //convert_data, hence "CVD"
-#define CVD_LINECHECK(x,msg) if((data_length - (endptr - data)) < x) { \
+#define CVD_LINECHECK(x,msg) if((data_end - endptr) < x) { \
    LOGDBG("ERROR: Not enough data to parse line! %s\n",msg); \
    return NULL; }
 
@@ -219,7 +219,7 @@ char * convert_lines_to_data(struct LinePackage * lines, char * container, u32 c
 //Parsed data is all stored in the given package. A partial parse may result 
 //in a partially modified package. Converts a single chunk of line data.
 //Returns the next position in the data to start reading a chunk
-char * convert_data_to_lines(struct LinePackage * package, char * data, u32 data_length)
+char * convert_data_to_lines(struct LinePackage * package, char * data, char * data_end)
 {
    char * endptr = data;
    package->line_count = 0;
@@ -245,7 +245,7 @@ char * convert_data_to_lines(struct LinePackage * package, char * data, u32 data
       u8 scanned = 0;
 
       //This could be VERY VERY UNSAFE!!
-      while((endptr - data) < data_length)
+      while(endptr < data_end)
       {
          struct SimpleLine * line = package->lines + package->line_count;
 
@@ -581,16 +581,21 @@ struct ScanDrawData
    struct LinePackage * current_package;
    struct LinePackage * last_package;
    struct SimpleLine * last_line;
+
+   u32 packages_capacity;
+   u32 lines_capacity;
 };
 
-void scandata_initialize(struct ScanDrawData * data)
+void scandata_initialize(struct ScanDrawData * data, u32 max_line_buffer)
 {
    //At MOST, we should have a maximum of the maximum allowed lines to read, as
    //each stroke NEEDS one line
-   data->packages = malloc(sizeof(struct LinePackage) * MAX_FRAMELINES);
+   data->packages_capacity = max_line_buffer;
+   data->lines_capacity = max_line_buffer + MAX_STROKE_LINES;
+   data->packages = malloc(sizeof(struct LinePackage) * data->packages_capacity); 
    //But for ALL lines put together, the last line we scan COULD be as big as
    //the maximum stroke by accident, so always include additional space
-   data->all_lines = malloc(sizeof(struct SimpleLine) * (MAX_FRAMELINES + MAX_STROKE_LINES));
+   data->all_lines = malloc(sizeof(struct SimpleLine) * data->lines_capacity);
    data->current_package = NULL;
    data->last_package = data->packages;
    data->last_line = data->all_lines;
@@ -600,6 +605,12 @@ void scandata_free(struct ScanDrawData * data)
 {
    free(data->packages);
    free(data->all_lines);
+   data->last_package = NULL;
+   data->last_line = NULL;
+   data->packages = NULL;
+   data->all_lines = NULL;
+   data->packages_capacity = 0;
+   data->lines_capacity = 0;
 }
 
 //Draw and track a certain number of lines from the given scandata.
@@ -628,7 +639,7 @@ u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount,
 
          //Scan over every package
          for(struct LinePackage * p = scandata->current_package; 
-               p != scandata->last_package; p++)
+               p < scandata->last_package; p++)
          {
             //Just entirely skip data for layers we're not focusing on yet.
             if(p->layer != layer_i) continue;
@@ -657,6 +668,13 @@ u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount,
 
       //At the end, only set package to NULL if we got all the way through.
       scandata->current_package = stopped_on;
+
+      //OH, we're at the end! Can reset the lines and such
+      if(scandata->current_package == NULL)
+      {
+         scandata->last_package = scandata->packages;
+         scandata->last_line = scandata->all_lines;
+      }
    }
 
    return current_drawcount;
@@ -670,16 +688,47 @@ char * scandata_parse(struct ScanDrawData * scandata, char * drawdata,
 {
    char * parse_pointer = drawdata;
    char * stroke_pointer = NULL;
+   u32 scan_remaining = MAX_DRAWDATA_SCAN;
 
-   parse_pointer = datamem_scanstroke(parse_pointer, drawdata_end, 
-         MAX_DRAWDATA_SCAN, page, &stroke_pointer);
+   //There's VERY LITTLE safety in these functions! PLEASE BE CAREFUL
+   //Assumptions: 
+   //-the scandata that's given can hold the entirety of the desired scancount
+   //-the scandata pointers are all at the start
+   //-there's nothing in the scandata
 
-   //HAH, nothing left to do!
-   //if(line_scancount <= 0) return parse_pointer;
+   //Is there a possibility it will scan past the end? Can we do comparisons
+   //like this on pointers? I'm pretty sure you can, they point to the same array
+   while(stroke_pointer < drawdata_end && 
+         (scandata->last_line - scandata->all_lines) < line_scancount && 
+         scan_remaining > 0)
+   {
+      //Remaining is always the maximum scan amount minus how far we've scanned
+      //into the data.
+      scan_remaining = MAX_DRAWDATA_SCAN - (parse_pointer - drawdata);
 
-   //First, see if we have leftover stuff to draw. If so, do it up to a certain
-   //amount. Assume the package has already been modified to point to the next
-   //place to draw.
+      //we should ALWAYS be able to trust parse_pointer
+      parse_pointer = datamem_scanstroke(parse_pointer, drawdata_end, 
+            scan_remaining, page, &stroke_pointer);
+
+      //What do we do if it doesn't find a stroke pointer? We can't do anymore,
+      //there was no stroke to be found.... right? Or does that mean no stroke to
+      //be found, within the allotted maximum scanning range?
+      if(stroke_pointer == NULL)
+         continue; //We assume we just didn't find anything, try again
+
+      //Pre-assign the next open line spot to this package
+      scandata->last_package->lines = scandata->last_line;
+
+      //Do we really care where the end of this ends up? no; don't use the return.
+      //I don't know when this wouldn't be the case, but the parse_pointer
+      //SHOULD point to the start of the next stroke, or in other words, 1 past
+      //the last character in the stroke data, which is perfect for this.
+      convert_data_to_lines(scandata->last_package, stroke_pointer, parse_pointer);
+
+      //Move the "last" pointers forward
+      scandata->last_line += scandata->last_package->line_count;
+      scandata->last_package++;
+   }
 
    return parse_pointer;
 }
@@ -828,7 +877,9 @@ int main(int argc, char** argv)
    pending.lines = pending_lines;
    pending.line_count = 0;
    pending.layer = PAGECOUNT - 1; //Always start on the top page
-   //pending.page = 0;
+
+   struct ScanDrawData scandata;
+   scandata_initialize(&scandata, MAX_FRAMELINES);
 
    char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
    char * stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
@@ -922,17 +973,8 @@ int main(int argc, char** argv)
             {
                //This is for a stroke, do different things if we have different tools!
                add_stroke(&pending, &current_touch, &screen_mod);
-
                //Draw ONLY the current line
                draw_lines(&pending, pending.line_count - 1, pending.line_count);
-
-               //pending.lines = line; //Force the pending line to only show the end
-               //u16 oldcount = pending.line_count;
-               //pending.line_count = 1;
-
-               //Reset pending lines to proper thing
-               //pending.lines = pending_lines;
-               //pending.line_count = oldcount + 1;
             }
 
             C2D_Flush();
@@ -1005,6 +1047,8 @@ int main(int argc, char** argv)
 
    for(int i = 0; i < PAGECOUNT; i++)
       delete_layer(layers[i]);
+
+   scandata_free(&scandata);
 
    C2D_Fini();
    C3D_Fini();

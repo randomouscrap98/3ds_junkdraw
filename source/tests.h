@@ -162,7 +162,7 @@ bool test_linearr_eq(struct SimpleLine * l1, struct SimpleLine * l2, u16 cnt)
 #define TST_CVLTST \
    endptr = convert_lines_to_data(&package1, data, TST_CVLDAT); \
    if(endptr == NULL) return 1; \
-   endptr2 = convert_data_to_lines(&package2, data, endptr - data); \
+   endptr2 = convert_data_to_lines(&package2, data, endptr); \
    if(endptr2 == NULL) return 1; \
    TST_CVLEQ(package1, package2) \
    printf(".");
