@@ -7,16 +7,26 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include <dirent.h>
+//#include <limits.h>
+//#include <errno.h>
+
+//#include <3ds/types.h>
 
 // MUST define all these debug things before importing libraries, 
 // as THEY use  them. 
 
 //#define DEBUG_COORD
-#define DEBUG_DATAPRINT
+//#define DEBUG_DATAPRINT
 #define DEBUG_PRINT
 #define DEBUG_PRINT_TIME
 #define DEBUG_RUNTESTS
-#define DEBUG_PRINT_SPECIAL "\x1b[18;1H\x1b[33m"
+
+u8 _db_prnt_row = 0;
+#define DEBUG_PRINT_MINROW 18
+#define DEBUG_PRINT_ROWS 8
+#define DEBUG_PRINT_SPECIAL() { printf("\x1b[%d;1H\x1b[33m", _db_prnt_row + DEBUG_PRINT_MINROW); \
+   _db_prnt_row = (_db_prnt_row + 1) % DEBUG_PRINT_ROWS; }
 
 #include "myutils.h"
 #include "dcv.h"
@@ -853,6 +863,63 @@ void print_time(bool showcolon)
 
 
 
+// -- FILESYSTEM --
+#define MKDIR_LOG(x) \
+   if(mkdir_p(x)) { LOGDBG("MKDIR FAIL: %s\n", x); } \
+   else { LOGDBG("Created(?) directory: %s\n", x); }
+
+
+void get_save_location(char * savename, char * container)
+{
+   container[0] = 0;
+   sprintf(container, "%s%s/", SAVE_BASE, savename);
+}
+
+void get_rawfile_location(char * savename, char * container)
+{
+   get_save_location(savename, container);
+   strcpy(container + strlen(container), "raw");
+}
+
+int write_file(const char * filename, const char * data)
+{
+   int result = 0;
+   printf_flush("\x1b[%d;1HSaving file %s...\n", MAINMENU_TOP, filename);
+   FILE * savefile = fopen(filename, "w");
+   if(!savefile)
+   {
+      LOGDBG("ERR: Couldn't open file %s", filename);
+      result = -1;
+      goto TRUEEND;
+   }
+   if(fputs(data, savefile) == EOF)
+   {
+      LOGDBG("ERR: Couldn't write data to %s", filename);
+      result = -2;
+      goto END;
+   }
+END:
+   fclose(savefile);
+TRUEEND:
+   printf_flush("\x1b[%d;1H%-50s", MAINMENU_TOP, "");
+   return result;
+}
+
+int try_write_file(const char * filename, const char * data, u8 top)
+{
+   int result = 0;
+
+   while((result = write_file(filename, data)))
+   {
+      if(!easy_warn("FAIL: Try again?", "The save failed, try again?", top))
+         break;
+   }
+
+   return result;
+}
+
+
+
 // -- TESTS --
 
 #ifdef DEBUG_RUNTESTS
@@ -941,6 +1008,8 @@ int main(int argc, char** argv)
    scandata_initialize(&scandata, MAX_FRAMELINES);
 
    char save_filename[MAX_FILENAME];
+   char save_fullpath[256]; //IDK if this is enough, whatever
+   char temp_msg[512];
    char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
    char * stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
    char * draw_data_end;
@@ -957,8 +1026,9 @@ int main(int argc, char** argv)
 #endif
 
    print_framing();
+   MKDIR_LOG(SAVE_BASE);
 
-   LOGDBG("STARTING");
+   LOGDBG("STARTING MAIN LOOP");
 
    while(aptMainLoop())
    {
@@ -997,7 +1067,22 @@ int main(int argc, char** argv)
             if(enter_text_fixed("Enter a filename: ", MAINMENU_TOP, save_filename, 
                      MAX_FILENAMESHOW, !strlen(save_filename), KEY_B | KEY_START))
             {
-               LOGDBG("ENTERED: %s\n", save_filename);
+               //Go get the full path
+               get_save_location(save_filename, save_fullpath);
+               MKDIR_LOG(save_fullpath);
+               get_rawfile_location(save_filename, save_fullpath);
+               
+               //Prepare the warning message
+               sprintf(temp_msg, "WARN: OVERWRITE %s", save_filename);
+
+               //We only save if it's new or if... idk.
+               if(!file_exists(save_fullpath) || easy_warn(temp_msg,
+                        "Save already exists, definitely overwrite?", MAINMENU_TOP))
+               {
+                  *draw_data_end = 0; //Just a temp thing
+                  if(!try_write_file(save_fullpath, draw_data, MAINMENU_TOP))
+                     saved_last = draw_data_end;
+               }
             }
          }
          else if(selected == MAINMENU_HOSTLOCAL || selected == MAINMENU_CONNECTLOCAL)

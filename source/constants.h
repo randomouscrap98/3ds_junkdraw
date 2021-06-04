@@ -2,7 +2,7 @@
 // -- Some SUPER IMPORTANT constants
 
 #define VERSION "1.0.0"
-#define SAVE_BASE "sdmc:/3ds/junkdraw"
+#define SAVE_BASE "/3ds/junkdraw/"
 
 #define SCREENWIDTH 320
 #define SCREENHEIGHT 240

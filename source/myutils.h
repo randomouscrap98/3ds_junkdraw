@@ -15,7 +15,7 @@
 
 #ifdef DEBUG_PRINT
 #ifdef DEBUG_PRINT_SPECIAL
-#define LOGDBG(f_, ...) {printf(DEBUG_PRINT_SPECIAL);LOGTIME();printf((f_), ## __VA_ARGS__);}
+#define LOGDBG(f_, ...) {DEBUG_PRINT_SPECIAL();LOGTIME();printf((f_), ## __VA_ARGS__);}
 #else
 #define LOGDBG(f_, ...) {LOGTIME();printf((f_), ## __VA_ARGS__);}
 #endif
@@ -46,5 +46,13 @@ bool easy_confirm(const char * title, u8 top);
 bool easy_warn(const char * warn, const char * title, u8 top);
 bool enter_text_fixed(const char * title, u8 top, char * container, 
       u8 max_entry, bool clear, u32 exit_btns);
+
+// PRINT STUFF
+void printf_flush(const char * format, ...);
+
+// FILESYSTEM
+int mkdir_p(const char *path);
+bool file_exists (char * filename);
+//int mkdir_p(char* file_path, mode_t mode);
 
 #endif

@@ -2,6 +2,10 @@
 #include "string.h"
 #include <citro3d.h>
 
+#include <dirent.h>
+#include <limits.h>
+#include <errno.h>
+#include <stdarg.h>
 
 
 // -------------------
@@ -220,3 +224,88 @@ bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_len
 
    return confirmed;
 }
+
+
+// -- PRINT STUFF --
+void printf_flush(const char * format, ...)
+{
+   C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+   va_list args;
+   va_start(args, format);
+   vprintf(format, args);
+   va_end(args);
+   C3D_FrameEnd(0);
+}
+
+//As expected, this causes a stack exception
+//int mkdir_p(char* file_path, mode_t mode) {
+//    if(!(file_path && *file_path)) return -2; //my special return, whatever
+//    for (char* p = strchr(file_path + 1, '/'); p; p = strchr(p + 1, '/')) {
+//        *p = '\0';
+//        if (mkdir(file_path, mode) == -1) {
+//            if (errno != EEXIST) {
+//                *p = '/';
+//                return -1;
+//            }
+//        }
+//        *p = '/';
+//    }
+//    return 0;
+//}
+
+//Taken verbatim from https://gist.github.com/JonathonReinhart/8c0d90191c38af2dcadb102c4e202950
+int mkdir_p(const char *path)
+{
+    /* Adapted from http://stackoverflow.com/a/2336245/119527 */
+    const size_t len = strlen(path);
+    char _path[PATH_MAX];
+    char *p; 
+
+    errno = 0;
+
+    /* Copy string so its mutable */
+    if (len > PATH_MAX-1) {
+        errno = ENAMETOOLONG;
+        //LOGDBG("MKDIR_P: DIRECTORY TOO LONG: %ld, %s\n", PATH_MAX, path);
+        return -1; 
+    }   
+    strcpy(_path, path);
+
+    /* Iterate the string */
+    for (p = _path + 1; *p; p++) {
+        if (*p == '/') {
+            /* Temporarily truncate */
+            *p = '\0';
+
+            if (mkdir(_path, S_IRWXU) != 0) {
+                if (errno != EEXIST)
+                {
+                    //LOGDBG("MKDIR_P: Couldn't make inner path: %s\n", _path);
+                    return -1; 
+                }
+            }
+
+            *p = '/';
+        }
+    }   
+
+    if (mkdir(_path, S_IRWXU) != 0) {
+        if (errno != EEXIST)
+        {
+           //LOGDBG("MKDIR_P: Couldn't make final path: %s\n", _path);
+            return -1; 
+        }
+    }   
+
+    //LOGDBG("Created directory: %s\n", path);
+
+    return 0;
+}
+
+//Taken from https://stackoverflow.com/a/230070/1066474
+bool file_exists (char * filename)
+{
+   struct stat buffer;
+   return (stat (filename, &buffer) == 0);
+}
+
