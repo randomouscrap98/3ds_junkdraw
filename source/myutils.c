@@ -108,8 +108,10 @@ void convert_palette(u32 * original, u16 * destination, u16 size)
 //after. CONTROL WILL BE GIVEN FULLY TO THIS MENU UNTIL IT FINISHES!
 s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_buttons)
 {
-   s8 menu_on = 0;
-   u8 menu_num = 0;
+   s16 menu_on = 0;
+   u16 menu_num = 0;
+   //u16 menu_next = 0;
+
    const char * menu_str[MAX_MENU_ITEMS];
    menu_str[0] = menu_items;
    bool has_title = (title != NULL && strlen(title));
@@ -309,3 +311,43 @@ bool file_exists (char * filename)
    return (stat (filename, &buffer) == 0);
 }
 
+//Get directories in menu format (separated by 0, last item has 2 0)
+s32 get_directories(char * directory, char * container, u32 c_size)
+{
+   s32 count = 0;
+   char * current_file = container;
+   DIR * dir = opendir(directory);
+
+   if(!dir) //{
+      //PRINTERR("Couldn't open directory");
+      return -1;
+   //}
+
+   struct dirent * entry = readdir(dir);
+
+   while(entry != NULL)
+   {
+      if(entry->d_type == DT_DIR)
+      {
+         u32 len = strlen(entry->d_name);
+
+         //No more files will fit
+         if(current_file - container + len + 2 > c_size)
+            break;
+
+         //Copy entry into just past the last slot (where the 0 is)
+         current_file++;
+         memcpy(current_file, entry->d_name, len);
+         current_file += len;
+         *current_file = 0;
+
+         count++;
+      }
+
+      entry = readdir(dir);
+   }
+
+   *(current_file + 1) = 0;
+
+   return count;
+}

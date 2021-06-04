@@ -2,7 +2,7 @@
 // -- Some SUPER IMPORTANT constants
 
 #define VERSION "1.0.0"
-#define SAVE_BASE "/3ds/junkdraw/"
+#define SAVE_BASE "/3ds/junkdraw/saves/"
 
 #define SCREENWIDTH 320
 #define SCREENHEIGHT 240
@@ -34,6 +34,7 @@
 #define MAX_DRAWDATA_SCAN 100000
 #define MAX_FILENAME 256
 #define MAX_FILENAMESHOW 5
+#define MAX_ALLFILENAMES 65535
 
 #define DRAWDATA_ALIGNMENT '.'
 
@@ -73,8 +74,15 @@
 #define MAINMENU_CONNECTLOCAL 4
 #define MAINMENU_EXIT 5
 
+#define DEBUG_PRINT_MINROW 21
+#define DEBUG_PRINT_ROWS 5
 #define STATUS_MAINCOLOR 36
 #define STATUS_ACTIVECOLOR 37
+
+//Weird stuff that should maybe be refactored
+#define MY_C2DOBJLIMIT 16384
+#define MY_C2DOBJLIMITSAFETY MY_C2DOBJLIMIT - 100
+#define PSX1BLEN 30
 
 typedef u16 page_num;
 typedef u8 layer_num;

@@ -12,6 +12,7 @@
 //#include <errno.h>
 
 //#include <3ds/types.h>
+#include "constants.h"
 
 // MUST define all these debug things before importing libraries, 
 // as THEY use  them. 
@@ -23,14 +24,11 @@
 #define DEBUG_RUNTESTS
 
 u8 _db_prnt_row = 0;
-#define DEBUG_PRINT_MINROW 18
-#define DEBUG_PRINT_ROWS 8
 #define DEBUG_PRINT_SPECIAL() { printf("\x1b[%d;1H\x1b[33m", _db_prnt_row + DEBUG_PRINT_MINROW); \
    _db_prnt_row = (_db_prnt_row + 1) % DEBUG_PRINT_ROWS; }
 
 #include "myutils.h"
 #include "dcv.h"
-#include "constants.h"
 
 
 // TODO: Figure out these weirdness things:
@@ -332,8 +330,6 @@ void delete_layer(struct LayerData page)
 // -- DRAWING UTILS --
 
 //Some (hopefully temporary) globals to overcome some unforeseen limits
-#define MY_C2DOBJLIMIT 16384
-#define MY_C2DOBJLIMITSAFETY MY_C2DOBJLIMIT - 100
 u32 _drw_cmd_cnt = 0;
 
 #define MY_FLUSH() { C2D_Flush(); _drw_cmd_cnt = 0; }
@@ -798,6 +794,18 @@ char * scandata_parse(struct ScanDrawData * scandata, char * drawdata,
 
 // -- MENU/PRINT STUFF --
 
+#define PRINTCLEAR() { printf_flush("\x1b[%d;2H%-150s", MAINMENU_TOP, ""); }
+
+#define PRINTGENERAL(x, col, ...) { \
+   printf_flush("\x1b[%d;1H%-150s\x1b[%d;2H\x1b[%dm", MAINMENU_TOP, "", MAINMENU_TOP, col); \
+   printf_flush(x, ## __VA_ARGS__); } \
+
+//#define LOGDBG(f_, ...) {DEBUG_PRINT_SPECIAL();LOGTIME();printf((f_), ## __VA_ARGS__);}
+#define PRINTERR(x, ...) PRINTGENERAL(x, 31, ## __VA_ARGS__)
+#define PRINTWARN(x, ...) PRINTGENERAL(x, 33, ## __VA_ARGS__)
+#define PRINTINFO(x, ...) PRINTGENERAL(x, 37, ## __VA_ARGS__)
+
+
 void print_controls()
 {
    printf("     L - change color        R - general modifier\n");
@@ -811,8 +819,6 @@ void print_framing()
 {
    printf("\x1b[29;1H--------------------------------------------------");
 }
-
-#define PSX1BLEN 30
 
 void get_printmods(char * status_x1b, char * active_x1b, char * statusbg_x1b, char * activebg_x1b)
 {
@@ -884,7 +890,8 @@ void get_rawfile_location(char * savename, char * container)
 int write_file(const char * filename, const char * data)
 {
    int result = 0;
-   printf_flush("\x1b[%d;1HSaving file %s...\n", MAINMENU_TOP, filename);
+   PRINTINFO("Saving file %s...", filename)
+   //printf_flush("\x1b[%d;1HSaving file %s...\n", MAINMENU_TOP, filename);
    FILE * savefile = fopen(filename, "w");
    if(!savefile)
    {
@@ -901,7 +908,9 @@ int write_file(const char * filename, const char * data)
 END:
    fclose(savefile);
 TRUEEND:
-   printf_flush("\x1b[%d;1H%-50s", MAINMENU_TOP, "");
+   PRINTCLEAR();
+   //PRINTINFO("%-150s", "");
+   //printf_flush("\x1b[%d;1H%-50s", MAINMENU_TOP, "");
    return result;
 }
 
@@ -1085,9 +1094,25 @@ int main(int argc, char** argv)
                }
             }
          }
+         else if (selected == MAINMENU_LOAD)
+         {
+            char * all_files = malloc(sizeof(char) * MAX_ALLFILENAMES);
+
+            if(!all_files) {
+               PRINTERR("Couldn't allocate memory");
+               goto MAINLOADTRUEEND;
+            }
+
+            PRINTINFO("Searching for saves...");
+            u32 dircount = get_directories(SAVE_BASE, all_files, MAX_ALLFILENAMES);
+            PRINTINFO("Found %d saves...", dircount);
+
+            free(all_files);
+MAINLOADTRUEEND:
+         }
          else if(selected == MAINMENU_HOSTLOCAL || selected == MAINMENU_CONNECTLOCAL)
          {
-            printf("\x1b[%d;2H\x1b[33mNot implemented yet\n", MAINMENU_TOP);
+            PRINTWARN("Not implemented yet");
          }
       }
       if(kDown & KEY_TOUCH) update_package_with_tool(&pending, &tool_data[current_tool]);
@@ -1147,7 +1172,6 @@ int main(int argc, char** argv)
                //Draw ONLY the current line
                draw_lines(&pending, pending.line_count - 1, pending.line_count);
             }
-
          }
       }
 
