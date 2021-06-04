@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <errno.h>
 #include <stdarg.h>
+#include <stdlib.h>
 
 
 // -------------------
@@ -106,13 +107,13 @@ void convert_palette(u32 * original, u16 * destination, u16 size)
 
 //Menu items must be packed together, separated by \0. Last item needs two \0
 //after. CONTROL WILL BE GIVEN FULLY TO THIS MENU UNTIL IT FINISHES!
-s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_buttons)
+s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u32 exit_buttons)
 {
-   s16 menu_on = 0;
-   u16 menu_num = 0;
-   //u16 menu_next = 0;
+   s32 menu_on = 0;
+   u32 menu_num = 0;
+   u32 menu_ofs = 0;
 
-   const char * menu_str[MAX_MENU_ITEMS];
+   const char ** menu_str = malloc(MAX_MENU_ITEMS * sizeof(char *)); //[MAX_MENU_ITEMS];
    menu_str[0] = menu_items;
    bool has_title = (title != NULL && strlen(title));
 
@@ -122,12 +123,16 @@ s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_butto
       menu_num++;
    }
 
+   if(!display || display > menu_num) display = menu_num;
+
    //Print title, 1 over
    if(has_title)
    {
       printf("\x1b[%d;1H\x1b[0m %-49s", top, title);
       printf("%-50s","");
    }
+
+   u8 menudispofs = (has_title ? 2 : 1);
 
    //I want to see how inefficient printf is, so I'm doing this awful on purpose 
    while(aptMainLoop())
@@ -140,21 +145,29 @@ s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_butto
       if(kRepeat & KEY_UP) menu_on = (menu_on - 1 + menu_num) % menu_num;
       if(kRepeat & KEY_DOWN) menu_on = (menu_on + 1) % menu_num;
 
+      if(menu_on < menu_ofs)
+         menu_ofs = menu_on;
+      if(menu_on >= menu_ofs + display)
+         menu_ofs = menu_on - display + 1;
+
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
       //Print menu. When you get to the selected item, do a different bg
-      for(u8 i = 0; i < menu_num; i++)
+      printf("\x1b[0m\x1b[%d;3H%s", top + menudispofs - 1, menu_ofs > 0 ? "..." : "   ");
+      printf("\x1b[%d;3H%s", top + menudispofs + display, (menu_num > menu_ofs + display) ? "..." : "   ");
+      for(u8 i = 0; i < display; i++)
       {
-         u8 menutop = top + (has_title ? 2 : 0) + i;
-         if(menu_on == i)
-            printf("\x1b[%d;1H\x1b[47;30m  %-48s", menutop, menu_str[i]);
+         u8 menutop = top + menudispofs + i;
+         u32 im = i + menu_ofs;
+         if(menu_on == im)
+            printf("\x1b[%d;1H\x1b[47;30m  %-48s", menutop, menu_str[im]);
          else
-            printf("\x1b[%d;1H\x1b[0m  %-48s", menutop, menu_str[i]);
+            printf("\x1b[%d;1H\x1b[0m  %-48s", menutop, menu_str[im]);
       }
       C3D_FrameEnd(0);
    }
 
    //Clear the menu area
-   for(u8 i = 0; i < (has_title ? 2 : 0) + menu_num; i++)
+   for(u8 i = 0; i < menudispofs + display + 1; i++)
       printf("\x1b[%d;1H\x1b[0m%-50s", top + i, "");
 
    return menu_on;
@@ -162,7 +175,7 @@ s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_butto
 
 bool easy_confirm(const char * title, u8 top)
 {
-   return 1 == easy_menu(title, "No\0Yes\0", top, KEY_B);
+   return 1 == easy_menu(title, "No\0Yes\0", top, 0, KEY_B);
 }
 
 bool easy_warn(const char * warn, const char * title, u8 top)
@@ -225,6 +238,24 @@ bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_len
       printf("\x1b[%d;1H\x1b[0m%-50s", top + i, "");
 
    return confirmed;
+}
+
+const char * get_menu_item(const char * menu_items, u32 length, u32 item)
+{
+   u32 strings = 0;
+
+   for(u32 i = 0; i < length; i++)
+   {
+      //This will always be true on the NEXT character, which is after the \0
+      //and is good, keep it first.
+      if(strings == item)
+         return menu_items + i;
+
+      if(!menu_items[i])
+         strings++;
+   }
+
+   return NULL;
 }
 
 
@@ -318,10 +349,8 @@ s32 get_directories(char * directory, char * container, u32 c_size)
    char * current_file = container;
    DIR * dir = opendir(directory);
 
-   if(!dir) //{
-      //PRINTERR("Couldn't open directory");
+   if(!dir) 
       return -1;
-   //}
 
    struct dirent * entry = readdir(dir);
 
@@ -336,10 +365,10 @@ s32 get_directories(char * directory, char * container, u32 c_size)
             break;
 
          //Copy entry into just past the last slot (where the 0 is)
-         current_file++;
          memcpy(current_file, entry->d_name, len);
          current_file += len;
          *current_file = 0;
+         current_file++;
 
          count++;
       }
@@ -347,7 +376,7 @@ s32 get_directories(char * directory, char * container, u32 c_size)
       entry = readdir(dir);
    }
 
-   *(current_file + 1) = 0;
+   *current_file = 0;
 
    return count;
 }

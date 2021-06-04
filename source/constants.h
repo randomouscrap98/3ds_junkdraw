@@ -32,8 +32,11 @@
 #define MAX_PAGE 0xFFFF
 #define MAX_FRAMELINES 500
 #define MAX_DRAWDATA_SCAN 100000
-#define MAX_FILENAME 256
+
+#define MAX_FILENAME 64
 #define MAX_FILENAMESHOW 5
+#define MAX_FILEPATH 256
+#define MAX_TEMPSTRING 2048
 #define MAX_ALLFILENAMES 65535
 
 #define DRAWDATA_ALIGNMENT '.'
@@ -78,6 +81,7 @@
 #define DEBUG_PRINT_ROWS 5
 #define STATUS_MAINCOLOR 36
 #define STATUS_ACTIVECOLOR 37
+#define FILELOAD_MENUCOUNT 10
 
 //Weird stuff that should maybe be refactored
 #define MY_C2DOBJLIMIT 16384

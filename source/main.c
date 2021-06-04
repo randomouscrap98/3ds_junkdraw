@@ -914,6 +914,34 @@ TRUEEND:
    return result;
 }
 
+char * read_file(const char * filename, char * container, u32 maxread)
+{
+   char * result = NULL;
+   PRINTINFO("Loading file %s...", filename)
+   FILE * loadfile = fopen(filename, "r");
+   if(loadfile == NULL)
+   {
+      LOGDBG("ERR: Couldn't open file %s", filename);
+      goto READFILE_TRUEEND;
+   }
+   result = fgets(container, maxread, loadfile);
+   if(result == NULL)
+   {
+      LOGDBG("ERR: Couldn't read file %s", filename);
+      goto READFILE_END;
+   }
+   else
+   {
+      result = container + strlen(container);
+   }
+
+READFILE_END:
+   fclose(loadfile);
+READFILE_TRUEEND:
+   PRINTCLEAR();
+   return result;
+}
+
 int try_write_file(const char * filename, const char * data, u8 top)
 {
    int result = 0;
@@ -1016,9 +1044,9 @@ int main(int argc, char** argv)
    struct ScanDrawData scandata;
    scandata_initialize(&scandata, MAX_FRAMELINES);
 
-   char save_filename[MAX_FILENAME];
-   char save_fullpath[256]; //IDK if this is enough, whatever
-   char temp_msg[512];
+   char * save_filename = malloc(MAX_FILENAME * sizeof(char));
+   char * fileop_fullpath = malloc(MAX_FILEPATH * sizeof(char)); //IDK if this is enough, whatever
+   char * temp_msg = malloc(MAX_TEMPSTRING * sizeof(char));
    char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
    char * stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
    char * draw_data_end;
@@ -1060,7 +1088,7 @@ int main(int argc, char** argv)
       if(kDown & KEY_B) current_tool = TOOL_ERASER;
       if(kDown & KEY_START) 
       {
-         u8 selected = easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, KEY_B | KEY_START);
+         u8 selected = easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, KEY_B | KEY_START);
          if(selected == MAINMENU_EXIT)
          {
             if(MAIN_UNSAVEDCHECK("Really quit?"))
@@ -1077,25 +1105,29 @@ int main(int argc, char** argv)
                      MAX_FILENAMESHOW, !strlen(save_filename), KEY_B | KEY_START))
             {
                //Go get the full path
-               get_save_location(save_filename, save_fullpath);
-               MKDIR_LOG(save_fullpath);
-               get_rawfile_location(save_filename, save_fullpath);
+               get_save_location(save_filename, fileop_fullpath);
+               MKDIR_LOG(fileop_fullpath);
+               get_rawfile_location(save_filename, fileop_fullpath);
                
                //Prepare the warning message
                sprintf(temp_msg, "WARN: OVERWRITE %s", save_filename);
 
                //We only save if it's new or if... idk.
-               if(!file_exists(save_fullpath) || easy_warn(temp_msg,
+               if(!file_exists(fileop_fullpath) || easy_warn(temp_msg,
                         "Save already exists, definitely overwrite?", MAINMENU_TOP))
                {
                   *draw_data_end = 0; //Just a temp thing
-                  if(!try_write_file(save_fullpath, draw_data, MAINMENU_TOP))
+                  if(!try_write_file(fileop_fullpath, draw_data, MAINMENU_TOP))
                      saved_last = draw_data_end;
                }
             }
          }
          else if (selected == MAINMENU_LOAD)
          {
+            if(!MAIN_UNSAVEDCHECK("Are you sure you want to load and lose changes?"))
+               goto MAINLOADTRUEEND;
+
+            //Why isn't this preallocated? IDK... TODO maybe
             char * all_files = malloc(sizeof(char) * MAX_ALLFILENAMES);
 
             if(!all_files) {
@@ -1105,8 +1137,40 @@ int main(int argc, char** argv)
 
             PRINTINFO("Searching for saves...");
             u32 dircount = get_directories(SAVE_BASE, all_files, MAX_ALLFILENAMES);
-            PRINTINFO("Found %d saves...", dircount);
 
+            if(dircount < 0)
+            {
+               PRINTERR("Something went wrong while searching!");
+               goto MAINLOADEND;
+            }
+            else if(dircount == 0)
+            {
+               PRINTINFO("No saves found");
+               goto MAINLOADEND;
+            }
+
+            sprintf(temp_msg, "Found %ld saves:", dircount);
+            u32 sel = easy_menu(temp_msg, all_files, MAINMENU_TOP, 10, KEY_START | KEY_B);
+
+            if(sel < 0) goto MAINLOADEND;
+
+            const char * loadname = get_menu_item(all_files, MAX_ALLFILENAMES, sel);
+
+            MAIN_NEWDRAW();
+            get_rawfile_location((char *)loadname, fileop_fullpath);
+            draw_data_end = read_file(fileop_fullpath, draw_data, MAX_DRAW_DATA);
+
+            if(!draw_data_end)
+            {
+               PRINTERR("LOAD FAILED!");
+               MAIN_NEWDRAW();
+            }
+            else
+            {
+               strcpy(save_filename, loadname);
+               saved_last = draw_data_end;
+            }
+MAINLOADEND:
             free(all_files);
 MAINLOADTRUEEND:
          }

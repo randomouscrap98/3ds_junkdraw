@@ -24,7 +24,7 @@
 #endif
 
 //Some of these should be namespaced or whatever
-#define MAX_MENU_ITEMS 20
+#define MAX_MENU_ITEMS 10000
 #define ENTERTEXT_CHAR "_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 #define ENTERTEXT_CHARARRSIZE 50
 
@@ -41,11 +41,12 @@ u32 rgba16_to_rgba32c(u16 val);
 void convert_palette(u32 * original, u16 * destination, u16 size);
 
 // MENU STUFF
-s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_btns);
+s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u32 exit_btns);
 bool easy_confirm(const char * title, u8 top); 
 bool easy_warn(const char * warn, const char * title, u8 top);
 bool enter_text_fixed(const char * title, u8 top, char * container, 
       u8 max_entry, bool clear, u32 exit_btns);
+const char * get_menu_item(const char * menu_items, u32 length, u32 item);
 
 // PRINT STUFF
 void printf_flush(const char * format, ...);
