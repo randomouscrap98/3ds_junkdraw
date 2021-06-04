@@ -14,6 +14,7 @@
 //#define DEBUG_COORD
 #define DEBUG_DATAPRINT
 #define DEBUG_PRINT
+#define DEBUG_PRINT_TIME
 #define DEBUG_RUNTESTS
 #define DEBUG_PRINT_SPECIAL "\x1b[18;1H\x1b[33m"
 
@@ -957,6 +958,8 @@ int main(int argc, char** argv)
 
    print_framing();
 
+   LOGDBG("STARTING");
+
    while(aptMainLoop())
    {
       hidScanInput();
@@ -988,6 +991,14 @@ int main(int argc, char** argv)
          {
             if(MAIN_UNSAVEDCHECK("Are you sure you want to start anew?"))
                MAIN_NEWDRAW();
+         }
+         else if(selected == MAINMENU_SAVE)
+         {
+            if(enter_text_fixed("Enter a filename: ", MAINMENU_TOP, save_filename, 
+                     MAX_FILENAMESHOW, !strlen(save_filename), KEY_B | KEY_START))
+            {
+               LOGDBG("ENTERED: %s\n", save_filename);
+            }
          }
          else if(selected == MAINMENU_HOSTLOCAL || selected == MAINMENU_CONNECTLOCAL)
          {

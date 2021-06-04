@@ -1,5 +1,6 @@
 #include "myutils.h"
 #include "string.h"
+#include <citro3d.h>
 
 
 
@@ -115,10 +116,16 @@ s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_butto
       menu_num++;
    }
 
+   //Print title, 1 over
+   if(has_title)
+   {
+      printf("\x1b[%d;1H\x1b[0m %-49s", top, title);
+      printf("%-50s","");
+   }
+
    //I want to see how inefficient printf is, so I'm doing this awful on purpose 
    while(aptMainLoop())
    {
-      gspWaitForVBlank();
       hidScanInput();
       u32 kDown = hidKeysDown();
       u32 kRepeat = hidKeysDownRepeat();
@@ -127,22 +134,17 @@ s8 easy_menu(const char * title, const char * menu_items, u8 top, u32 exit_butto
       if(kRepeat & KEY_UP) menu_on = (menu_on - 1 + menu_num) % menu_num;
       if(kRepeat & KEY_DOWN) menu_on = (menu_on + 1) % menu_num;
 
-      //Print title, 1 over
-      if(has_title)
-      {
-         printf("\x1b[%d;1H\x1b[0m %-49s", top, title);
-         printf("%-50s","");
-      }
-
+      C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
       //Print menu. When you get to the selected item, do a different bg
       for(u8 i = 0; i < menu_num; i++)
       {
          u8 menutop = top + (has_title ? 2 : 0) + i;
          if(menu_on == i)
-            printf("\x1b[%d;1H\x1b[47m\x1b[30m  %-48s", menutop, menu_str[i]);
+            printf("\x1b[%d;1H\x1b[47;30m  %-48s", menutop, menu_str[i]);
          else
             printf("\x1b[%d;1H\x1b[0m  %-48s", menutop, menu_str[i]);
       }
+      C3D_FrameEnd(0);
    }
 
    //Clear the menu area
@@ -159,9 +161,62 @@ bool easy_confirm(const char * title, u8 top)
 
 bool easy_warn(const char * warn, const char * title, u8 top)
 {
-   printf("\x1b[%d;1H\x1b[31m\x1b[40m %-49s", top, warn);
+   printf("\x1b[%d;1H\x1b[31;40m %-49s", top, warn);
    bool value = easy_confirm(title, top + 1);
    printf("\x1b[%d;1H%-50s",top, "");
    return value;
 }
 
+bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_length,
+      bool clear, u32 exit_buttons)
+{
+   bool confirmed = false;
+   bool has_title = (title != NULL && strlen(title));
+   char chars[ENTERTEXT_CHARARRSIZE];
+   strcpy(chars, ENTERTEXT_CHAR);
+   u8 av_ch = strlen(chars);
+   if(clear) memset(container, chars[0], fixed_length);
+   container[fixed_length] = '\0';
+
+   u8 ud = top + (has_title ? 2 : 1);
+   u8 pos = 0;
+
+   //Print title, 1 over
+   if(has_title)
+      printf("\x1b[%d;1H\x1b[0m %-49s", top, title);
+
+   printf("%-150s","");
+
+   //I want to see how inefficient printf is, so I'm doing this awful on purpose 
+   while(aptMainLoop())
+   {
+      hidScanInput();
+      u32 kDown = hidKeysDown();
+      u32 kRepeat = hidKeysDownRepeat();
+      u8 current_index = (strchr(chars, container[pos]) - chars);
+      if(kDown & KEY_A) { confirmed = true; break; }
+      if(kDown & exit_buttons) break;
+      if(kRepeat & KEY_RIGHT && pos < fixed_length - 1) pos++;
+      if(kRepeat & KEY_LEFT && pos > 0) pos--;
+      if(kRepeat & KEY_UP) container[pos] = chars[(current_index + 1) % av_ch];
+      if(kRepeat & KEY_DOWN) container[pos] = chars[(current_index - 1 + av_ch) % av_ch];
+
+      C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+      //Print menu. When you get to the selected item, do a different bg
+      for(u8 i = 0; i < fixed_length; i++)
+      {
+         u8 lr = 3 + i;
+         printf("\x1b[%d;%dH%c\x1b[%d;%dH%c\x1b[%d;%dH%c", 
+               ud, lr, container[i], //The char data
+               ud - 1, lr, i==pos ? '-' : ' ',  //The up/down
+               ud + 1, lr, i==pos ? '-' : ' ');
+      }
+      C3D_FrameEnd(0);
+   }
+
+   //Clear the text area
+   for(u8 i = 0; i < (has_title ? 2 : 1) + 2; i++)
+      printf("\x1b[%d;1H\x1b[0m%-50s", top + i, "");
+
+   return confirmed;
+}

@@ -1,6 +1,9 @@
 
 // -- Some SUPER IMPORTANT constants
 
+#define VERSION "1.0.0"
+#define SAVE_BASE "sdmc:/3ds/junkdraw"
+
 #define SCREENWIDTH 320
 #define SCREENHEIGHT 240
 
@@ -64,6 +67,8 @@
 #define MAINMENU_TITLE "Main menu:"
 #define MAINMENU_ITEMS "New\0Save\0Load\0Host Local\0Connect Local\0Exit App\0"
 #define MAINMENU_NEW 0
+#define MAINMENU_SAVE 1
+#define MAINMENU_LOAD 2
 #define MAINMENU_HOSTLOCAL 3
 #define MAINMENU_CONNECTLOCAL 4
 #define MAINMENU_EXIT 5
