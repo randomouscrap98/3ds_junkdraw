@@ -65,8 +65,10 @@ float calc_pagepos(s16 d, float existing_pos)
 //modifier. Clamps the values appropriately
 void set_screenmodifier_ofs(struct ScreenModifier * mod, u16 ofs_x, u16 ofs_y)
 {
-   mod->ofs_x = C2D_Clamp(ofs_x, 0, LAYER_WIDTH * mod->zoom - SCREENWIDTH);
-   mod->ofs_y = C2D_Clamp(ofs_y, 0, LAYER_HEIGHT * mod->zoom - SCREENHEIGHT);
+   float maxofsx = LAYER_WIDTH * mod->zoom - SCREENWIDTH;
+   float maxofsy = LAYER_HEIGHT * mod->zoom - SCREENHEIGHT;
+   mod->ofs_x = C2D_Clamp(ofs_x, 0, maxofsx < 0 ? 0 : maxofsx);
+   mod->ofs_y = C2D_Clamp(ofs_y, 0, maxofsy < 0 ? 0 : maxofsy);
 }
 
 //Easy way to set the screen zoom while preserving the center of the screen.
