@@ -822,6 +822,22 @@ void get_printmods(char * status_x1b, char * active_x1b, char * statusbg_x1b, ch
    if(activebg_x1b != NULL) sprintf(activebg_x1b, "\x1b[%dm\x1b[30m", 10 + STATUS_ACTIVECOLOR);
 }
 
+void print_data(char * data, char * dataptr, char * saveptr)
+{
+   char status_x1b[PSX1BLEN];
+   char active_x1b[PSX1BLEN];
+   get_printmods(status_x1b, active_x1b, NULL, NULL);
+
+   u32 datasize = dataptr - data;
+   u32 unsaved = dataptr - saveptr;
+   float percent = 100.0 * (float)datasize / MAX_DRAW_DATA;
+
+   char numbers[50];
+   sprintf(numbers, "%ld %ld", unsaved, datasize);
+   printf("\x1b[28;1H%s %s  %s(%05.2f%%)%*s", status_x1b, 
+         numbers, active_x1b, percent, 39 - strlen(numbers),"");
+}
+
 void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color, u16 page)
 {
    char tool_chars[TOOL_COUNT + 1];
@@ -963,6 +979,8 @@ int try_write_file(const char * filename, const char * data, u8 top)
       zoom_power = UTILS_CLAMP(zoom_power + x, MIN_ZOOMPOWER, MAX_ZOOMPOWER);    \
    } }
 
+#define PRINT_DATAUSAGE() print_data(draw_data, draw_data_end, saved_last);
+
 #define MAIN_NEWDRAW() { \
    draw_data_end = draw_pointer = saved_last = draw_data; \
    current_page = 0;          \
@@ -972,6 +990,10 @@ int try_write_file(const char * filename, const char * data, u8 top)
    pending.line_count = 0;        \
    pending.layer = LAYER_COUNT - 1; /*Always start on the top page */ \
    current_frame = end_frame = 0; \
+   printf("\x1b[1;1H");       \
+   print_controls();          \
+   print_framing();           \
+   PRINT_DATAUSAGE();         \
 }
 
 #define MAIN_UNSAVEDCHECK(x) \
@@ -1042,13 +1064,12 @@ int main(int argc, char** argv)
    MAIN_NEWDRAW();
 
    hidSetRepeatParameters(BREPEAT_DELAY, BREPEAT_INTERVAL);
-   print_controls();
 
 #ifdef DEBUG_RUNTESTS
+   printf("\x1b[6;1H");
    run_tests();
 #endif
 
-   print_framing();
    mkdir_p(SAVE_BASE);
 
    LOGDBG("STARTING MAIN LOOP");
@@ -1101,9 +1122,11 @@ int main(int argc, char** argv)
                         "Save already exists, definitely overwrite?", MAINMENU_TOP))
                {
                   *draw_data_end = 0; //Just a temp thing
-                  //PRINTINFO("Saving file %s...", filename)
                   if(!try_write_file(fileop_fullpath, draw_data, MAINMENU_TOP))
+                  {
                      saved_last = draw_data_end;
+                     PRINT_DATAUSAGE(); //Should this be out in the main loop?
+                  }
                }
             }
          }
@@ -1141,7 +1164,6 @@ int main(int argc, char** argv)
 
             const char * loadname = get_menu_item(all_files, MAX_ALLFILENAMES, sel);
 
-            //PRINTINFO("Loading file %s...", fileop_fullpath)
             MAIN_NEWDRAW();
             get_rawfile_location((char *)loadname, fileop_fullpath);
             draw_data_end = read_file(fileop_fullpath, draw_data, MAX_DRAW_DATA);
@@ -1155,6 +1177,7 @@ int main(int argc, char** argv)
             {
                strcpy(save_filename, loadname);
                saved_last = draw_data_end;
+               PRINT_DATAUSAGE();
             }
 MAINLOADEND:
             free(all_files);
@@ -1260,6 +1283,9 @@ MAINLOADTRUEEND:
             //twice, but it's difficult to determine what has or has not been
             //drawn when the pointer isn't at the end.
             if(previous_end == draw_pointer) draw_pointer = draw_data_end;
+
+            //TODO: need to do this in more places (like when you get lines)
+            PRINT_DATAUSAGE();
          }
 
          pending.line_count = 0;
