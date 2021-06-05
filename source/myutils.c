@@ -1,19 +1,18 @@
-#include "myutils.h"
-#include "string.h"
 #include <citro3d.h>
 
+#include <string.h>
 #include <dirent.h>
 #include <limits.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdlib.h>
 
+#include "myutils.h"
+
 
 // -------------------
 // -- GENERAL UTILS --
 // -------------------
-
-
 
 
 // -----------------
@@ -113,16 +112,19 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
    u32 menu_num = 0;
    u32 menu_ofs = 0;
 
-   const char ** menu_str = malloc(MAX_MENU_ITEMS * sizeof(char *)); //[MAX_MENU_ITEMS];
+   const char ** menu_str = malloc(MAX_MENU_ITEMS * sizeof(char *));
    menu_str[0] = menu_items;
    bool has_title = (title != NULL && strlen(title));
 
+   //Parse out the menu positions to make it easier to print them
    while(menu_num < MAX_MENU_ITEMS && *menu_str[menu_num] != 0)
    {
       menu_str[menu_num + 1] = menu_str[menu_num] + strlen(menu_str[menu_num]) + 1;
       menu_num++;
    }
 
+   //Set display properly, don't want an overlong menu. Users can pass in 0 to
+   //show all items (please be careful with this option)
    if(!display || display > menu_num) display = menu_num;
 
    //Print title, 1 over
@@ -132,6 +134,7 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
       printf("%-50s","");
    }
 
+   //The offset from the top to display the menu
    u8 menudispofs = (has_title ? 2 : 1);
 
    //I want to see how inefficient printf is, so I'm doing this awful on purpose 
@@ -140,20 +143,23 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
       hidScanInput();
       u32 kDown = hidKeysDown();
       u32 kRepeat = hidKeysDownRepeat();
+
       if(kDown & KEY_A) break;
       if(kDown & exit_buttons) { menu_on = -1; break; }
       if(kRepeat & KEY_UP) menu_on = (menu_on - 1 + menu_num) % menu_num;
       if(kRepeat & KEY_DOWN) menu_on = (menu_on + 1) % menu_num;
 
-      if(menu_on < menu_ofs)
-         menu_ofs = menu_on;
-      if(menu_on >= menu_ofs + display)
-         menu_ofs = menu_on - display + 1;
+      //Move the offset if the selected index goes outside visibility
+      if(menu_on < menu_ofs) menu_ofs = menu_on;
+      if(menu_on >= menu_ofs + display) menu_ofs = menu_on - display + 1;
 
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-      //Print menu. When you get to the selected item, do a different bg
+
+      //Show if there's more to the menu 
       printf("\x1b[0m\x1b[%d;3H%s", top + menudispofs - 1, menu_ofs > 0 ? "..." : "   ");
       printf("\x1b[%d;3H%s", top + menudispofs + display, (menu_num > menu_ofs + display) ? "..." : "   ");
+
+      //Print menu. When you get to the selected item, do a different bg
       for(u8 i = 0; i < display; i++)
       {
          u8 menutop = top + menudispofs + i;
@@ -163,6 +169,7 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
          else
             printf("\x1b[%d;1H\x1b[0m  %-48s", menutop, menu_str[im]);
       }
+
       C3D_FrameEnd(0);
    }
 
@@ -173,11 +180,13 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
    return menu_on;
 }
 
+//Set up the menu to be a simple confirmation
 bool easy_confirm(const char * title, u8 top)
 {
    return 1 == easy_menu(title, "No\0Yes\0", top, 0, KEY_B);
 }
 
+//Set up the menu to be a warning (still yes/no confirmation though)
 bool easy_warn(const char * warn, const char * title, u8 top)
 {
    printf("\x1b[%d;1H\x1b[31;40m %-49s", top, warn);
@@ -186,6 +195,7 @@ bool easy_warn(const char * warn, const char * title, u8 top)
    return value;
 }
 
+//Allows user to submit a fixed length text using the dpad. HIGHLY limited characters
 bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_length,
       bool clear, u32 exit_buttons)
 {
@@ -193,8 +203,8 @@ bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_len
    bool has_title = (title != NULL && strlen(title));
    char chars[ENTERTEXT_CHARARRSIZE];
    strcpy(chars, ENTERTEXT_CHAR);
-   u8 av_ch = strlen(chars);
-   if(clear) memset(container, chars[0], fixed_length);
+   u8 av_ch = strlen(chars); //total unique character count
+   if(clear) memset(container, chars[0], fixed_length); 
    container[fixed_length] = '\0';
 
    u8 ud = top + (has_title ? 2 : 1);
@@ -213,6 +223,7 @@ bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_len
       u32 kDown = hidKeysDown();
       u32 kRepeat = hidKeysDownRepeat();
       u8 current_index = (strchr(chars, container[pos]) - chars);
+
       if(kDown & KEY_A) { confirmed = true; break; }
       if(kDown & exit_buttons) break;
       if(kRepeat & KEY_RIGHT && pos < fixed_length - 1) pos++;
@@ -221,6 +232,7 @@ bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_len
       if(kRepeat & KEY_DOWN) container[pos] = chars[(current_index - 1 + av_ch) % av_ch];
 
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+
       //Print menu. When you get to the selected item, do a different bg
       for(u8 i = 0; i < fixed_length; i++)
       {
@@ -230,6 +242,7 @@ bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_len
                ud - 1, lr, i==pos ? '-' : ' ',  //The up/down
                ud + 1, lr, i==pos ? '-' : ' ');
       }
+
       C3D_FrameEnd(0);
    }
 
@@ -240,6 +253,7 @@ bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_len
    return confirmed;
 }
 
+//Get the text for the given menu item from a menu item blob
 const char * get_menu_item(const char * menu_items, u32 length, u32 item)
 {
    u32 strings = 0;
@@ -260,6 +274,11 @@ const char * get_menu_item(const char * menu_items, u32 length, u32 item)
 
 
 // -- PRINT STUFF --
+
+//So apparently printf doesn't work unless you do the standard Citro3D frame
+//stuff. It only SOMETIMES works, IDK. So, this will wait a full frame to show
+//the given message, basically forcing it to be shown even if you're about to
+//do a long running task.
 void printf_flush(const char * format, ...)
 {
    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
@@ -269,22 +288,6 @@ void printf_flush(const char * format, ...)
    va_end(args);
    C3D_FrameEnd(0);
 }
-
-//As expected, this causes a stack exception
-//int mkdir_p(char* file_path, mode_t mode) {
-//    if(!(file_path && *file_path)) return -2; //my special return, whatever
-//    for (char* p = strchr(file_path + 1, '/'); p; p = strchr(p + 1, '/')) {
-//        *p = '\0';
-//        if (mkdir(file_path, mode) == -1) {
-//            if (errno != EEXIST) {
-//                *p = '/';
-//                return -1;
-//            }
-//        }
-//        *p = '/';
-//    }
-//    return 0;
-//}
 
 //Taken verbatim from https://gist.github.com/JonathonReinhart/8c0d90191c38af2dcadb102c4e202950
 int mkdir_p(const char *path)
@@ -299,7 +302,7 @@ int mkdir_p(const char *path)
     /* Copy string so its mutable */
     if (len > PATH_MAX-1) {
         errno = ENAMETOOLONG;
-        //LOGDBG("MKDIR_P: DIRECTORY TOO LONG: %ld, %s\n", PATH_MAX, path);
+        LOGDBG("MKDIR_P: DIRECTORY TOO LONG: %d, %s\n", PATH_MAX, path);
         return -1; 
     }   
     strcpy(_path, path);
@@ -310,27 +313,21 @@ int mkdir_p(const char *path)
             /* Temporarily truncate */
             *p = '\0';
 
-            if (mkdir(_path, S_IRWXU) != 0) {
-                if (errno != EEXIST)
-                {
-                    //LOGDBG("MKDIR_P: Couldn't make inner path: %s\n", _path);
-                    return -1; 
-                }
+            if (mkdir(_path, S_IRWXU) != 0 && errno != EEXIST) {
+               LOGDBG("MKDIR_P: Couldn't make inner path: %s\n", _path);
+               return -1; 
             }
 
             *p = '/';
         }
     }   
 
-    if (mkdir(_path, S_IRWXU) != 0) {
-        if (errno != EEXIST)
-        {
-           //LOGDBG("MKDIR_P: Couldn't make final path: %s\n", _path);
-            return -1; 
-        }
+    if (mkdir(_path, S_IRWXU) != 0 && errno != EEXIST) {
+       LOGDBG("MKDIR_P: Couldn't make final path: %s\n", _path);
+       return -1; 
     }   
 
-    //LOGDBG("Created directory: %s\n", path);
+    LOGDBG("Created directory: %s\n", path);
 
     return 0;
 }
@@ -350,7 +347,10 @@ s32 get_directories(char * directory, char * container, u32 c_size)
    DIR * dir = opendir(directory);
 
    if(!dir) 
+   {
+      LOGDBG("ERR: Couldn't open dir %s\n", directory);
       return -1;
+   }
 
    struct dirent * entry = readdir(dir);
 
@@ -362,7 +362,10 @@ s32 get_directories(char * directory, char * container, u32 c_size)
 
          //No more files will fit
          if(current_file - container + len + 2 > c_size)
+         {
+            LOGDBG("WARN: No more room in directory container for %s", directory);
             break;
+         }
 
          //Copy entry into just past the last slot (where the 0 is)
          memcpy(current_file, entry->d_name, len);

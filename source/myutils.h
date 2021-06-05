@@ -4,6 +4,7 @@
 
 #include <3ds.h>
 #include <stdio.h>
+#include "cconfig.h"
 
 #ifdef DEBUG_PRINT_TIME
 #define LOGTIME() { time_t rawtime = time(NULL); \
@@ -55,6 +56,5 @@ void printf_flush(const char * format, ...);
 int mkdir_p(const char *path);
 bool file_exists (char * filename);
 s32 get_directories(char * directory, char * container, u32 c_size);
-//int mkdir_p(char* file_path, mode_t mode);
 
 #endif

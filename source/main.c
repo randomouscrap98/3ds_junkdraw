@@ -12,23 +12,15 @@
 //#include <errno.h>
 
 //#include <3ds/types.h>
-#include "constants.h"
-
-// MUST define all these debug things before importing libraries, 
-// as THEY use  them. 
 
 //#define DEBUG_COORD
 //#define DEBUG_DATAPRINT
-#define DEBUG_PRINT
-#define DEBUG_PRINT_TIME
-#define DEBUG_RUNTESTS
 
-u8 _db_prnt_row = 0;
-#define DEBUG_PRINT_SPECIAL() { printf("\x1b[%d;1H\x1b[33m", _db_prnt_row + DEBUG_PRINT_MINROW); \
-   _db_prnt_row = (_db_prnt_row + 1) % DEBUG_PRINT_ROWS; }
-
+#include "constants.h"
 #include "myutils.h"
 #include "dcv.h"
+
+#define DEBUG_RUNTESTS
 
 
 // TODO: Figure out these weirdness things:
@@ -38,8 +30,9 @@ u8 _db_prnt_row = 0;
 // - ClearTarget with a transparent color seems to make the color stick using
 //   DrawLine unless a DrawRect (or perhaps other) call is performed.
 //    THIS IS FIXED IN A LATER REVISION
-// - Can't fill with transparency to clear.... 
 
+//Some globals for the um... idk.
+u8 _db_prnt_row = 0;
 
 // -- SCREEN UTILS? --
 
@@ -870,10 +863,6 @@ void print_time(bool showcolon)
 
 
 // -- FILESYSTEM --
-#define MKDIR_LOG(x) \
-   if(mkdir_p(x)) { LOGDBG("MKDIR FAIL: %s\n", x); } \
-   else { LOGDBG("Created(?) directory: %s\n", x); }
-
 
 void get_save_location(char * savename, char * container)
 {
@@ -891,7 +880,6 @@ int write_file(const char * filename, const char * data)
 {
    int result = 0;
    PRINTINFO("Saving file %s...", filename)
-   //printf_flush("\x1b[%d;1HSaving file %s...\n", MAINMENU_TOP, filename);
    FILE * savefile = fopen(filename, "w");
    if(!savefile)
    {
@@ -909,8 +897,6 @@ END:
    fclose(savefile);
 TRUEEND:
    PRINTCLEAR();
-   //PRINTINFO("%-150s", "");
-   //printf_flush("\x1b[%d;1H%-50s", MAINMENU_TOP, "");
    return result;
 }
 
@@ -1063,7 +1049,7 @@ int main(int argc, char** argv)
 #endif
 
    print_framing();
-   MKDIR_LOG(SAVE_BASE);
+   mkdir_p(SAVE_BASE);
 
    LOGDBG("STARTING MAIN LOOP");
 
@@ -1091,13 +1077,11 @@ int main(int argc, char** argv)
          u8 selected = easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, KEY_B | KEY_START);
          if(selected == MAINMENU_EXIT)
          {
-            if(MAIN_UNSAVEDCHECK("Really quit?"))
-               break;
+            if(MAIN_UNSAVEDCHECK("Really quit?")) break;
          }
          else if(selected == MAINMENU_NEW)
          {
-            if(MAIN_UNSAVEDCHECK("Are you sure you want to start anew?"))
-               MAIN_NEWDRAW();
+            if(MAIN_UNSAVEDCHECK("Are you sure you want to start anew?")) MAIN_NEWDRAW();
          }
          else if(selected == MAINMENU_SAVE)
          {
@@ -1106,7 +1090,7 @@ int main(int argc, char** argv)
             {
                //Go get the full path
                get_save_location(save_filename, fileop_fullpath);
-               MKDIR_LOG(fileop_fullpath);
+               mkdir_p(fileop_fullpath); //TODO: not even checking if it succeeded
                get_rawfile_location(save_filename, fileop_fullpath);
                
                //Prepare the warning message
@@ -1117,6 +1101,7 @@ int main(int argc, char** argv)
                         "Save already exists, definitely overwrite?", MAINMENU_TOP))
                {
                   *draw_data_end = 0; //Just a temp thing
+                  //PRINTINFO("Saving file %s...", filename)
                   if(!try_write_file(fileop_fullpath, draw_data, MAINMENU_TOP))
                      saved_last = draw_data_end;
                }
@@ -1156,6 +1141,7 @@ int main(int argc, char** argv)
 
             const char * loadname = get_menu_item(all_files, MAX_ALLFILENAMES, sel);
 
+            //PRINTINFO("Loading file %s...", fileop_fullpath)
             MAIN_NEWDRAW();
             get_rawfile_location((char *)loadname, fileop_fullpath);
             draw_data_end = read_file(fileop_fullpath, draw_data, MAX_DRAW_DATA);
@@ -1196,11 +1182,9 @@ MAINLOADTRUEEND:
 
       update_screenmodifier(&screen_mod, pos);
 
-      if(!(current_frame % 30))
-         print_time(current_frame % 60);
-
       // Render the scene
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+
 
       // -- LAYER DRAW SECTION --
       C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
@@ -1254,6 +1238,8 @@ MAINLOADTRUEEND:
       // -- OTHER DRAW SECTION --
       C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, 
             GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
+
+      if(!(current_frame % 30)) print_time(current_frame % 60);
 
       //TODO: Eventually, change this to put the data in different places?
       if(end_frame == current_frame && pending.line_count > 0)
