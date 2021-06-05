@@ -30,7 +30,7 @@
 #define MIN_WIDTH 1
 #define MAX_WIDTH 64
 #define MAX_PAGE 0xFFFF
-#define MAX_FRAMELINES 500
+#define MAX_FRAMELINES 1000
 #define MAX_DRAWDATA_SCAN 100000
 
 #define MAX_FILENAME 64
@@ -82,7 +82,7 @@
 #define FILELOAD_MENUCOUNT 10
 
 //Weird stuff that should maybe be refactored
-#define MY_C2DOBJLIMIT 16384
+#define MY_C2DOBJLIMIT 8192
 #define MY_C2DOBJLIMITSAFETY MY_C2DOBJLIMIT - 100
 #define PSX1BLEN 30
 

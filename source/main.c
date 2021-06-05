@@ -325,7 +325,7 @@ void delete_layer(struct LayerData page)
 //Some (hopefully temporary) globals to overcome some unforeseen limits
 u32 _drw_cmd_cnt = 0;
 
-#define MY_FLUSH() { C2D_Flush(); _drw_cmd_cnt = 0; }
+#define MY_FLUSH() { C3D_FrameEnd(0); C3D_FrameBegin(C3D_FRAME_SYNCDRAW); _drw_cmd_cnt = 0; }
 #define MY_FLUSHCHECK() if(_drw_cmd_cnt > MY_C2DOBJLIMITSAFETY) { \
    LOGDBG("FLUSHING %ld DRAW CMDS PREMATURELY\n", _drw_cmd_cnt); \
    MY_FLUSH(); }
@@ -1256,7 +1256,9 @@ MAINLOADTRUEEND:
          scandata_draw(&scandata, maxdraw, layers, LAYER_COUNT); 
       }
 
-      MY_FLUSH();
+      C2D_Flush();
+      _drw_cmd_cnt = 0;
+      //MY_FLUSH();
 
       // -- OTHER DRAW SECTION --
       C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, 
