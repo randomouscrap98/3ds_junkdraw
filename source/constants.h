@@ -1,7 +1,7 @@
 
 // -- Some SUPER IMPORTANT constants
 
-#define VERSION "1.0.0"
+#define VERSION "0.1.1"
 #define SAVE_BASE "/3ds/junkdraw/saves/"
 
 #define SCREENWIDTH 320
@@ -77,6 +77,7 @@
 #define MAINMENU_CONNECTLOCAL 4
 #define MAINMENU_EXIT 5
 
+#define PRINTDATA_WIDTH 40
 #define STATUS_MAINCOLOR 36
 #define STATUS_ACTIVECOLOR 37
 #define FILELOAD_MENUCOUNT 10

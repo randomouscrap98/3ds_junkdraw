@@ -811,6 +811,7 @@ void print_controls()
 void print_framing()
 {
    printf("\x1b[29;1H--------------------------------------------------");
+   printf("\x1b[28;43H%7s", VERSION);
 }
 
 void get_printmods(char * status_x1b, char * active_x1b, char * statusbg_x1b, char * activebg_x1b)
@@ -833,9 +834,9 @@ void print_data(char * data, char * dataptr, char * saveptr)
    float percent = 100.0 * (float)datasize / MAX_DRAW_DATA;
 
    char numbers[50];
-   sprintf(numbers, "%ld %ld", unsaved, datasize);
-   printf("\x1b[28;1H%s %s  %s(%05.2f%%)%*s", status_x1b, 
-         numbers, active_x1b, percent, 39 - strlen(numbers),"");
+   sprintf(numbers, "%ld %ld  %s(%05.2f%%)", unsaved, datasize, active_x1b, percent);
+   printf("\x1b[28;1H%s %s%*s", status_x1b, numbers, 
+         PRINTDATA_WIDTH - (strlen(numbers) - strlen(active_x1b)),"");
 }
 
 void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color, u16 page)
