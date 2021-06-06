@@ -342,8 +342,8 @@ float cr_ly = -1;
 void draw_centeredrect(float x, float y, u16 width, u32 color)
 {
    float ofs = width / 2.0;
-   x = round(x - ofs);
-   y = round(y - ofs);
+   x = (width & 1) ? floor(x - ofs) : round(x - ofs);
+   y = (width & 1) ? floor(y - ofs) : round(y - ofs);
    if(x < LAYER_EDGEBUF || y < LAYER_EDGEBUF || (cr_lx == x && cr_ly == y)) return;
    MY_SOLIDRECT(x, y, 0.5f, width, width, color);
    cr_lx = x; cr_ly = y;
