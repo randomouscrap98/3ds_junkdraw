@@ -899,6 +899,8 @@ int save_drawing(char * filename, char * data)
    char fullpath[MAX_FILEPATH];
    char temp_msg[MAX_FILEPATH];
 
+   //LOGDBG("SAVEFILENAME: %s", filename);
+
    if(enter_text_fixed("Enter a filename: ", MAINMENU_TOP, filename, 
             MAX_FILENAMESHOW, !strlen(filename), KEY_B | KEY_START))
    {
@@ -947,45 +949,20 @@ char * load_drawing(char * data_container, char * final_filename)
 
    if(sel < 0) goto END;
 
-   final_filename = (char *)get_menu_item(all_files, MAX_ALLFILENAMES, sel);
+   final_filename[0] = 0;
+   strcpy(final_filename, get_menu_item(all_files, MAX_ALLFILENAMES, sel));
+   //LOGDBG("LOADFILENAME: %s", final_filename);
 
-   //MAIN_NEWDRAW();
-   get_rawfile_location(final_filename, fullpath);
    PRINTINFO("Loading file %s...", final_filename)
+   get_rawfile_location(final_filename, fullpath);
    result = read_file(fullpath, data_container, MAX_DRAW_DATA);
    PRINTCLEAR();
-   //get_rawfile_location((char *)loadname, fileop_fullpath);
-   //draw_data_end = read_file(fullpath, draw_data, MAX_DRAW_DATA);
 
-   //if(!draw_data_end)
-   //{
-   //   PRINTERR("LOAD FAILED!");
-   //   MAIN_NEWDRAW();
-   //}
-   //else
-   //{
-   //   strcpy(save_filename, loadname);
-   //   saved_last = draw_data_end;
-   //   PRINT_DATAUSAGE();
-   //}
 END:
    free(all_files);
 TRUEEND:
    return result;
 }
-
-//int try_write_file(const char * filename, const char * data, u8 top)
-//{
-//   int result = 0;
-//
-//   while((result = write_file(filename, data)))
-//   {
-//      if(!easy_warn("FAIL: Try again?", "The save failed, try again?", top))
-//         break;
-//   }
-//
-//   return result;
-//}
 
 
 
@@ -1146,18 +1123,16 @@ int main(int argc, char** argv)
          {
             if(MAIN_UNSAVEDCHECK("Are you sure you want to load and lose changes?"))
             {
-               char * load_end = load_drawing(draw_data, save_filename);
-
-               //I HOPE THIS DOESN'T DO ANYTHING TO DRAW_DATA!!!
                MAIN_NEWDRAW();
+               draw_data_end = load_drawing(draw_data, save_filename);
 
-               if(load_end == NULL) //!draw_data_end)
+               if(draw_data_end == NULL) //!draw_data_end)
                {
                   PRINTERR("LOAD FAILED!");
+                  MAIN_NEWDRAW();
                }
                else
                {
-                  draw_data_end = load_end;
                   saved_last = draw_data_end;
                   PRINT_DATAUSAGE();
                }

@@ -387,37 +387,29 @@ s32 get_directories(char * directory, char * container, u32 c_size)
 int write_file(const char * filename, const char * data)
 {
    int result = 0;
-   //PRINTINFO("Saving file %s...", filename)
    FILE * savefile = fopen(filename, "w");
    if(!savefile)
    {
       LOGDBG("ERR: Couldn't open file %s", filename);
       return -1;
-      //result = -1;
    }
    else if(fputs(data, savefile) == EOF)
    {
       LOGDBG("ERR: Couldn't write data to %s", filename);
       result = -2;
-      //goto END;
    }
-//END:
    fclose(savefile);
-//TRUEEND:
-   //PRINTCLEAR();
    return result;
 }
 
 char * read_file(const char * filename, char * container, u32 maxread)
 {
    char * result = NULL;
-   //PRINTINFO("Loading file %s...", filename)
    FILE * loadfile = fopen(filename, "r");
    if(loadfile == NULL)
    {
       LOGDBG("ERR: Couldn't open file %s", filename);
       return NULL;
-      //goto TRUEEND;
    }
    else
    {
@@ -425,7 +417,6 @@ char * read_file(const char * filename, char * container, u32 maxread)
       if(result == NULL)
       {
          LOGDBG("ERR: Couldn't read file %s", filename);
-         //goto READFILE_END;
       }
       else
       {
@@ -433,9 +424,6 @@ char * read_file(const char * filename, char * container, u32 maxread)
       }
    }
 
-//READFILE_END:
    fclose(loadfile);
-//TRUEEND:
-//   PRINTCLEAR();
    return result;
 }
