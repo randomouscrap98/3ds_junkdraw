@@ -8,10 +8,7 @@
 #include <math.h>
 #include <time.h>
 #include <dirent.h>
-//#include <limits.h>
-//#include <errno.h>
 
-//#include <3ds/types.h>
 
 //#define DEBUG_COORD
 //#define DEBUG_DATAPRINT
@@ -279,6 +276,7 @@ char * convert_data_to_lines(struct LinePackage * package, char * data, char * d
       {
          package->lines[0].x1 = package->lines[0].x2 = x; 
          package->lines[0].y1 = package->lines[0].y2 = y;
+         package->line_count++;
       }
    }
    else
