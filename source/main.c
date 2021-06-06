@@ -964,6 +964,85 @@ TRUEEND:
    return result;
 }
 
+//Export the given page from the given data into a default named file in some
+//default image format (bitmap? png? who knows)
+void export_page(page_num page, char * data, char * data_end)
+{
+   //NOTE: this entire function is going to use Citro2D u32 formatted colors, all
+   //the way until the final bitmap is written (at which point it can be
+   //converted as needed)
+
+   u32 * layerdata[LAYER_COUNT + 1];
+   u32 size_bytes = sizeof(u32) * LAYER_WIDTH * LAYER_HEIGHT;
+
+   for(int i = 0; i < LAYER_COUNT + 1; i++)
+   {
+      layerdata[i] = malloc(size_bytes);
+
+      if(layerdata[i] == NULL)
+      {
+         LOGDBG("ERR: COULDN'T ALLOCATE MEMORY FOR EXPORT");
+
+         for(int j = 0; j < i; j++)
+            free(layerdata[j]);
+
+         return;
+      }
+
+      //TODO: This assumes the bg is white
+      memset(layerdata[i], (i == LAYER_COUNT) ? 0xFF : 0, size_bytes);
+   }
+
+   char savepath[MAX_FILEPATH];
+   time_t now = time(NULL);
+   sprintf(savepath, "%s%jd.bmp", SCREENSHOTS_BASE, now);
+
+   //Now just parse and parse and parse until we reach the end!
+   u32 data_length = data_end - data;
+   char * current_data = data;
+   char * stroke_start = NULL;
+   struct LinePackage package;
+   package.lines = malloc(sizeof(struct SimpleLine) * MAX_STROKE_LINES);
+
+   if(!package.lines)
+   {
+      LOGDBG("ERR: Couldn't allocate stroke lines");
+      goto END;
+   }
+
+   while(current_data < data_end)
+   {
+      current_data = datamem_scanstroke(current_data, data_end, data_length, 
+              page, &stroke_start);
+
+      //Is this the normal way to do this? idk
+      if(stroke_start != NULL)
+         convert_data_to_lines(&package, stroke_start, current_data);
+
+      //At this point, we draw the line.
+   }
+
+   //Now fill the final array with good stuff. Will this take a while?
+   for(int i = 0; i < LAYER_HEIGHT * LAYER_WIDTH; i++)
+   {
+      //Loop over arrays, the topmost (layer) value persists
+      for(int j = LAYER_COUNT - 1; j >= 0; j--)
+      {
+         if(layerdata[j][i])
+         {
+            layerdata[LAYER_COUNT][i] = layerdata[j][i];
+            break;
+         }
+      }
+   }
+
+   PRINTINFO("Exported page to: %s", savepath);
+
+END:
+   for(int i = 0; i < LAYER_COUNT + 1; i++)
+      free(layerdata[i]);
+}
+
 
 
 // -- TESTS --
@@ -1096,18 +1175,19 @@ int main(int argc, char** argv)
       if(kRepeat & KEY_DDOWN) MAIN_UPDOWN(-1)
       if(kRepeat & KEY_DRIGHT) tool_data[current_tool].width += (kHeld & KEY_R ? 5 : 1);
       if(kRepeat & KEY_DLEFT) tool_data[current_tool].width -= (kHeld & KEY_R ? 5 : 1);
-      if(kDown & KEY_SELECT) pending.layer = (pending.layer + 1) % LAYER_COUNT;
       if(kDown & KEY_A) current_tool = TOOL_PENCIL;
       if(kDown & KEY_B) current_tool = TOOL_ERASER;
+      if(kDown & KEY_SELECT) {
+         if(kHeld & KEY_R) { export_page(current_page, draw_data, draw_data_end); } 
+         else { pending.layer = (pending.layer + 1) % LAYER_COUNT; }
+      }
       if(kDown & KEY_START) 
       {
          u8 selected = easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, KEY_B | KEY_START);
-         if(selected == MAINMENU_EXIT)
-         {
+         if(selected == MAINMENU_EXIT) {
             if(MAIN_UNSAVEDCHECK("Really quit?")) break;
          }
-         else if(selected == MAINMENU_NEW)
-         {
+         else if(selected == MAINMENU_NEW) {
             if(MAIN_UNSAVEDCHECK("Are you sure you want to start anew?")) MAIN_NEWDRAW();
          }
          else if(selected == MAINMENU_SAVE)

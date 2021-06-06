@@ -2,7 +2,9 @@
 // -- Some SUPER IMPORTANT constants
 
 #define VERSION "0.1.2"
-#define SAVE_BASE "/3ds/junkdraw/saves/"
+#define FOLDER_BASE "/3ds/junkdraw/"
+#define SAVE_BASE FOLDER_BASE"saves/"
+#define SCREENSHOTS_BASE FOLDER_BASE"screenshots/"
 
 #define SCREENWIDTH 320
 #define SCREENHEIGHT 240
