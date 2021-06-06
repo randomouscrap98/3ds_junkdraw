@@ -336,21 +336,27 @@ u32 _drw_cmd_cnt = 0;
 float cr_lx = -1;
 float cr_ly = -1;
 
+typedef void (* rectangle_func)(float, float, u16, u32);
+
 //Draw a rectangle centered and pixel aligned around the given point.
-void draw_centeredrect(float x, float y, u16 width, u32 color)
+void draw_centeredrect(float x, float y, u16 width, u32 color, 
+      rectangle_func rect_f)
+      //void (* rect_f)(float, float, u16, u32))
 {
    float ofs = width / 2.0;
    x = (width & 1) ? floor(x - ofs) : round(x - ofs);
    y = (width & 1) ? floor(y - ofs) : round(y - ofs);
    if(x < LAYER_EDGEBUF || y < LAYER_EDGEBUF || (cr_lx == x && cr_ly == y)) return;
-   MY_SOLIDRECT(x, y, 0.5f, width, width, color);
+   if(rect_f != NULL) (*rect_f)(x,y,width,color);
+   else MY_SOLIDRECT(x, y, 0.5f, width, width, color);
    cr_lx = x; cr_ly = y;
 }
 
 //Draw a line using a custom line drawing system (required like this because of
 //javascript's general inability to draw non anti-aliased lines, and I want the
 //strokes saved by this program to be 100% accurately reproducible on javascript)
-void custom_drawline(const struct SimpleLine * line, u16 width, u32 color)
+void custom_drawline(const struct SimpleLine * line, u16 width, u32 color,
+      rectangle_func rect_f)
 {
    float xdiff = line->x2 - line->x1;
    float ydiff = line->y2 - line->y1;
@@ -360,13 +366,14 @@ void custom_drawline(const struct SimpleLine * line, u16 width, u32 color)
    float yang = sin(ang);
 
    for(float i = 0; i <= dist; i+=0.5)
-      draw_centeredrect(line->x1+xang*i, line->y1+yang*i, width, color);
+      draw_centeredrect(line->x1+xang*i, line->y1+yang*i, width, color, rect_f);
 }
 
 //Draw the collection of lines given, starting at the given line and ending
 //before the other given line (first inclusive, last exclusive)
 //Assumes you're already on the appropriate page you want and all that
-void draw_lines(const struct LinePackage * linepack, u16 pack_start, u16 pack_end)
+void draw_lines(const struct LinePackage * linepack, u16 pack_start, u16 pack_end,
+      rectangle_func rect_f)
 {
    u32 color = rgba16_to_rgba32c(linepack->color);
 
@@ -374,12 +381,12 @@ void draw_lines(const struct LinePackage * linepack, u16 pack_start, u16 pack_en
       pack_end = linepack->line_count;
 
    for(u16 i = pack_start; i < pack_end; i++)
-      custom_drawline(&linepack->lines[i], linepack->width, color);
+      custom_drawline(&linepack->lines[i], linepack->width, color, rect_f);
 }
 
 void draw_all_lines(const struct LinePackage * linepack)
 {
-   draw_lines(linepack, 0, linepack->line_count);
+   draw_lines(linepack, 0, linepack->line_count, NULL);
 }
 
 //Draw the scrollbars on the sides of the screen for the given screen
@@ -702,7 +709,7 @@ u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount,
                packagedrawlines = leftover_drawcount;
             }
 
-            draw_lines(p, 0, packagedrawlines);
+            draw_lines(p, 0, packagedrawlines, NULL);
             line_drawcount += packagedrawlines;
 
             //If we didn't draw ALL the lines, move the line pointer forward.
@@ -1276,7 +1283,7 @@ int main(int argc, char** argv)
                //This is for a stroke, do different things if we have different tools!
                add_stroke(&pending, &current_touch, &screen_mod);
                //Draw ONLY the current line
-               draw_lines(&pending, pending.line_count - 1, pending.line_count);
+               draw_lines(&pending, pending.line_count - 1, pending.line_count, NULL);
             }
          }
       }
