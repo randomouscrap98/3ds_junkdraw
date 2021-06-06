@@ -893,70 +893,99 @@ void get_rawfile_location(char * savename, char * container)
    strcpy(container + strlen(container), "raw");
 }
 
-int write_file(const char * filename, const char * data)
+int save_drawing(char * filename, char * data)
 {
-   int result = 0;
-   PRINTINFO("Saving file %s...", filename)
-   FILE * savefile = fopen(filename, "w");
-   if(!savefile)
+   char savefolder[MAX_FILEPATH];
+   char fullpath[MAX_FILEPATH];
+   char temp_msg[MAX_FILEPATH];
+
+   if(enter_text_fixed("Enter a filename: ", MAINMENU_TOP, filename, 
+            MAX_FILENAMESHOW, !strlen(filename), KEY_B | KEY_START))
    {
-      LOGDBG("ERR: Couldn't open file %s", filename);
-      result = -1;
+      //Go get the full path
+      get_save_location(filename, savefolder);
+      get_rawfile_location(filename, fullpath);
+
+      //Prepare the warning message
+      snprintf(temp_msg, MAX_FILEPATH - 1, "WARN: OVERWRITE %s", filename);
+
+      //We only save if it's new or if... idk.
+      if(!file_exists(fullpath) || easy_warn(temp_msg,
+               "Save already exists, definitely overwrite?", MAINMENU_TOP))
+      {
+         PRINTINFO("Saving file %s...", filename);
+         int result = mkdir_p(savefolder);
+         if(!result) result = write_file(fullpath, data);
+         PRINTCLEAR();
+         return result;
+      }
+   }
+
+   return -1;
+}
+
+char * load_drawing(char * data_container, char * final_filename)
+{
+   char * all_files = malloc(sizeof(char) * MAX_ALLFILENAMES);
+   char fullpath[MAX_FILEPATH];
+   char temp_msg[MAX_FILEPATH]; //Find another constant for this I guess
+   char * result = NULL;
+
+   if(!all_files) {
+      PRINTERR("Couldn't allocate memory");
       goto TRUEEND;
    }
-   if(fputs(data, savefile) == EOF)
-   {
-      LOGDBG("ERR: Couldn't write data to %s", filename);
-      result = -2;
-      goto END;
-   }
+
+   PRINTINFO("Searching for saves...");
+   u32 dircount = get_directories(SAVE_BASE, all_files, MAX_ALLFILENAMES);
+
+   if(dircount < 0) { PRINTERR("Something went wrong while searching!"); goto END; }
+   else if(dircount <= 0) { PRINTINFO("No saves found"); goto END; }
+
+   sprintf(temp_msg, "Found %ld saves:", dircount);
+   u32 sel = easy_menu(temp_msg, all_files, MAINMENU_TOP, FILELOAD_MENUCOUNT, KEY_START | KEY_B);
+
+   if(sel < 0) goto END;
+
+   final_filename = (char *)get_menu_item(all_files, MAX_ALLFILENAMES, sel);
+
+   //MAIN_NEWDRAW();
+   get_rawfile_location(final_filename, fullpath);
+   PRINTINFO("Loading file %s...", final_filename)
+   result = read_file(fullpath, data_container, MAX_DRAW_DATA);
+   PRINTCLEAR();
+   //get_rawfile_location((char *)loadname, fileop_fullpath);
+   //draw_data_end = read_file(fullpath, draw_data, MAX_DRAW_DATA);
+
+   //if(!draw_data_end)
+   //{
+   //   PRINTERR("LOAD FAILED!");
+   //   MAIN_NEWDRAW();
+   //}
+   //else
+   //{
+   //   strcpy(save_filename, loadname);
+   //   saved_last = draw_data_end;
+   //   PRINT_DATAUSAGE();
+   //}
 END:
-   fclose(savefile);
+   free(all_files);
 TRUEEND:
-   PRINTCLEAR();
    return result;
 }
 
-char * read_file(const char * filename, char * container, u32 maxread)
-{
-   char * result = NULL;
-   PRINTINFO("Loading file %s...", filename)
-   FILE * loadfile = fopen(filename, "r");
-   if(loadfile == NULL)
-   {
-      LOGDBG("ERR: Couldn't open file %s", filename);
-      goto READFILE_TRUEEND;
-   }
-   result = fgets(container, maxread, loadfile);
-   if(result == NULL)
-   {
-      LOGDBG("ERR: Couldn't read file %s", filename);
-      goto READFILE_END;
-   }
-   else
-   {
-      result = container + strlen(container);
-   }
-
-READFILE_END:
-   fclose(loadfile);
-READFILE_TRUEEND:
-   PRINTCLEAR();
-   return result;
-}
-
-int try_write_file(const char * filename, const char * data, u8 top)
-{
-   int result = 0;
-
-   while((result = write_file(filename, data)))
-   {
-      if(!easy_warn("FAIL: Try again?", "The save failed, try again?", top))
-         break;
-   }
-
-   return result;
-}
+//int try_write_file(const char * filename, const char * data, u8 top)
+//{
+//   int result = 0;
+//
+//   while((result = write_file(filename, data)))
+//   {
+//      if(!easy_warn("FAIL: Try again?", "The save failed, try again?", top))
+//         break;
+//   }
+//
+//   return result;
+//}
 
 
 
@@ -1054,8 +1083,7 @@ int main(int argc, char** argv)
    scandata_initialize(&scandata, MAX_FRAMELINES);
 
    char * save_filename = malloc(MAX_FILENAME * sizeof(char));
-   char * fileop_fullpath = malloc(MAX_FILEPATH * sizeof(char)); //IDK if this is enough, whatever
-   char * temp_msg = malloc(MAX_TEMPSTRING * sizeof(char));
+   //char * temp_msg = malloc(MAX_TEMPSTRING * sizeof(char));
    char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
    char * stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
    char * draw_data_end;
@@ -1107,82 +1135,33 @@ int main(int argc, char** argv)
          }
          else if(selected == MAINMENU_SAVE)
          {
-            if(enter_text_fixed("Enter a filename: ", MAINMENU_TOP, save_filename, 
-                     MAX_FILENAMESHOW, !strlen(save_filename), KEY_B | KEY_START))
+            *draw_data_end = 0;
+            if(save_drawing(save_filename, draw_data) == 0)
             {
-               //Go get the full path
-               get_save_location(save_filename, fileop_fullpath);
-               mkdir_p(fileop_fullpath); //TODO: not even checking if it succeeded
-               get_rawfile_location(save_filename, fileop_fullpath);
-               
-               //Prepare the warning message
-               sprintf(temp_msg, "WARN: OVERWRITE %s", save_filename);
-
-               //We only save if it's new or if... idk.
-               if(!file_exists(fileop_fullpath) || easy_warn(temp_msg,
-                        "Save already exists, definitely overwrite?", MAINMENU_TOP))
-               {
-                  *draw_data_end = 0; //Just a temp thing
-                  if(!try_write_file(fileop_fullpath, draw_data, MAINMENU_TOP))
-                  {
-                     saved_last = draw_data_end;
-                     PRINT_DATAUSAGE(); //Should this be out in the main loop?
-                  }
-               }
+               saved_last = draw_data_end;
+               PRINT_DATAUSAGE(); //Should this be out in the main loop?
             }
          }
          else if (selected == MAINMENU_LOAD)
          {
-            if(!MAIN_UNSAVEDCHECK("Are you sure you want to load and lose changes?"))
-               goto MAINLOADTRUEEND;
-
-            //Why isn't this preallocated? IDK... TODO maybe
-            char * all_files = malloc(sizeof(char) * MAX_ALLFILENAMES);
-
-            if(!all_files) {
-               PRINTERR("Couldn't allocate memory");
-               goto MAINLOADTRUEEND;
-            }
-
-            PRINTINFO("Searching for saves...");
-            u32 dircount = get_directories(SAVE_BASE, all_files, MAX_ALLFILENAMES);
-
-            if(dircount < 0)
+            if(MAIN_UNSAVEDCHECK("Are you sure you want to load and lose changes?"))
             {
-               PRINTERR("Something went wrong while searching!");
-               goto MAINLOADEND;
-            }
-            else if(dircount == 0)
-            {
-               PRINTINFO("No saves found");
-               goto MAINLOADEND;
-            }
+               char * load_end = load_drawing(draw_data, save_filename);
 
-            sprintf(temp_msg, "Found %ld saves:", dircount);
-            u32 sel = easy_menu(temp_msg, all_files, MAINMENU_TOP, 10, KEY_START | KEY_B);
-
-            if(sel < 0) goto MAINLOADEND;
-
-            const char * loadname = get_menu_item(all_files, MAX_ALLFILENAMES, sel);
-
-            MAIN_NEWDRAW();
-            get_rawfile_location((char *)loadname, fileop_fullpath);
-            draw_data_end = read_file(fileop_fullpath, draw_data, MAX_DRAW_DATA);
-
-            if(!draw_data_end)
-            {
-               PRINTERR("LOAD FAILED!");
+               //I HOPE THIS DOESN'T DO ANYTHING TO DRAW_DATA!!!
                MAIN_NEWDRAW();
+
+               if(load_end == NULL) //!draw_data_end)
+               {
+                  PRINTERR("LOAD FAILED!");
+               }
+               else
+               {
+                  draw_data_end = load_end;
+                  saved_last = draw_data_end;
+                  PRINT_DATAUSAGE();
+               }
             }
-            else
-            {
-               strcpy(save_filename, loadname);
-               saved_last = draw_data_end;
-               PRINT_DATAUSAGE();
-            }
-MAINLOADEND:
-            free(all_files);
-MAINLOADTRUEEND:
          }
          else if(selected == MAINMENU_HOSTLOCAL || selected == MAINMENU_CONNECTLOCAL)
          {

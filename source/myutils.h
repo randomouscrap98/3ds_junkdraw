@@ -56,5 +56,7 @@ void printf_flush(const char * format, ...);
 int mkdir_p(const char *path);
 bool file_exists (char * filename);
 s32 get_directories(char * directory, char * container, u32 c_size);
+char * read_file(const char * filename, char * container, u32 maxread);
+int write_file(const char * filename, const char * data);
 
 #endif
