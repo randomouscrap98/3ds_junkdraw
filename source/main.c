@@ -8,6 +8,7 @@
 #include <math.h>
 #include <time.h>
 #include <dirent.h>
+//#include <libpng16/png.h>
 
 
 //#define DEBUG_COORD
@@ -978,6 +979,9 @@ u32 * _exp_layer_dt = NULL;
 
 void _exp_layer_dt_func(float x, float y, u16 width, u32 color)
 {
+   //pre-calculating can save tons of time in the critical loop down there. We
+   //don't want ANY long operations (modulus, my goodness) and we want it to
+   //use cache as much as possible. 
    u32 minx = x < 0 ? 0 : ((u32)x % LAYER_WIDTH);
    u32 maxx = minx + width;
    u32 minyi = y < 0 ? 0 : (y * LAYER_WIDTH);
@@ -998,7 +1002,13 @@ void export_page(page_num page, char * data, char * data_end)
    //the way until the final bitmap is written (at which point it can be
    //converted as needed)
 
-   PRINTINFO("Exporting page %d", page);
+   PRINTINFO("Exporting page %d: building...", page);
+
+   if(mkdir_p(SCREENSHOTS_BASE))
+   {
+      PRINTERR("Couldn't create screenshots folder: %s", SCREENSHOTS_BASE);
+      return;
+   }
 
    u32 * layerdata[LAYER_COUNT + 1];
    u32 size_bytes = sizeof(u32) * LAYER_WIDTH * LAYER_HEIGHT;
@@ -1023,7 +1033,7 @@ void export_page(page_num page, char * data, char * data_end)
 
    char savepath[MAX_FILEPATH];
    time_t now = time(NULL);
-   sprintf(savepath, "%s%jd.bmp", SCREENSHOTS_BASE, now);
+   sprintf(savepath, "%s%jd.png", SCREENSHOTS_BASE, now);
 
    //Now just parse and parse and parse until we reach the end!
    u32 data_length = data_end - data;
@@ -1038,6 +1048,7 @@ void export_page(page_num page, char * data, char * data_end)
       goto END;
    }
 
+   //PRINTINFO("Exporting page %d: drawing", page);
    while(current_data < data_end)
    {
       current_data = datamem_scanstroke(current_data, data_end, data_length, 
@@ -1053,7 +1064,8 @@ void export_page(page_num page, char * data, char * data_end)
       draw_all_lines(&package, &_exp_layer_dt_func);
    }
 
-   //Now fill the final array with good stuff. Will this take a while?
+   //Now merge arrays together; our alpha blending is dead simple. 
+   //Will this take a while?
    for(int i = 0; i < LAYER_HEIGHT * LAYER_WIDTH; i++)
    {
       //Loop over arrays, the topmost (layer) value persists
@@ -1067,7 +1079,14 @@ void export_page(page_num page, char * data, char * data_end)
       }
    }
 
-   PRINTINFO("Exported page to: %s", savepath);
+   PRINTINFO("Exporting page %d: converting to png...", page);
+
+   if(write_citropng(layerdata[LAYER_COUNT], LAYER_WIDTH, LAYER_HEIGHT, savepath) == 0) {
+      PRINTINFO("Exported page to: %s", savepath);
+   }
+   else {
+      PRINTERR("FAILED to export: %s", savepath);
+   }
 
 END:
    for(int i = 0; i < LAYER_COUNT + 1; i++)
