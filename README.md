@@ -19,6 +19,7 @@ If these work, that's cool:
 * **B** : eraser tool
 * **UP/DOWN** : zoom in/out
 * **LEFT/RIGHT** : change brush width
+* **R+SELECT** : export whole page as png (slow)
 * **R+LEFT/RIGHT** : REALLY change brush width
 * **R+UP/DOWN** : change page (can have thousands)
 * **R+L+UP/DOWN** : REALLY change page (please don't do this)
