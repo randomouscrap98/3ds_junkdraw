@@ -335,21 +335,22 @@ u32 _drw_cmd_cnt = 0;
 
 float cr_lx = -1;
 float cr_ly = -1;
+u32 cr_cl = 0;
 
 typedef void (* rectangle_func)(float, float, u16, u32);
 
 //Draw a rectangle centered and pixel aligned around the given point.
 void draw_centeredrect(float x, float y, u16 width, u32 color, 
       rectangle_func rect_f)
-      //void (* rect_f)(float, float, u16, u32))
 {
-   float ofs = width / 2.0;
-   x = (width & 1) ? floor(x - ofs) : round(x - ofs);
-   y = (width & 1) ? floor(y - ofs) : round(y - ofs);
-   if(x < LAYER_EDGEBUF || y < LAYER_EDGEBUF || (cr_lx == x && cr_ly == y)) return;
+   float ofs = (width / 2.0) - 0.5;
+   x = floor(x - ofs);
+   y = floor(y - ofs);
+   if(x < LAYER_EDGEBUF || y < LAYER_EDGEBUF || 
+         (cr_lx == x && cr_ly == y && cr_cl == color)) return;
    if(rect_f != NULL) (*rect_f)(x,y,width,color);
    else MY_SOLIDRECT(x, y, 0.5f, width, width, color);
-   cr_lx = x; cr_ly = y;
+   cr_lx = x; cr_ly = y; cr_cl = color;
 }
 
 //Draw a line using a custom line drawing system (required like this because of
@@ -384,9 +385,9 @@ void draw_lines(const struct LinePackage * linepack, u16 pack_start, u16 pack_en
       custom_drawline(&linepack->lines[i], linepack->width, color, rect_f);
 }
 
-void draw_all_lines(const struct LinePackage * linepack)
+void draw_all_lines(const struct LinePackage * linepack, rectangle_func rect_f)
 {
-   draw_lines(linepack, 0, linepack->line_count, NULL);
+   draw_lines(linepack, 0, linepack->line_count, rect_f);
 }
 
 //Draw the scrollbars on the sides of the screen for the given screen
@@ -971,6 +972,24 @@ TRUEEND:
    return result;
 }
 
+//This is a funny little system. Custom line drawing, passing the function,
+//idk. There are better ways, but I'm lazy
+u32 * _exp_layer_dt = NULL;
+
+void _exp_layer_dt_func(float x, float y, u16 width, u32 color)
+{
+   u32 minx = x < 0 ? 0 : ((u32)x % LAYER_WIDTH);
+   u32 maxx = minx + width;
+   u32 minyi = y < 0 ? 0 : (y * LAYER_WIDTH);
+   u32 maxyi = minyi + LAYER_WIDTH * width;
+   if(maxx >= LAYER_WIDTH) maxx = LAYER_WIDTH - 1;
+   if(maxyi >= LAYER_WIDTH * LAYER_HEIGHT) maxyi = LAYER_WIDTH * LAYER_HEIGHT - 1;
+
+   for(u32 yi = minyi; yi < maxyi; yi += LAYER_WIDTH)
+      for(u32 xi = minx; xi < maxx; xi++)
+         _exp_layer_dt[yi + xi] = color;
+}
+
 //Export the given page from the given data into a default named file in some
 //default image format (bitmap? png? who knows)
 void export_page(page_num page, char * data, char * data_end)
@@ -978,6 +997,8 @@ void export_page(page_num page, char * data, char * data_end)
    //NOTE: this entire function is going to use Citro2D u32 formatted colors, all
    //the way until the final bitmap is written (at which point it can be
    //converted as needed)
+
+   PRINTINFO("Exporting page %d", page);
 
    u32 * layerdata[LAYER_COUNT + 1];
    u32 size_bytes = sizeof(u32) * LAYER_WIDTH * LAYER_HEIGHT;
@@ -1023,10 +1044,13 @@ void export_page(page_num page, char * data, char * data_end)
               page, &stroke_start);
 
       //Is this the normal way to do this? idk
-      if(stroke_start != NULL)
-         convert_data_to_lines(&package, stroke_start, current_data);
+      if(stroke_start == NULL) continue;
+
+      convert_data_to_lines(&package, stroke_start, current_data);
+      _exp_layer_dt = layerdata[package.layer];
 
       //At this point, we draw the line.
+      draw_all_lines(&package, &_exp_layer_dt_func);
    }
 
    //Now fill the final array with good stuff. Will this take a while?
