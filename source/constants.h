@@ -1,7 +1,7 @@
 
 // -- Some SUPER IMPORTANT constants
 
-#define VERSION "0.2.0"
+#define VERSION "0.2.1"
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE"saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE"screenshots/"

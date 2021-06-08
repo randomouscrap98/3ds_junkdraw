@@ -8,7 +8,6 @@
 #include <math.h>
 #include <time.h>
 #include <dirent.h>
-//#include <libpng16/png.h>
 
 
 //#define DEBUG_COORD
@@ -996,7 +995,7 @@ void _exp_layer_dt_func(float x, float y, u16 width, u32 color)
 
 //Export the given page from the given data into a default named file in some
 //default image format (bitmap? png? who knows)
-void export_page(page_num page, char * data, char * data_end)
+void export_page(page_num page, char * data, char * data_end, char * basename)
 {
    //NOTE: this entire function is going to use Citro2D u32 formatted colors, all
    //the way until the final bitmap is written (at which point it can be
@@ -1033,7 +1032,8 @@ void export_page(page_num page, char * data, char * data_end)
 
    char savepath[MAX_FILEPATH];
    time_t now = time(NULL);
-   sprintf(savepath, "%s%jd.png", SCREENSHOTS_BASE, now);
+   sprintf(savepath, "%s%s_%d_%jd.png", SCREENSHOTS_BASE, 
+         strlen(basename) ? basename : "new", page, now);
 
    //Now just parse and parse and parse until we reach the end!
    u32 data_length = data_end - data;
@@ -1228,7 +1228,7 @@ int main(int argc, char** argv)
       if(kDown & KEY_A) current_tool = TOOL_PENCIL;
       if(kDown & KEY_B) current_tool = TOOL_ERASER;
       if(kDown & KEY_SELECT) {
-         if(kHeld & KEY_R) { export_page(current_page, draw_data, draw_data_end); } 
+         if(kHeld & KEY_R) { export_page(current_page, draw_data, draw_data_end, save_filename); } 
          else { pending.layer = (pending.layer + 1) % LAYER_COUNT; }
       }
       if(kDown & KEY_START) 

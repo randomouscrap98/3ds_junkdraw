@@ -429,11 +429,15 @@ char * read_file(const char * filename, char * container, u32 maxread)
    return result;
 }
 
-#define MYPNG_FORMAT PNG_COLOR_TYPE_RGB
-#define MYPNG_BYTESPER 3
+#define MYPNG_FORMAT PNG_COLOR_TYPE_RGBA
+#define MYPNG_BYTESPER 4
 
 //Given a citro-formatted array of u32 colors, write a png to the given 
-//location. Rawdata needs to be linear and row first
+//location. Rawdata needs to be linear and row first. The 
+
+//No, the data must be in a linear array, row first, of PNG formatted RGBA
+//bytes. Ironically, citro-formatted colors on the 3ds are already like this,
+//as the 3ds is little endian just like png
 int write_citropng(u32 * rawdata, u16 width, u16 height, char * filepath)
 {
    //A lot of this is taken from http://www.labbookpages.co.uk/software/imgProc/libPNG.html
@@ -441,7 +445,6 @@ int write_citropng(u32 * rawdata, u16 width, u16 height, char * filepath)
    FILE *fp = NULL;
    png_structp png_ptr = NULL;
    png_infop info_ptr = NULL;
-   png_bytep row = NULL;
 
    // Open file for writing (binary mode)
    fp = fopen(filepath, "wb");
@@ -482,31 +485,11 @@ int write_citropng(u32 * rawdata, u16 width, u16 height, char * filepath)
          8, MYPNG_FORMAT, PNG_INTERLACE_NONE,
          PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
 
-   // Set title
-   //if (title != NULL) {
-   //   png_text title_text;
-   //   title_text.compression = PNG_TEXT_COMPRESSION_NONE;
-   //   title_text.key = "Title";
-   //   title_text.text = title;
-   //   png_set_text(png_ptr, info_ptr, &title_text, 1);
-   //}
-
    png_write_info(png_ptr, info_ptr);
-
-   // Allocate memory for one row (3 bytes per pixel - RGB)
-   row = (png_bytep) malloc(MYPNG_BYTESPER * width * sizeof(png_byte));
 
    // Write image data
    for (u32 y=0 ; y<height ; y++) {
-      u32 yi = y * width;
-      for (u32 x=0 ; x<width ; x++) {
-         u32 xi = x * MYPNG_BYTESPER;
-         u32 d = rawdata[yi + x];
-         row[xi] =     d & 0x0000FF;
-         row[xi + 1] = (d & 0x00FF00) >> 8;
-         row[xi + 2] = (d & 0xFF0000) >> 16;
-      }
-      png_write_row(png_ptr, row);
+      png_write_row(png_ptr, (png_bytep)(rawdata + y * width));
    }
 
    // End write
@@ -516,7 +499,6 @@ finalise:
    if (fp != NULL) fclose(fp);
    if (info_ptr != NULL) png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
    if (png_ptr != NULL) png_destroy_write_struct(&png_ptr, (png_infopp)NULL);
-   if (row != NULL) free(row);
 
    return code;
 
