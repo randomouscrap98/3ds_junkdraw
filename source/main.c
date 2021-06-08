@@ -9,7 +9,6 @@
 #include <time.h>
 #include <dirent.h>
 
-
 //#define DEBUG_COORD
 //#define DEBUG_DATAPRINT
 
@@ -17,7 +16,6 @@
 #include "myutils.h"
 #include "dcv.h"
 
-#define DEBUG_RUNTESTS
 
 
 // TODO: Figure out these weirdness things:
@@ -1150,8 +1148,9 @@ int main(int argc, char** argv)
    const u32 bg_color = CANVAS_BG_COLOR;
    const u32 layer_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
 
+   u16 palette_offset = 0;
    u16 palette [PALETTE_COLORS];
-   convert_palette(base_palette, palette, PALETTE_COLORS);
+   convert_palette(base_palette + palette_offset, palette, PALETTE_COLORS);
    u8 palette_index = PALETTE_STARTINDEX;
 
    const Tex3DS_SubTexture subtex = {
@@ -1189,7 +1188,6 @@ int main(int argc, char** argv)
    scandata_initialize(&scandata, MAX_FRAMELINES);
 
    char * save_filename = malloc(MAX_FILENAME * sizeof(char));
-   //char * temp_msg = malloc(MAX_TEMPSTRING * sizeof(char));
    char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
    char * stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
    char * draw_data_end;
@@ -1227,6 +1225,13 @@ int main(int argc, char** argv)
       if(kRepeat & KEY_DLEFT) tool_data[current_tool].width -= (kHeld & KEY_R ? 5 : 1);
       if(kDown & KEY_A) current_tool = TOOL_PENCIL;
       if(kDown & KEY_B) current_tool = TOOL_ERASER;
+      if(kDown & KEY_R && palette_active) {
+         palette_offset = (palette_offset + PALETTE_COLORS) % 
+            (sizeof(base_palette) / sizeof(base_palette[0]));
+         convert_palette(base_palette + palette_offset, palette, PALETTE_COLORS);
+         if(tool_data[current_tool].color_settable)
+            tool_data[current_tool].color = palette[palette_index];
+      }
       if(kDown & KEY_SELECT) {
          if(kHeld & KEY_R) { export_page(current_page, draw_data, draw_data_end, save_filename); } 
          else { pending.layer = (pending.layer + 1) % LAYER_COUNT; }
@@ -1292,7 +1297,6 @@ int main(int argc, char** argv)
 
       // Render the scene
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-
 
       // -- LAYER DRAW SECTION --
       C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
@@ -1383,7 +1387,8 @@ int main(int argc, char** argv)
 
       draw_layers(layers, LAYER_COUNT, &screen_mod, bg_color);
       draw_scrollbars(&screen_mod);
-      draw_colorpicker(palette, PALETTE_COLORS, palette_index, !palette_active);
+      draw_colorpicker(palette, PALETTE_COLORS, tool_data[current_tool].color_settable ?
+            palette_index : PALETTE_COLORS + 1, !palette_active);
 
       C3D_FrameEnd(0);
 
