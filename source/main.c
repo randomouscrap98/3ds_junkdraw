@@ -1225,7 +1225,7 @@ int main(int argc, char** argv)
       if(kRepeat & KEY_DLEFT) tool_data[current_tool].width -= (kHeld & KEY_R ? 5 : 1);
       if(kDown & KEY_A) current_tool = TOOL_PENCIL;
       if(kDown & KEY_B) current_tool = TOOL_ERASER;
-      if(kDown & KEY_R && palette_active) {
+      if(kHeld & KEY_L && kDown & KEY_R && palette_active) {
          palette_offset = (palette_offset + PALETTE_COLORS) % 
             (sizeof(base_palette) / sizeof(base_palette[0]));
          convert_palette(base_palette + palette_offset, palette, PALETTE_COLORS);
