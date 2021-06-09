@@ -807,6 +807,7 @@ char * scandata_parse(struct ScanDrawData * scandata, char * drawdata,
 
 void print_controls()
 {
+   printf("\x1b[0m");
    printf("     L - change color        R - general modifier\n");
    printf(" LF/RT - line width     UP/DWN - zoom\n");
    printf("SELECT - change layers   START - menu\n");
@@ -816,6 +817,7 @@ void print_controls()
 
 void print_framing()
 {
+   printf("\x1b[0m");
    printf("\x1b[29;1H--------------------------------------------------");
    printf("\x1b[28;43H%7s", VERSION);
 }
@@ -951,7 +953,7 @@ char * load_drawing(char * data_container, char * final_filename)
    else if(dircount <= 0) { PRINTINFO("No saves found"); goto END; }
 
    sprintf(temp_msg, "Found %ld saves:", dircount);
-   u32 sel = easy_menu(temp_msg, all_files, MAINMENU_TOP, FILELOAD_MENUCOUNT, KEY_START | KEY_B);
+   s32 sel = easy_menu(temp_msg, all_files, MAINMENU_TOP, FILELOAD_MENUCOUNT, KEY_START | KEY_B);
 
    if(sel < 0) goto END;
 
@@ -1093,6 +1095,49 @@ END:
 
 
 
+// -- NETWORKING --
+s8 host_local(udsNetworkStruct * networkstruct, udsBindContext * bindctx)
+{
+   if(!easy_warn("PRIVACY WARNING!", 
+"You are opening a public room which anybody can\n"
+" connect to locally. All of your current pages\n"
+" will be available to draw on.\n\n"
+" Really open a public room?", MAINMENU_TOP))
+      return 1;
+
+   PRINTINFO("Initializing network...");
+
+   //udsConnectionType conntype = 0; //UDSCONTYPE_Client;
+   u32 recv_buffer_size = UDS_DEFAULT_RECVBUFSIZE;
+   u8 data_channel = 1; //Is this because we're the server?
+   Result ret;
+
+   ret = udsInit(0x3000, NULL);
+
+   if(R_FAILED(ret))
+   {
+      PRINTERR("ERR: Couldn't initialize networking!");
+      return -1;
+   }
+
+   udsGenerateDefaultNetworkStruct(networkstruct, WLAN_COMMID, 0, UDS_MAXNODES);
+
+   ret = udsCreateNetwork(networkstruct, WLAN_PASSPHRASE, strlen(WLAN_PASSPHRASE)+1, bindctx, 
+         data_channel, recv_buffer_size);
+
+   if(R_FAILED(ret))
+   {
+      PRINTERR("Couldn't create network, code: %#010x", (unsigned int)ret);
+      return -1;
+   }
+
+   PRINTINFO("Local network enabled");
+
+   //conntype = 0;
+   return 0;
+}
+
+
 // -- TESTS --
 
 #ifdef DEBUG_RUNTESTS
@@ -1132,6 +1177,15 @@ END:
 
 #define MAIN_UNSAVEDCHECK(x) \
    (saved_last == draw_data_end || easy_warn("WARN: UNSAVED DATA", x, MAINMENU_TOP))
+
+#define MAIN_DC_GENERAL() { udsUnbind(&bind_ctx); udsExit(); }
+
+#define MAIN_DC_HOSTLOCAL() { \
+   hosting_local = false;     \
+   udsDisconnectNetwork();    \
+   MAIN_DC_GENERAL(); \
+   PRINTINFO("Stopped local hosting"); }
+
 
 int main(int argc, char** argv)
 {
@@ -1194,6 +1248,10 @@ int main(int argc, char** argv)
    char * draw_pointer;
    char * saved_last;
 
+   udsNetworkStruct network_struct;
+   udsBindContext bind_ctx;
+   bool hosting_local = false;
+
    MAIN_NEWDRAW();
 
    hidSetRepeatParameters(BREPEAT_DELAY, BREPEAT_INTERVAL);
@@ -1238,7 +1296,7 @@ int main(int argc, char** argv)
       }
       if(kDown & KEY_START) 
       {
-         u8 selected = easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, KEY_B | KEY_START);
+         s32 selected = easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, KEY_B | KEY_START);
          if(selected == MAINMENU_EXIT) {
             if(MAIN_UNSAVEDCHECK("Really quit?")) break;
          }
@@ -1273,8 +1331,18 @@ int main(int argc, char** argv)
                }
             }
          }
-         else if(selected == MAINMENU_HOSTLOCAL || selected == MAINMENU_CONNECTLOCAL)
+         else if(selected == MAINMENU_HOSTLOCAL)
          {
+            if(hosting_local) {
+               if(easy_warn("WARN: DISCONNECT ALL USERS", "Do you really want to stop hosting?", MAINMENU_TOP)) {
+                  MAIN_DC_HOSTLOCAL();
+               }
+            }
+            else {
+               hosting_local = !host_local(&network_struct, &bind_ctx);
+            }
+         }
+         else if(selected == MAINMENU_CONNECTLOCAL) {
             PRINTWARN("Not implemented yet");
          }
       }
@@ -1395,6 +1463,9 @@ int main(int argc, char** argv)
       last_zoom_power = zoom_power;
       current_frame++;
    }
+
+   if(hosting_local)
+      MAIN_DC_HOSTLOCAL();
 
    free(pending_lines);
    free(draw_data);

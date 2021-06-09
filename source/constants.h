@@ -6,6 +6,10 @@
 #define SAVE_BASE FOLDER_BASE"saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE"screenshots/"
 
+#define WLAN_PASSPHRASE VERSION"_wanted_to_call_it_junk_drawer"
+#define WLAN_COMMID 0x48425710
+//0x5812FADB
+
 #define SCREENWIDTH 320
 #define SCREENHEIGHT 240
 

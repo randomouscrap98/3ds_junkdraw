@@ -15,6 +15,18 @@
 // -- GENERAL UTILS --
 // -------------------
 
+u32 char_occurrences(const char * string, char c)
+{
+   u32 count = 0;
+   char *pch = strchr(string,c);
+   while (pch != NULL) {
+      count++;
+      pch = strchr(pch+1,c);
+   }
+   return count;
+}
+
+
 
 // -----------------
 // -- COLOR UTILS --
@@ -116,6 +128,7 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
    const char ** menu_str = malloc(MAX_MENU_ITEMS * sizeof(char *));
    menu_str[0] = menu_items;
    bool has_title = (title != NULL && strlen(title));
+   u8 menudispofs = has_title ? (2 + char_occurrences(title, '\n')) : 1;
 
    //Parse out the menu positions to make it easier to print them
    while(menu_num < MAX_MENU_ITEMS && *menu_str[menu_num] != 0)
@@ -131,12 +144,11 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
    //Print title, 1 over
    if(has_title)
    {
-      printf("\x1b[%d;1H\x1b[0m %-49s", top, title);
-      printf("%-50s","");
+      printf("\x1b[0m\x1b[%d;1H%*s", top, menudispofs * 50, "");
+      printf("\x1b[%d;1H %s\n", top, title); //Still keeping that space for some reason.
    }
 
-   //The offset from the top to display the menu
-   u8 menudispofs = (has_title ? 2 : 1);
+   //LOGDBG("MOFS: %d, T: %s", menudispofs, title);
 
    //I want to see how inefficient printf is, so I'm doing this awful on purpose 
    while(aptMainLoop())
@@ -185,6 +197,10 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
 bool easy_confirm(const char * title, u8 top)
 {
    return 1 == easy_menu(title, "No\0Yes\0", top, 0, KEY_B);
+}
+
+void easy_ok(const char * title, u8 top) {
+   easy_menu(title, "OK\0", top, 0, KEY_B);
 }
 
 //Set up the menu to be a warning (still yes/no confirmation though)
