@@ -841,7 +841,7 @@ void print_data(char * data, char * dataptr, char * saveptr)
    u32 unsaved = dataptr - saveptr;
    float percent = 100.0 * (float)datasize / MAX_DRAW_DATA;
 
-   char numbers[50];
+   char numbers[51];
    sprintf(numbers, "%ld %ld  %s(%05.2f%%)", unsaved, datasize, active_x1b, percent);
    printf("\x1b[28;1H%s %s%*s", status_x1b, numbers, 
          PRINTDATA_WIDTH - (strlen(numbers) - strlen(active_x1b)),"");
@@ -883,6 +883,12 @@ void print_time(bool showcolon)
 
    printf("\x1b[30;45H%s%02d%c%02d", 
          status_x1b, timeinfo->tm_hour, showcolon ? ':' : ' ', timeinfo->tm_min);
+}
+
+void print_constatus(int con_type, int disp)
+{
+   printf("\x1b[28;%dH%s%s", 48 - strlen(VERSION), contype_styles[con_type], 
+         con_type ? constatus_animframes[disp] : constatus_animframes[CONSTATUS_ANIMFRAMES]);
 }
 
 
@@ -1178,13 +1184,17 @@ s8 host_local(udsNetworkStruct * networkstruct, udsBindContext * bindctx)
 #define MAIN_UNSAVEDCHECK(x) \
    (saved_last == draw_data_end || easy_warn("WARN: UNSAVED DATA", x, MAINMENU_TOP))
 
-#define MAIN_DC_GENERAL() { udsUnbind(&bind_ctx); udsExit(); }
-
-#define MAIN_DC_HOSTLOCAL() { \
-   hosting_local = false;     \
-   udsDisconnectNetwork();    \
-   MAIN_DC_GENERAL(); \
-   PRINTINFO("Stopped local hosting"); }
+#define MAIN_NETWORK_DC(ct) if(ct) {  \
+   switch(ct) { \
+      case CONTYPE_HOSTLOCAL: \
+         udsDisconnectNetwork(); \
+         PRINTINFO("Stopped local hosting"); \
+         break; \
+      case CONTYPE_CONNECTLOCAL: \
+         udsDestroyNetwork(); \
+         PRINTINFO("Stopped local connection"); \
+         break; \
+   } udsUnbind(&bind_ctx); udsExit(); ct = 0; }
 
 
 int main(int argc, char** argv)
@@ -1250,7 +1260,8 @@ int main(int argc, char** argv)
 
    udsNetworkStruct network_struct;
    udsBindContext bind_ctx;
-   bool hosting_local = false;
+   u8 con_type = 0;
+   //bool hosting_local = false;
 
    MAIN_NEWDRAW();
 
@@ -1333,13 +1344,13 @@ int main(int argc, char** argv)
          }
          else if(selected == MAINMENU_HOSTLOCAL)
          {
-            if(hosting_local) {
+            if(con_type) {
                if(easy_warn("WARN: DISCONNECT ALL USERS", "Do you really want to stop hosting?", MAINMENU_TOP)) {
-                  MAIN_DC_HOSTLOCAL();
+                  MAIN_NETWORK_DC(con_type);
                }
             }
             else {
-               hosting_local = !host_local(&network_struct, &bind_ctx);
+               con_type = !host_local(&network_struct, &bind_ctx) ?  CONTYPE_HOSTLOCAL : 0;
             }
          }
          else if(selected == MAINMENU_CONNECTLOCAL) {
@@ -1422,6 +1433,11 @@ int main(int argc, char** argv)
             GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
 
       if(!(current_frame % 30)) print_time(current_frame % 60);
+      if(!(current_frame % CONSTATUS_ANIMTIME)) 
+      {
+         print_constatus(con_type, (current_frame % (CONSTATUS_ANIMTIME * CONSTATUS_ANIMFRAMES)) 
+               / CONSTATUS_ANIMTIME);
+      }
 
       //TODO: Eventually, change this to put the data in different places?
       if(end_frame == current_frame && pending.line_count > 0)
@@ -1464,8 +1480,7 @@ int main(int argc, char** argv)
       current_frame++;
    }
 
-   if(hosting_local)
-      MAIN_DC_HOSTLOCAL();
+   MAIN_NETWORK_DC(con_type);
 
    free(pending_lines);
    free(draw_data);

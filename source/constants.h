@@ -7,8 +7,9 @@
 #define SCREENSHOTS_BASE FOLDER_BASE"screenshots/"
 
 #define WLAN_PASSPHRASE VERSION"_wanted_to_call_it_junk_drawer"
-#define WLAN_COMMID 0x48425710
-//0x5812FADB
+#define WLAN_COMMID 0x5812FADB
+#define CONTYPE_HOSTLOCAL 1
+#define CONTYPE_CONNECTLOCAL 2
 
 #define SCREENWIDTH 320
 #define SCREENHEIGHT 240
@@ -87,6 +88,8 @@
 #define STATUS_MAINCOLOR 36
 #define STATUS_ACTIVECOLOR 37
 #define FILELOAD_MENUCOUNT 10
+#define CONSTATUS_ANIMTIME 15 
+#define CONSTATUS_ANIMFRAMES 4
 
 //Weird stuff that should maybe be refactored
 #define MY_C2DOBJLIMIT 8192
@@ -96,6 +99,9 @@
 typedef u16 page_num;
 typedef u8 layer_num;
 //typedef u16 stroke_num;
+
+const char* contype_styles[] = {"\x1b[0m", "\x1b[31m", "\x1b[32m", "\x1b[35m", "\x1b[34m"};
+const char* constatus_animframes[] = { "  ", " (", "((", " (", "  ", "((", " (", "  " } ;
 
 
 // The base palette definitions. Unless otherwise stated, all palettes are
