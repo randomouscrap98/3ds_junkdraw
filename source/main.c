@@ -12,6 +12,7 @@
 //#define DEBUG_COORD
 //#define DEBUG_DATAPRINT
 
+#include "entity.h"
 #include "constants.h"
 #include "myutils.h"
 #include "dcv.h"
@@ -887,7 +888,7 @@ void print_time(bool showcolon)
 
 void print_constatus(int con_type, int disp)
 {
-   printf("\x1b[28;%dH%s%s", 48 - strlen(VERSION), contype_styles[con_type], 
+   printf("\x1b[28;%dH%s%s", 47 - strlen(VERSION), contype_styles[con_type], 
          con_type ? constatus_animframes[disp] : constatus_animframes[CONSTATUS_ANIMFRAMES]);
 }
 
