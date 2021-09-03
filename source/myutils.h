@@ -26,6 +26,7 @@
 
 //Some of these should be namespaced or whatever
 #define MAX_MENU_ITEMS 10000
+#define MIN_MENU_DISPLAY 1
 #define ENTERTEXT_CHAR "_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 #define ENTERTEXT_CHARARRSIZE 50
 
@@ -66,8 +67,9 @@ struct EasyMenuState
 };
 
 void initialize_easy_menu_state(struct EasyMenuState * state);
-void clean_easy_menu_state(struct EasyMenuState * state);
+void free_easy_menu_state(struct EasyMenuState * state);
 void draw_easy_menu(struct EasyMenuState * state);
+void clear_easy_menu(struct EasyMenuState * state);
 
 s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u32 exit_btns);
 void easy_ok(const char * title, u8 top);

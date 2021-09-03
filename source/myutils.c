@@ -137,8 +137,13 @@ void initialize_easy_menu_state(struct EasyMenuState * state)
       state->_menu_num++;
    }
 
+   //Pure madness. But really, if no max height is set, the max height is as
+   //big as possible (makes the math... easier? idk).
+   if(state->max_height == 0)
+      state->max_height = 0xFF;
+
    //The 2 is for the dots; we make room even if they're not used
-   u8 min_totalheight = state->_title_height + 2; 
+   u8 min_totalheight = state->_title_height + 2 + MIN_MENU_DISPLAY; 
 
    if(state->max_height < min_totalheight)
    {
@@ -155,20 +160,26 @@ void initialize_easy_menu_state(struct EasyMenuState * state)
 
    state->selected_index = 0;
    state->menu_ofs = 0;
-};
+}
 
-void clean_easy_menu_state(struct EasyMenuState * state)
+//Cleans up any weird data initialized in menu state
+void free_easy_menu_state(struct EasyMenuState * state)
 {
    free(state->_menu_strings);
 }
 
-void draw_easy_menu(struct EasyMenuState * state)
+//Clears the drawn easy menu
+void clear_easy_menu(struct EasyMenuState * state)
 {
    //Sort of like a "full clear"
    printf("\x1b[0m\x1b[%d;1H%*s", state->top, (state->_title_height + state->_display_items + 2) * 50, "");
+}
 
+//Draws the easy menu. Does NOT assume the background has been cleared!
+void draw_easy_menu(struct EasyMenuState * state)
+{
    if(state->_has_title)
-      printf("\x1b[%d;1H %s\n", state->top, state->title); //Still keeping that space for some reason.
+      printf("\x1b[0m\x1b[%d;1H %s\n", state->top, state->title); //Still keeping that space for some reason.
 
    //Show if there's more to the menu 
    printf("\x1b[0m\x1b[%d;3H%s", state->top + state->_title_height, 
@@ -192,34 +203,45 @@ void draw_easy_menu(struct EasyMenuState * state)
 //after. CONTROL WILL BE GIVEN FULLY TO THIS MENU UNTIL IT FINISHES!
 s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u32 exit_buttons)
 {
-   s32 menu_on = 0;
-   u32 menu_num = 0;
-   u32 menu_ofs = 0;
+   struct EasyMenuState state;
+   state.title = title;
+   state.menu_items = menu_items;
+   state.top = top;
+   state.max_height = display; //Just for now; but this will severely limit the menus!
 
-   const char ** menu_str = malloc(MAX_MENU_ITEMS * sizeof(char *));
-   menu_str[0] = menu_items;
-   bool has_title = (title != NULL && strlen(title));
-   u8 menudispofs = has_title ? (2 + char_occurrences(title, '\n')) : 1;
+   initialize_easy_menu_state(&state);
 
-   //Parse out the menu positions to make it easier to print them
-   while(menu_num < MAX_MENU_ITEMS && *menu_str[menu_num] != 0)
-   {
-      menu_str[menu_num + 1] = menu_str[menu_num] + strlen(menu_str[menu_num]) + 1;
-      menu_num++;
-   }
 
-   //Set display properly, don't want an overlong menu. Users can pass in 0 to
-   //show all items (please be careful with this option)
-   if(!display || display > menu_num) display = menu_num;
+   //s32 menu_on = 0;
+   //u32 menu_num = 0;
+   //u32 menu_ofs = 0;
 
-   //Print title, 1 over
-   if(has_title)
-   {
-      printf("\x1b[0m\x1b[%d;1H%*s", top, menudispofs * 50, "");
-      printf("\x1b[%d;1H %s\n", top, title); //Still keeping that space for some reason.
-   }
+   //const char ** menu_str = malloc(MAX_MENU_ITEMS * sizeof(char *));
+   //menu_str[0] = menu_items;
+   //bool has_title = (title != NULL && strlen(title));
+   //u8 menudispofs = has_title ? (2 + char_occurrences(title, '\n')) : 1;
+
+   ////Parse out the menu positions to make it easier to print them
+   //while(menu_num < MAX_MENU_ITEMS && *menu_str[menu_num] != 0)
+   //{
+   //   menu_str[menu_num + 1] = menu_str[menu_num] + strlen(menu_str[menu_num]) + 1;
+   //   menu_num++;
+   //}
+
+   ////Set display properly, don't want an overlong menu. Users can pass in 0 to
+   ////show all items (please be careful with this option)
+   //if(!display || display > menu_num) display = menu_num;
+
+   ////Print title, 1 over
+   //if(has_title)
+   //{
+   //   printf("\x1b[0m\x1b[%d;1H%*s", top, menudispofs * 50, "");
+   //   printf("\x1b[%d;1H %s\n", top, title); //Still keeping that space for some reason.
+   //}
 
    //LOGDBG("MOFS: %d, T: %s", menudispofs, title);
+
+   clear_easy_menu(&state);
 
    //I want to see how inefficient printf is, so I'm doing this awful on purpose 
    while(aptMainLoop())
@@ -228,40 +250,51 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
       u32 kDown = hidKeysDown();
       u32 kRepeat = hidKeysDownRepeat();
 
-      if(kDown & KEY_A) break;
-      if(kDown & exit_buttons) { menu_on = -1; break; }
-      if(kRepeat & KEY_UP) menu_on = (menu_on - 1 + menu_num) % menu_num;
-      if(kRepeat & KEY_DOWN) menu_on = (menu_on + 1) % menu_num;
+      if(kDown & KEY_A) 
+         break;
+      if(kDown & exit_buttons) 
+         { state.selected_index= -1; break; }
+      if(kRepeat & KEY_UP) 
+         state.selected_index = (state.selected_index - 1 + state._menu_num) % state._menu_num;
+      if(kRepeat & KEY_DOWN) 
+         state.selected_index= (state.selected_index + 1) % state._menu_num;
 
       //Move the offset if the selected index goes outside visibility
-      if(menu_on < menu_ofs) menu_ofs = menu_on;
-      if(menu_on >= menu_ofs + display) menu_ofs = menu_on - display + 1;
+      if(state.selected_index < state.menu_ofs) 
+         state.menu_ofs = state.selected_index;
+      if(state.selected_index >= state.menu_ofs + state._display_items) 
+         state.menu_ofs = state.selected_index - state._display_items + 1;
 
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
+      draw_easy_menu(&state);
+
       //Show if there's more to the menu 
-      printf("\x1b[0m\x1b[%d;3H%s", top + menudispofs - 1, menu_ofs > 0 ? "..." : "   ");
-      printf("\x1b[%d;3H%s", top + menudispofs + display, (menu_num > menu_ofs + display) ? "..." : "   ");
+      //printf("\x1b[0m\x1b[%d;3H%s", top + menudispofs - 1, menu_ofs > 0 ? "..." : "   ");
+      //printf("\x1b[%d;3H%s", top + menudispofs + display, (menu_num > menu_ofs + display) ? "..." : "   ");
 
       //Print menu. When you get to the selected item, do a different bg
-      for(u8 i = 0; i < display; i++)
-      {
-         u8 menutop = top + menudispofs + i;
-         u32 im = i + menu_ofs;
-         if(menu_on == im)
-            printf("\x1b[%d;1H\x1b[47;30m  %-48s", menutop, menu_str[im]);
-         else
-            printf("\x1b[%d;1H\x1b[0m  %-48s", menutop, menu_str[im]);
-      }
+      //for(u8 i = 0; i < display; i++)
+      //{
+      //   u8 menutop = top + menudispofs + i;
+      //   u32 im = i + menu_ofs;
+      //   if(menu_on == im)
+      //      printf("\x1b[%d;1H\x1b[47;30m  %-48s", menutop, menu_str[im]);
+      //   else
+      //      printf("\x1b[%d;1H\x1b[0m  %-48s", menutop, menu_str[im]);
+      //}
 
       C3D_FrameEnd(0);
    }
 
-   //Clear the menu area
-   for(u8 i = 0; i < menudispofs + display + 1; i++)
-      printf("\x1b[%d;1H\x1b[0m%-50s", top + i, "");
+   clear_easy_menu(&state);
+   free_easy_menu_state(&state);
 
-   return menu_on;
+   ////Clear the menu area
+   //for(u8 i = 0; i < menudispofs + display + 1; i++)
+   //   printf("\x1b[%d;1H\x1b[0m%-50s", top + i, "");
+
+   return state.selected_index;
 }
 
 //Set up the menu to be a simple confirmation
