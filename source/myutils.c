@@ -117,6 +117,77 @@ void convert_palette(u32 * original, u16 * destination, u16 size)
 // -- MENU UTILS --
 // ----------------
 
+//WARN: THIS MALLOCS DATA, YOU MUST CLEAN UP THE DATA!
+void initialize_easy_menu_state(struct EasyMenuState * state)
+{
+   //Need at LEAST menu_items and title
+   state->_has_title = (state->title != NULL && strlen(state->title));
+   state->_title_height = state->_has_title ? (1 + char_occurrences(state->title, '\n')) : 0;
+
+   //Setup for menu item calculation
+   state->_menu_strings = malloc(MAX_MENU_ITEMS * sizeof(char *));
+   state->_menu_num = 0;
+   state->_menu_strings[0] = state->menu_items;
+
+   //Find the locations of each menu option within the items string
+   while(state->_menu_num < MAX_MENU_ITEMS && *state->_menu_strings[state->_menu_num] != 0)
+   {
+      state->_menu_strings[state->_menu_num + 1] = state->_menu_strings[state->_menu_num] + 
+         strlen(state->_menu_strings[state->_menu_num]) + 1;
+      state->_menu_num++;
+   }
+
+   //The 2 is for the dots; we make room even if they're not used
+   u8 min_totalheight = state->_title_height + 2; 
+
+   if(state->max_height < min_totalheight)
+   {
+      LOGDBG("MENU TOO SMALL, INCREASING FROM %d TO %d", state->max_height, min_totalheight);
+      state->max_height = min_totalheight;
+   }
+
+   //Assume they won't all fit (saves a duplicate calculation in code)
+   state->_display_items = state->max_height - state->_title_height - 2; 
+
+   //Oops, they actually would've fit lol
+   if(state->_display_items > state->_menu_num) 
+      state->_display_items = state->_menu_num;
+
+   state->selected_index = 0;
+   state->menu_ofs = 0;
+};
+
+void clean_easy_menu_state(struct EasyMenuState * state)
+{
+   free(state->_menu_strings);
+}
+
+void draw_easy_menu(struct EasyMenuState * state)
+{
+   //Sort of like a "full clear"
+   printf("\x1b[0m\x1b[%d;1H%*s", state->top, (state->_title_height + state->_display_items + 2) * 50, "");
+
+   if(state->_has_title)
+      printf("\x1b[%d;1H %s\n", state->top, state->title); //Still keeping that space for some reason.
+
+   //Show if there's more to the menu 
+   printf("\x1b[0m\x1b[%d;3H%s", state->top + state->_title_height, 
+         (state->menu_ofs > 0) ? "..." : "   ");
+   printf("\x1b[%d;3H%s", state->top + state->_title_height + state->_display_items + 1, 
+         (state->_menu_num > state->menu_ofs + state->_display_items) ? "..." : "   ");
+
+   //Print menu. When you get to the selected item, do a different bg
+   for(u8 i = 0; i < state->_display_items; i++)
+   {
+      u32 im = i + state->menu_ofs;
+      printf("\x1b[%d;1H\x1b[%s  %-48s", 
+         state->top + state->_title_height + 1 + i,
+         state->selected_index == im ? "47;30m" : "0m", 
+         state->_menu_strings[im]);
+   }
+}
+
+
 //Menu items must be packed together, separated by \0. Last item needs two \0
 //after. CONTROL WILL BE GIVEN FULLY TO THIS MENU UNTIL IT FINISHES!
 s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u32 exit_buttons)

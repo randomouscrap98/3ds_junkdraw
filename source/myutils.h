@@ -43,6 +43,32 @@ u32 rgba16_to_rgba32c(u16 val);
 void convert_palette(u32 * original, u16 * destination, u16 size);
 
 // MENU STUFF
+
+// All the information needed to draw a menu in a given state
+struct EasyMenuState
+{
+   //You need to set these for the menu to function all right
+   const char * title;
+   const char * menu_items;
+   u8 top;
+   u8 max_height; //set to 0 for unlimited height
+   
+   //Cached data (you don't need to set these)
+   const char ** _menu_strings;
+   u32 _menu_num;
+   bool _has_title;
+   u8 _title_height;
+   u8 _display_items; 
+
+   //Menu tracking
+   u32 selected_index;
+   u32 menu_ofs;
+};
+
+void initialize_easy_menu_state(struct EasyMenuState * state);
+void clean_easy_menu_state(struct EasyMenuState * state);
+void draw_easy_menu(struct EasyMenuState * state);
+
 s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u32 exit_btns);
 void easy_ok(const char * title, u8 top);
 bool easy_confirm(const char * title, u8 top); 
