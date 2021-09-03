@@ -198,6 +198,47 @@ void draw_easy_menu(struct EasyMenuState * state)
    }
 }
 
+//Given key presses, modify the given menu state.
+bool modify_easy_menu_state(struct EasyMenuState * state, u32 kDown, u32 kRepeat)
+{
+   if(kDown & state->accept_buttons)
+      return true;
+   if(kDown & state->cancel_buttons) 
+      { state->selected_index= -1; return true; }
+   if(kRepeat & KEY_UP) 
+      state->selected_index = (state->selected_index - 1 + state->_menu_num) % state->_menu_num;
+   if(kRepeat & KEY_DOWN) 
+      state->selected_index = (state->selected_index + 1) % state->_menu_num;
+
+   //Move the offset if the selected index goes outside visibility
+   if(state->selected_index < state->menu_ofs) 
+      state->menu_ofs = state->selected_index;
+   if(state->selected_index >= state->menu_ofs + state->_display_items) 
+      state->menu_ofs = state->selected_index - state->_display_items + 1;
+
+   return false;
+}
+
+//Get the text for the given menu item from a menu item blob
+const char * get_menu_item(const char * menu_items, u32 length, u32 item)
+{
+   u32 strings = 0;
+
+   for(u32 i = 0; i < length; i++)
+   {
+      //This will always be true on the NEXT character, which is after the \0
+      //and is good, keep it first.
+      if(strings == item)
+         return menu_items + i;
+
+      if(!menu_items[i])
+         strings++;
+   }
+
+   return NULL;
+}
+
+
 
 //Menu items must be packed together, separated by \0. Last item needs two \0
 //after. CONTROL WILL BE GIVEN FULLY TO THIS MENU UNTIL IT FINISHES!
@@ -208,91 +249,26 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
    state.menu_items = menu_items;
    state.top = top;
    state.max_height = display; //Just for now; but this will severely limit the menus!
+   state.cancel_buttons = exit_buttons;
+   state.accept_buttons = KEY_A;
 
    initialize_easy_menu_state(&state);
-
-
-   //s32 menu_on = 0;
-   //u32 menu_num = 0;
-   //u32 menu_ofs = 0;
-
-   //const char ** menu_str = malloc(MAX_MENU_ITEMS * sizeof(char *));
-   //menu_str[0] = menu_items;
-   //bool has_title = (title != NULL && strlen(title));
-   //u8 menudispofs = has_title ? (2 + char_occurrences(title, '\n')) : 1;
-
-   ////Parse out the menu positions to make it easier to print them
-   //while(menu_num < MAX_MENU_ITEMS && *menu_str[menu_num] != 0)
-   //{
-   //   menu_str[menu_num + 1] = menu_str[menu_num] + strlen(menu_str[menu_num]) + 1;
-   //   menu_num++;
-   //}
-
-   ////Set display properly, don't want an overlong menu. Users can pass in 0 to
-   ////show all items (please be careful with this option)
-   //if(!display || display > menu_num) display = menu_num;
-
-   ////Print title, 1 over
-   //if(has_title)
-   //{
-   //   printf("\x1b[0m\x1b[%d;1H%*s", top, menudispofs * 50, "");
-   //   printf("\x1b[%d;1H %s\n", top, title); //Still keeping that space for some reason.
-   //}
-
-   //LOGDBG("MOFS: %d, T: %s", menudispofs, title);
-
    clear_easy_menu(&state);
 
-   //I want to see how inefficient printf is, so I'm doing this awful on purpose 
    while(aptMainLoop())
    {
       hidScanInput();
-      u32 kDown = hidKeysDown();
-      u32 kRepeat = hidKeysDownRepeat();
 
-      if(kDown & KEY_A) 
+      if(modify_easy_menu_state(&state, hidKeysDown(), hidKeysDownRepeat())) 
          break;
-      if(kDown & exit_buttons) 
-         { state.selected_index= -1; break; }
-      if(kRepeat & KEY_UP) 
-         state.selected_index = (state.selected_index - 1 + state._menu_num) % state._menu_num;
-      if(kRepeat & KEY_DOWN) 
-         state.selected_index= (state.selected_index + 1) % state._menu_num;
-
-      //Move the offset if the selected index goes outside visibility
-      if(state.selected_index < state.menu_ofs) 
-         state.menu_ofs = state.selected_index;
-      if(state.selected_index >= state.menu_ofs + state._display_items) 
-         state.menu_ofs = state.selected_index - state._display_items + 1;
 
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-
       draw_easy_menu(&state);
-
-      //Show if there's more to the menu 
-      //printf("\x1b[0m\x1b[%d;3H%s", top + menudispofs - 1, menu_ofs > 0 ? "..." : "   ");
-      //printf("\x1b[%d;3H%s", top + menudispofs + display, (menu_num > menu_ofs + display) ? "..." : "   ");
-
-      //Print menu. When you get to the selected item, do a different bg
-      //for(u8 i = 0; i < display; i++)
-      //{
-      //   u8 menutop = top + menudispofs + i;
-      //   u32 im = i + menu_ofs;
-      //   if(menu_on == im)
-      //      printf("\x1b[%d;1H\x1b[47;30m  %-48s", menutop, menu_str[im]);
-      //   else
-      //      printf("\x1b[%d;1H\x1b[0m  %-48s", menutop, menu_str[im]);
-      //}
-
       C3D_FrameEnd(0);
    }
 
    clear_easy_menu(&state);
    free_easy_menu_state(&state);
-
-   ////Clear the menu area
-   //for(u8 i = 0; i < menudispofs + display + 1; i++)
-   //   printf("\x1b[%d;1H\x1b[0m%-50s", top + i, "");
 
    return state.selected_index;
 }
@@ -372,25 +348,6 @@ bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_len
       printf("\x1b[%d;1H\x1b[0m%-50s", top + i, "");
 
    return confirmed;
-}
-
-//Get the text for the given menu item from a menu item blob
-const char * get_menu_item(const char * menu_items, u32 length, u32 item)
-{
-   u32 strings = 0;
-
-   for(u32 i = 0; i < length; i++)
-   {
-      //This will always be true on the NEXT character, which is after the \0
-      //and is good, keep it first.
-      if(strings == item)
-         return menu_items + i;
-
-      if(!menu_items[i])
-         strings++;
-   }
-
-   return NULL;
 }
 
 

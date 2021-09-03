@@ -53,6 +53,8 @@ struct EasyMenuState
    const char * menu_items;
    u8 top;
    u8 max_height; //set to 0 for unlimited height
+   u32 accept_buttons;
+   u32 cancel_buttons;
    
    //Cached data (you don't need to set these)
    const char ** _menu_strings;
@@ -66,18 +68,23 @@ struct EasyMenuState
    u32 menu_ofs;
 };
 
+//Generic menu operations; can be used without context
 void initialize_easy_menu_state(struct EasyMenuState * state);
 void free_easy_menu_state(struct EasyMenuState * state);
 void draw_easy_menu(struct EasyMenuState * state);
 void clear_easy_menu(struct EasyMenuState * state);
+bool modify_easy_menu_state(struct EasyMenuState * state, u32 kdown, u32 krepeat);
 
+const char * get_menu_item(const char * menu_items, u32 length, u32 item);
+
+//Actual menu implementations. A little more exact in use case;
+//might get replaced
 s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u32 exit_btns);
 void easy_ok(const char * title, u8 top);
 bool easy_confirm(const char * title, u8 top); 
 bool easy_warn(const char * warn, const char * title, u8 top);
 bool enter_text_fixed(const char * title, u8 top, char * container, 
       u8 max_entry, bool clear, u32 exit_btns);
-const char * get_menu_item(const char * menu_items, u32 length, u32 item);
 
 // PRINT STUFF
 void printf_flush(const char * format, ...);
