@@ -163,15 +163,12 @@ void initialize_easy_menu_state(struct EasyMenuState * state)
 }
 
 //Cleans up any weird data initialized in menu state
-void free_easy_menu_state(struct EasyMenuState * state)
-{
+void free_easy_menu_state(struct EasyMenuState * state) {
    free(state->_menu_strings);
 }
 
 //Clears the drawn easy menu
-void clear_easy_menu(struct EasyMenuState * state)
-{
-   //Sort of like a "full clear"
+void clear_easy_menu(struct EasyMenuState * state) {
    printf("\x1b[0m\x1b[%d;1H%*s", state->top, (state->_title_height + state->_display_items + 2) * 50, "");
 }
 
@@ -274,8 +271,7 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
 }
 
 //Set up the menu to be a simple confirmation
-bool easy_confirm(const char * title, u8 top)
-{
+bool easy_confirm(const char * title, u8 top) {
    return 1 == easy_menu(title, "No\0Yes\0", top, 0, KEY_B);
 }
 
@@ -292,62 +288,113 @@ bool easy_warn(const char * warn, const char * title, u8 top)
    return value;
 }
 
+
+// -- enter text stuff --
+
+void initialize_enter_text_state(struct EnterTextState * state)
+{
+   state->_has_title = (state->title != NULL && strlen(state->title));
+   state->_title_height = state->_has_title ? (1 + char_occurrences(state->title, '\n')) : 0;
+   state->_charset_count = strlen(state->charset);
+
+   state->text = malloc(sizeof(char) * (state->entry_max + 1));
+   memset(state->text, state->charset[0], state->entry_max); 
+   state->text[state->entry_max] = '\0';
+   state->selected_index = 0;
+   state->confirmed = false;
+}
+
+void free_enter_text_state(struct EnterTextState * state) {
+   free(state->text);
+   state->text = NULL;
+}
+
+//3 is: 1 for text entry, 2 for cursor (above and below)
+void clear_enter_text(struct EnterTextState * state) {
+   printf("\x1b[0m\x1b[%d;1H%*s", state->top, (state->_title_height + 3) * 50, "");
+}
+
+void draw_enter_text(struct EnterTextState * state)
+{
+   if(state->_has_title)
+      printf("\x1b[%d;1H\x1b[0m %-49s", state->top, state->title);
+
+   u8 y = state->top + state->_title_height + 1;
+
+   for(u8 i = 0; i < state->entry_max; i++)
+   {
+      u8 x = 3 + i;
+      bool selected = (i == state->selected_index);
+      printf("\x1b[%d;%dH%c\x1b[%d;%dH%c\x1b[%d;%dH%c", 
+            y, x, state->text[i], //The char data
+            y - 1, x, selected ? '-' : ' ',  //The up/down
+            y + 1, x, selected ? '-' : ' ');
+   }
+}
+
+bool modify_enter_text_state(struct EnterTextState * state, u32 kDown, u32 kRepeat)
+{
+   u8 current_index = (strchr(state->charset, state->text[state->selected_index]) - state->charset);
+
+   if(kDown & state->accept_buttons) { state->confirmed = true; return true; }
+   if(kDown & state->cancel_buttons) { state->confirmed = false; return true; }
+   if(kRepeat & KEY_RIGHT && state->selected_index < state->entry_max - 1) state->selected_index++;
+   if(kRepeat & KEY_LEFT && state->selected_index > 0) state->selected_index--;
+   if(kRepeat & KEY_UP) {
+      state->text[state->selected_index] = 
+         state->charset[(current_index + 1) % state->_charset_count];
+   }
+   if(kRepeat & KEY_DOWN) {
+      state->text[state->selected_index] = 
+         state->charset[(current_index - 1 + state->_charset_count) % state->_charset_count];
+   }
+
+   return false;
+}
+
+
 //Allows user to submit a fixed length text using the dpad. HIGHLY limited characters
 bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_length,
       bool clear, u32 exit_buttons)
 {
-   bool confirmed = false;
-   bool has_title = (title != NULL && strlen(title));
    char chars[ENTERTEXT_CHARARRSIZE];
    strcpy(chars, ENTERTEXT_CHAR);
-   u8 av_ch = strlen(chars); //total unique character count
-   if(clear) memset(container, chars[0], fixed_length); 
-   container[fixed_length] = '\0';
 
-   u8 ud = top + (has_title ? 2 : 1);
-   u8 pos = 0;
+   struct EnterTextState state;
+   state.title = title;
+   state.top = top;
+   state.charset = chars;
+   state.entry_max = fixed_length;
+   state.cancel_buttons = exit_buttons;
+   state.accept_buttons = KEY_A;
 
-   //Print title, 1 over
-   if(has_title)
-      printf("\x1b[%d;1H\x1b[0m %-49s", top, title);
+   initialize_enter_text_state(&state);
 
-   printf("%-150s","");
+   //Weird code, but this will all go away anyway
+   if(!clear) strcpy(state.text, container);
+
+   clear_enter_text(&state);
 
    //I want to see how inefficient printf is, so I'm doing this awful on purpose 
    while(aptMainLoop())
    {
       hidScanInput();
-      u32 kDown = hidKeysDown();
-      u32 kRepeat = hidKeysDownRepeat();
-      u8 current_index = (strchr(chars, container[pos]) - chars);
 
-      if(kDown & KEY_A) { confirmed = true; break; }
-      if(kDown & exit_buttons) break;
-      if(kRepeat & KEY_RIGHT && pos < fixed_length - 1) pos++;
-      if(kRepeat & KEY_LEFT && pos > 0) pos--;
-      if(kRepeat & KEY_UP) container[pos] = chars[(current_index + 1) % av_ch];
-      if(kRepeat & KEY_DOWN) container[pos] = chars[(current_index - 1 + av_ch) % av_ch];
+      if(modify_enter_text_state(&state, hidKeysDown(), hidKeysDownRepeat())) 
+         break;
 
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-
-      //Print menu. When you get to the selected item, do a different bg
-      for(u8 i = 0; i < fixed_length; i++)
-      {
-         u8 lr = 3 + i;
-         printf("\x1b[%d;%dH%c\x1b[%d;%dH%c\x1b[%d;%dH%c", 
-               ud, lr, container[i], //The char data
-               ud - 1, lr, i==pos ? '-' : ' ',  //The up/down
-               ud + 1, lr, i==pos ? '-' : ' ');
-      }
-
+      draw_enter_text(&state);
       C3D_FrameEnd(0);
    }
 
-   //Clear the text area
-   for(u8 i = 0; i < (has_title ? 2 : 1) + 2; i++)
-      printf("\x1b[%d;1H\x1b[0m%-50s", top + i, "");
+   //Get the data out BEFORE we free it.
+   strcpy(container, state.text);
 
-   return confirmed;
+   clear_enter_text(&state);
+   free_enter_text_state(&state);
+
+   return state.confirmed;
 }
 
 
@@ -417,7 +464,7 @@ bool file_exists (char * filename)
    return (stat (filename, &buffer) == 0);
 }
 
-//Get directories in menu format (separated by 0, last item has 2 0)
+//Get directories in menu format (separated by \0, last item has 2 \0)
 s32 get_directories(char * directory, char * container, u32 c_size)
 {
    s32 count = 0;

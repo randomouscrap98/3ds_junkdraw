@@ -83,6 +83,34 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
 void easy_ok(const char * title, u8 top);
 bool easy_confirm(const char * title, u8 top); 
 bool easy_warn(const char * warn, const char * title, u8 top);
+
+struct EnterTextState
+{
+   //You need to set these for the input to function
+   const char * title;
+   u8 top;
+   char * charset;
+   u8 entry_max;
+   u32 accept_buttons;
+   u32 cancel_buttons;
+
+   bool _has_title;
+   u8 _title_height;
+   u8 _charset_count;
+
+   //State tracking
+   bool confirmed;
+   u32 selected_index;
+   char * text;
+};
+
+//Generic text input operations.
+void initialize_enter_text_state(struct EnterTextState * state);
+void free_enter_text_state(struct EnterTextState * state);
+void draw_enter_text(struct EnterTextState * state);
+void clear_enter_text(struct EnterTextState * state);
+bool modify_enter_text_state(struct EnterTextState * state, u32 kdown, u32 krepeat);
+
 bool enter_text_fixed(const char * title, u8 top, char * container, 
       u8 max_entry, bool clear, u32 exit_btns);
 
