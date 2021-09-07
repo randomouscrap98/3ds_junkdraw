@@ -16,6 +16,7 @@
 #include "constants.h"
 #include "myutils.h"
 #include "dcv.h"
+#include "gamestate.h"
 
 
 

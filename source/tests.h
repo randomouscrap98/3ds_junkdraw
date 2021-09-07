@@ -252,6 +252,72 @@ int test_convertlines()
    return 0;
 }
 
+int test_insert1evt(struct GameEvent ** list, game_event_handler handler, u8 priority, u32 eid, u8 epos)
+{
+   struct GameEvent * result = insert_gameevent(list, handler, priority);
+   //printf("l%p;", list);
+
+   if(result == NULL)
+   {
+      printf("insert_gameevent returned null for expected eid %ld!\n", eid);
+      return 1;
+   }
+
+   if(result->id != eid)
+   {
+      printf("Expected insert_gamevent id: %ld, actual: %ld\n", eid, result->id);
+      return 1;
+   }
+
+   int pos = 0;
+   struct GameEvent * this;
+
+   for(this = *list; this != NULL; this = this->next_event)
+   {
+      if(this->id == eid)
+      {
+         if(pos == epos)
+         {
+            printf(".");
+            return 0;
+         }
+         else
+         {
+            printf("Expected insert_gamevent (eid %ld) pos: %d, actual: %d\n", eid, epos, pos);
+            return 1;
+         }
+      }
+      pos++;
+   }
+
+   printf("Inserted element missing from insert_gameevent! eid: %ld", eid);
+   return 1;
+}
+
+int test_insertevent()
+{
+   //Start with a null pointer, it's an empty list
+   struct GameEvent * list = NULL;
+
+   //Empty insert
+   if(test_insert1evt(&list, NULL, DEFAULT_EVENT_PRIORITY, 1, 0)) return 1;
+
+   //Insert with same priority, should go second and third
+   if(test_insert1evt(&list, NULL, DEFAULT_EVENT_PRIORITY, 2, 1)) return 1;
+   if(test_insert1evt(&list, NULL, DEFAULT_EVENT_PRIORITY, 3, 2)) return 1;
+
+   //Insert with high priority, should go first
+   if(test_insert1evt(&list, NULL, HIGH_EVENT_PRIORITY, 4, 0)) return 1;
+
+   //insert with very low priority, should go last
+   if(test_insert1evt(&list, NULL, DEFAULT_EVENT_PRIORITY - 1, 5, 4)) return 1;
+
+   //Insert with medium priority again, should go second to last
+   if(test_insert1evt(&list, NULL, DEFAULT_EVENT_PRIORITY, 6, 4)) return 1;
+
+   return 0;
+}
+
 void run_tests()
 {
    printf("Running tests; only errors will be displayed\n");
@@ -262,6 +328,7 @@ void run_tests()
    if(test_signedtospecial()) return; 
    if(test_inttovarwidth()) return; 
    if(test_convertlines()) return; 
+   if(test_insertevent()) return;
    printf("\nAll tests passed\n");
 }
 
