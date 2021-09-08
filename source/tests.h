@@ -252,7 +252,7 @@ int test_convertlines()
    return 0;
 }
 
-int test_insert1evt(struct GameEvent ** list, game_event_handler handler, u8 priority, u32 eid, u8 epos)
+int test_insert1evt(struct GameEvent ** list, void * handler, u8 priority, u32 eid, u8 epos)
 {
    struct GameEvent * result = insert_gameevent(list, handler, priority);
    //printf("l%p;", list);

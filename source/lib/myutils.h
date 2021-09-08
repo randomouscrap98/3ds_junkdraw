@@ -4,7 +4,7 @@
 
 #include <3ds.h>
 #include <stdio.h>
-#include "cconfig.h"
+#include "libconfig.h"
 
 #ifdef DEBUG_PRINT_TIME
 #define LOGTIME() { time_t rawtime = time(NULL); \

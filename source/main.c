@@ -12,13 +12,13 @@
 //#define DEBUG_COORD
 //#define DEBUG_DATAPRINT
 
-#include "entity.h"
 #include "constants.h"
-#include "myutils.h"
-#include "dcv.h"
-#include "gamestate.h"
+//#include "lib/entity.h"
+#include "lib/myutils.h"
+#include "lib/dcv.h"
+#include "lib/gameevent.h"
 
-
+#include "gamemain.h"
 
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
@@ -1198,6 +1198,15 @@ s8 host_local(udsNetworkStruct * networkstruct, udsBindContext * bindctx)
          break; \
    } udsUnbind(&bind_ctx); udsExit(); ct = 0; }
 
+void set_gstate_inputs(struct GameState * gstate)
+{
+   gstate->k_down = hidKeysDown();
+   gstate->k_repeat = hidKeysDownRepeat();
+   gstate->k_up = hidKeysUp();
+   gstate->k_held = hidKeysHeld();
+   hidTouchRead(&gstate->touch_position);
+   hidCircleRead(&gstate->circle_position);
+}
 
 int main(int argc, char** argv)
 {
@@ -1208,6 +1217,12 @@ int main(int argc, char** argv)
 
    consoleInit(GFX_TOP, NULL);
    C3D_RenderTarget* screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
+
+   //TODO: eventually, I want the game state to include most of what you'd need
+   //to reboot the system and still have the exact same setup.
+   struct GameState gstate;
+   //struct GameState estate;            //The state passed to events
+   struct GameEvent * equeue = NULL;   //The head of the event queue
 
    //weird byte order? 16 bits of color are at top
    const u32 screen_color = SCREEN_COLOR;
@@ -1235,8 +1250,8 @@ int main(int argc, char** argv)
    bool palette_active = false;
    bool flush_layers = true;
 
-   circlePosition pos;
-   touchPosition current_touch;
+   //circlePosition pos;
+   //touchPosition current_touch;
    u32 current_frame = 0;
    u32 end_frame = 0;
    s8 zoom_power = 0;
@@ -1281,12 +1296,8 @@ int main(int argc, char** argv)
    while(aptMainLoop())
    {
       hidScanInput();
-      u32 kDown = hidKeysDown();
-      u32 kRepeat = hidKeysDownRepeat();
-      u32 kUp = hidKeysUp();
-      u32 kHeld = hidKeysHeld();
-      hidTouchRead(&current_touch);
-		hidCircleRead(&pos);
+
+      set_gstate_inputs(&gstate);
 
       // Respond to user input
       if(kDown & KEY_L && !(kHeld & KEY_R)) palette_active = !palette_active;
@@ -1376,6 +1387,8 @@ int main(int argc, char** argv)
 
       update_screenmodifier(&screen_mod, pos);
 
+
+
       // Render the scene
       C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
@@ -1433,6 +1446,18 @@ int main(int argc, char** argv)
       // -- OTHER DRAW SECTION --
       C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, 
             GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
+
+
+      //TODO: Assume all events want to happen within the standard drawing
+      //section (not the blit-tool-to-layer and not the draw-bottom-screen)
+
+      //Run through the event queue and.. do it all
+      for(struct GameEvent * ge = equeue; ge != NULL; ge = ge->next_event)
+         ((game_event_handler)ge->handler)(&gstate);
+      
+      //SHALLOW COPY the gstate to our event state so changes in events don't
+      //alter the real game state (is this desirable???)
+      //memcpy(estate, gstate, sizeof(struct GameEvent));
 
       if(!(current_frame % 30)) print_time(current_frame % 60);
       if(!(current_frame % CONSTATUS_ANIMTIME)) 
