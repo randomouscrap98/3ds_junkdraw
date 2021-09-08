@@ -12,12 +12,12 @@
 //#define DEBUG_COORD
 //#define DEBUG_DATAPRINT
 
-#include "constants.h"
 //#include "lib/entity.h"
-#include "myutils.h"
-#include "dcv.h"
-#include "gameevent.h"
+#include "lib/myutils.h"
+#include "lib/dcv.h"
+#include "lib/gameevent.h"
 
+#include "constants.h"
 #include "gamemain.h"
 
 // TODO: Figure out these weirdness things:

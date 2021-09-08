@@ -2,9 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "lib/myutils.h"
+#include "lib/gameevent.h"
+
 #include "gamemain.h"
-#include "myutils.h"
-#include "gameevent.h"
 
 
 void initialize_gamestate(struct GameState * state)

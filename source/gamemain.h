@@ -4,7 +4,7 @@
 
 #include <3ds.h>
 
-#include "gameevent.h"
+#include "lib/gameevent.h"
 
 //Represents most of what you'd need to keep track of general state.
 //Consider splitting out the various portions in preparation for a more
