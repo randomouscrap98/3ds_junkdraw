@@ -14,9 +14,9 @@
 
 #include "constants.h"
 //#include "lib/entity.h"
-#include "lib/myutils.h"
-#include "lib/dcv.h"
-#include "lib/gameevent.h"
+#include "myutils.h"
+#include "dcv.h"
+#include "gameevent.h"
 
 #include "gamemain.h"
 
@@ -1198,16 +1198,6 @@ s8 host_local(udsNetworkStruct * networkstruct, udsBindContext * bindctx)
          break; \
    } udsUnbind(&bind_ctx); udsExit(); ct = 0; }
 
-void set_gstate_inputs(struct GameState * gstate)
-{
-   gstate->k_down = hidKeysDown();
-   gstate->k_repeat = hidKeysDownRepeat();
-   gstate->k_up = hidKeysUp();
-   gstate->k_held = hidKeysHeld();
-   hidTouchRead(&gstate->touch_position);
-   hidCircleRead(&gstate->circle_position);
-}
-
 int main(int argc, char** argv)
 {
    gfxInitDefault();
@@ -1298,6 +1288,12 @@ int main(int argc, char** argv)
       hidScanInput();
 
       set_gstate_inputs(&gstate);
+      u32 kDown = gstate.k_down;
+      u32 kUp = gstate.k_up;
+      u32 kRepeat = gstate.k_repeat;
+      u32 kHeld = gstate.k_held;
+      circlePosition pos = gstate.circle_position;
+      touchPosition current_touch = gstate.touch_position;
 
       // Respond to user input
       if(kDown & KEY_L && !(kHeld & KEY_R)) palette_active = !palette_active;

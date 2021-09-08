@@ -5,11 +5,6 @@
 #include "gameevent.h"
 #include "myutils.h"
 
-void initialize_gamestate(struct GameState * state)
-{
-   memset(state, 0, sizeof(struct GameState));
-}
-
 u32 insert_event_globalid = 0;
 
 void reset_gameevent_globalid() { insert_event_globalid = 0; }
@@ -22,7 +17,7 @@ void initialize_gameevent(struct GameEvent * event)
 
 //Insert an event into the given queue. NULL queue is empty queue. Events with
 //the same priority will preserve insert temporal order (oldest first).
-struct GameEvent * insert_gameevent(struct GameEvent ** event_queue, game_event_handler handler, u8 priority)
+struct GameEvent * insert_gameevent(struct GameEvent ** event_queue, void * handler, u8 priority)
 {
    //Always create a new event
    struct GameEvent * new_event = malloc(sizeof(struct GameEvent));

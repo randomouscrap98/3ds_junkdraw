@@ -4,6 +4,8 @@
 
 #include <3ds.h>
 
+#include "gameevent.h"
+
 //Represents most of what you'd need to keep track of general state.
 //Consider splitting out the various portions in preparation for a more
 //"modular" approach... if that's what you need, anyway.
@@ -25,9 +27,23 @@ struct GameState
    u16 draw_page;
    u8 draw_tool;
 };
+
 void initialize_gamestate(struct GameState * state);
 
-typedef void * (*game_event_handler)(struct GameState *);
+typedef struct GameState * gs;
+typedef void (*game_event_handler)(gs);
 
+//ALL the events, gosh is this even OK??
+void set_gstate_inputs(gs gstate);
+void draw_controls(gs gstate);
+
+
+struct DefaultEventPriority
+{
+   game_event_handler handler;
+   u8 priority;
+};  /* C's shortcut struct define/initialization */
+
+extern struct DefaultEventPriority default_event_priorities[];
 
 #endif
