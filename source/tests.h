@@ -294,8 +294,48 @@ int test_insert1evt(struct GameEvent ** list, game_event_handler handler, u8 pri
    return 1;
 }
 
+int test_remove1evt(struct GameEvent ** list, u32 eid, u32 epos, u32 size)
+{
+   s32 pos = remove_gameevent(list, eid);
+
+   if(pos != epos)
+   {
+      printf("remove_gameevent eid %ld returned pos %ld, expected %ld!\n", eid, pos, epos);
+      return 1;
+   }
+
+   struct GameEvent * this;
+
+   for(this = *list; this != NULL; this = this->next_event)
+   {
+      if(this->id == eid)
+      {
+         printf("remove_gameevent eid %ld, removed element still exists!\n", eid);
+         return 1;
+      }
+   }
+
+   u32 real_size = gameevent_queue_count(list);
+   if(real_size != size)
+   {
+      printf("remove_gameevent eid %ld, list size is %ld, expected %ld!\n", eid, real_size, size);
+      return 1;
+   }
+
+   if(size == 0 && (*list) != NULL)
+   {
+      printf("remove_gameevent eid %ld, list not null after removing last element!\n", eid);
+      return 1;
+   }
+
+   printf(".");
+   return 0;
+}
+
 int test_insertevent()
 {
+   reset_gameevent_globalid();
+
    //Start with a null pointer, it's an empty list
    struct GameEvent * list = NULL;
 
@@ -315,6 +355,47 @@ int test_insertevent()
    //Insert with medium priority again, should go second to last
    if(test_insert1evt(&list, NULL, DEFAULT_EVENT_PRIORITY, 6, 4)) return 1;
 
+   //Now you have to be able to remove every event!
+   u32 freed_count = free_gameevent_queue(&list);
+   if(freed_count != 6)
+   {
+      printf("free_gameevent_queue in test_insert expected %d elements, freed %ld\n", 6, freed_count);
+      return 1;
+   }
+   else
+   {
+      printf(".");
+      return 0;
+   }
+}
+
+int test_removeevent()
+{
+   reset_gameevent_globalid();
+
+   //Start with a null pointer, it's an empty list
+   struct GameEvent * list = NULL;
+
+   //First, can we remove from an empty list? We should get -1
+   if(test_remove1evt(&list, 1, -1, 0)) return 1;
+   if(test_insert1evt(&list, NULL, DEFAULT_EVENT_PRIORITY, 1, 0)) return 1;
+   if(test_remove1evt(&list, 2, -1, 1)) return 1;
+
+   //Now, can we remove the first element?
+   if(test_remove1evt(&list, 1, 0, 0)) return 1;
+
+   //Well now we need to insert more elements
+   if(test_insert1evt(&list, NULL, DEFAULT_EVENT_PRIORITY, 2, 0)) return 1;
+   if(test_insert1evt(&list, NULL, DEFAULT_EVENT_PRIORITY, 3, 1)) return 1;
+   if(test_insert1evt(&list, NULL, DEFAULT_EVENT_PRIORITY, 4, 2)) return 1;
+
+   //If we remove the MIDDLE and LAST element, does the list still work?
+   if(test_remove1evt(&list, 3, 1, 2)) return 1;
+   if(test_remove1evt(&list, 4, 1, 1)) return 1;
+
+   //And then the first element again for good measure (and to make the list empty)
+   if(test_remove1evt(&list, 2, 0, 0)) return 1;
+
    return 0;
 }
 
@@ -329,6 +410,7 @@ void run_tests()
    if(test_inttovarwidth()) return; 
    if(test_convertlines()) return; 
    if(test_insertevent()) return;
+   if(test_removeevent()) return;
    printf("\nAll tests passed\n");
 }
 

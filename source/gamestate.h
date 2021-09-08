@@ -41,8 +41,11 @@ struct GameEvent
    struct GameEvent * next_event;
 };
 
+void reset_gameevent_globalid();
 void initialize_gamestate(struct GameState * state);
 struct GameEvent * insert_gameevent(struct GameEvent ** event_queue, game_event_handler handler, u8 priority);
 s32 remove_gameevent(struct GameEvent ** event_queue, u32 id);
+u32 free_gameevent_queue(struct GameEvent ** event_queue);
+u32 gameevent_queue_count(struct GameEvent ** event_queue);
 
 #endif

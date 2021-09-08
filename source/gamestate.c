@@ -12,6 +12,8 @@ void initialize_gamestate(struct GameState * state)
 
 u32 insert_event_globalid = 0;
 
+void reset_gameevent_globalid() { insert_event_globalid = 0; }
+
 void initialize_gameevent(struct GameEvent * event)
 {
    event->id = ++insert_event_globalid;
@@ -92,4 +94,37 @@ s32 remove_gameevent(struct GameEvent ** event_queue, u32 id)
    free(free_this);
 
    return index;
+}
+
+//Free ALL the game events from the given queue
+u32 free_gameevent_queue(struct GameEvent ** event_queue)
+{
+   struct GameEvent* cur = (*event_queue); 
+   u32 count = 0;
+
+   while(cur != NULL)
+   {
+      struct GameEvent * next = cur->next_event;
+      free(cur);
+      cur = next;
+      count++;
+   } 
+
+   (*event_queue) = NULL;
+
+   return count;
+}
+
+u32 gameevent_queue_count(struct GameEvent ** event_queue)
+{
+   struct GameEvent* cur = (*event_queue); 
+   u32 count = 0;
+
+   while(cur != NULL)
+   {
+      count++;
+      cur = cur->next_event;
+   } 
+
+   return count;
 }
