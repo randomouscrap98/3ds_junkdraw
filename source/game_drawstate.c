@@ -113,17 +113,19 @@ void init_default_drawstate(struct DrawState * state)
 {
    state->zoom_power = 0;
    state->page = 0;
-   //state->layer_count = DEFAULT_LAYER_COUNT;
-   state->layer = DEFAULT_START_LAYER; //state->layer_count - 1; //Start on top layer
+   state->layer = DEFAULT_START_LAYER; 
 
    state->palette_count = sizeof(default_palette) / sizeof(u32);
    state->palette = malloc(state->palette_count * sizeof(u16));
    convert_palette(default_palette, state->palette, state->palette_count);
-   state->palette_index = DEFAULT_PALETTE_STARTINDEX;
+   state->current_color = state->palette + DEFAULT_PALETTE_STARTINDEX;
 
    state->tools = malloc(sizeof(default_tooldata));
    memcpy(state->tools, default_tooldata, sizeof(default_tooldata));
-   state->tool_index = TOOL_PENCIL;
+   state->current_tool = state->tools + TOOL_PENCIL;
+
+   state->min_width = DEFAULT_MIN_WIDTH;
+   state->max_width = DEFAULT_MAX_WIDTH;
 }
 
 //Only really applies to default initialized states
@@ -133,3 +135,27 @@ void free_drawstate(struct DrawState * state)
    free(state->palette);
 }
 
+void shift_drawstate_color(struct DrawState * state, s16 ofs)
+{
+   u16 i = state->current_color - state->palette;
+   state->current_color = state->palette +
+      ((i + ofs + state->palette_count) % (state->palette_count));
+}
+
+void shift_drawstate_width(struct DrawState * state, s16 ofs)
+{
+   //instead of rolling, this one clamps
+   state->current_tool->width =
+      C2D_Clamp(state->current_tool->width + ofs, state->min_width, state->max_width);
+}
+
+u16 get_drawstate_color(struct DrawState * state)
+{
+   return state->current_tool->has_static_color ? 
+      state->current_tool->static_color : *state->current_color;
+}
+
+void set_drawstate_tool(struct DrawState * state, u8 tool)
+{
+   state->current_tool = state->tools + tool;
+}

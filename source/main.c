@@ -1305,24 +1305,19 @@ int main(int argc, char** argv)
       circlePosition pos = gstate.circle_position;
       touchPosition current_touch = gstate.touch_position;
 
-            u16 po = drwst.palette_index / DEFAULT_PALETTE_SPLIT;
-            u8 pi = drwst.palette_index % DEFAULT_PALETTE_SPLIT;
+      u16 po = (drwst.current_color - drwst.palette) / DEFAULT_PALETTE_SPLIT;
+      u8 pi = (drwst.current_color - drwst.palette) % DEFAULT_PALETTE_SPLIT;
 
       // Respond to user input
       if(kDown & KEY_L && !(kHeld & KEY_R)) palette_active = !palette_active;
       if(kRepeat & KEY_DUP) MAIN_UPDOWN(1)
       if(kRepeat & KEY_DDOWN) MAIN_UPDOWN(-1)
-      if(kRepeat & KEY_DRIGHT) drwst.tools[drwst.tool_index].width += (kHeld & KEY_R ? 5 : 1);
-      if(kRepeat & KEY_DLEFT) drwst.tools[drwst.tool_index].width -= (kHeld & KEY_R ? 5 : 1);
-      if(kDown & KEY_A) drwst.tool_index = TOOL_PENCIL; //current_tool = TOOL_PENCIL;
-      if(kDown & KEY_B) drwst.tool_index = TOOL_ERASER; //current_tool = TOOL_ERASER;
+      if(kRepeat & KEY_DRIGHT) shift_drawstate_width(&drwst, (kHeld & KEY_R ? 5 : 1));
+      if(kRepeat & KEY_DLEFT) shift_drawstate_width(&drwst, -(kHeld & KEY_R ? 5 : 1));
+      if(kDown & KEY_A) set_drawstate_tool(&drwst, TOOL_PENCIL); 
+      if(kDown & KEY_B) set_drawstate_tool(&drwst, TOOL_ERASER);
       if(kHeld & KEY_L && kDown & KEY_R && palette_active) {
-         drwst.palette_index = (drwst.palette_index + DEFAULT_PALETTE_SPLIT) % (drwst.palette_count);
-         //palette_offset = (palette_offset + PALETTE_COLORS) % 
-         //   (sizeof(base_palette) / sizeof(base_palette[0]));
-         //convert_palette(base_palette + palette_offset, palette, PALETTE_COLORS);
-         //if(tool_data[current_tool].color_settable)
-         //   tool_data[current_tool].color = palette[palette_index];
+         shift_drawstate_color(&drwst, DEFAULT_PALETTE_SPLIT);
       }
       if(kDown & KEY_SELECT) {
          if(kHeld & KEY_R) { export_page(drwst.page, draw_data, draw_data_end, save_filename); } 
@@ -1381,10 +1376,11 @@ int main(int argc, char** argv)
          }
       }
       if(kDown & KEY_TOUCH) {
-         struct ToolData t = drwst.tools[drwst.tool_index];
-         pending.color = t.has_static_color ? t.static_color : drwst.palette[drwst.palette_index]; //tool_data->color;
-         pending.style = t.style; //tool_data->style;
-         pending.width = t.width; //tool_data->width;
+         //struct ToolData t = drwst.tools[drwst.tool_index];
+         pending.color = get_drawstate_color(&drwst);
+            //t.has_static_color ? t.static_color : drwst.palette[drwst.palette_index];
+         pending.style = drwst.current_tool->style;
+         pending.width = drwst.current_tool->width;
          pending.layer = drwst.layer;
       }
          //update_package_with_tool(&pending, &tool_data[current_tool]);
@@ -1392,12 +1388,12 @@ int main(int argc, char** argv)
 
       //Update zoom separately, since the update is always the same
       if(drwst.zoom_power != last_zoom_power) set_screenstate_zoom(&scrst, pow(2, drwst.zoom_power));
-      drwst.tools[drwst.tool_index].width = C2D_Clamp(drwst.tools[drwst.tool_index].width, MIN_WIDTH, MAX_WIDTH);
+      //drwst.tools[drwst.tool_index].width = C2D_Clamp(drwst.tools[drwst.tool_index].width, MIN_WIDTH, MAX_WIDTH);
 
       if(kRepeat & ~(KEY_TOUCH) || !current_frame)
       {
-         print_status(drwst.tools[drwst.tool_index].width, drwst.layer, drwst.zoom_power, 
-               drwst.tool_index, drwst.palette[drwst.palette_index], drwst.page);
+         print_status(drwst.current_tool->width, drwst.layer, drwst.zoom_power, 
+               drwst.tools - drwst.current_tool, *drwst.current_color, drwst.page);
       }
 
       touching = (kHeld & KEY_TOUCH) > 0;
@@ -1430,7 +1426,7 @@ int main(int argc, char** argv)
          if(palette_active)
          {
             update_paletteindex(&current_touch, &pi);
-            drwst.palette_index = po * DEFAULT_PALETTE_SPLIT + pi;
+            drwst.current_color = drwst.palette + po * DEFAULT_PALETTE_SPLIT + pi;
          }
          else
          {
@@ -1517,8 +1513,8 @@ int main(int argc, char** argv)
 
       draw_layers(layers, LAYER_COUNT, &scrst, scrst.bg_color);
       draw_scrollbars(&scrst);
-      draw_colorpicker(drwst.palette + po * DEFAULT_PALETTE_SPLIT, DEFAULT_PALETTE_SPLIT, drwst.tools[drwst.tool_index].has_static_color ?
-            DEFAULT_PALETTE_SPLIT + 1 : pi, !palette_active);
+      draw_colorpicker(drwst.palette + po * DEFAULT_PALETTE_SPLIT, DEFAULT_PALETTE_SPLIT, 
+            drwst.current_tool->has_static_color ? DEFAULT_PALETTE_SPLIT + 1 : pi, !palette_active);
 
       C3D_FrameEnd(0);
 

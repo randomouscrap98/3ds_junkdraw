@@ -21,6 +21,8 @@
 
 #define DEFAULT_START_LAYER 1
 #define DEFAULT_PALETTE_STARTINDEX 1
+#define DEFAULT_MIN_WIDTH 1
+#define DEFAULT_MAX_WIDTH 64
 
 //palette split is arbitrary, but I personally have them in blocks of 64 colors
 #define DEFAULT_PALETTE_SPLIT 64 
@@ -76,15 +78,23 @@ struct DrawState
    //u8 layer_count;
 
    u16 * palette;
+   u16 * current_color; //This tells us the exact color for drawing
    u16 palette_count;
-   u16 palette_index; //This tells us the exact color for drawing
 
    //The tool states; each tool can have its own modifiable state
    struct ToolData * tools;
-   u8 tool_index; //the current selected tool
+   struct ToolData * current_tool; //the current selected tool
+
+   //Some configurable limits and such
+   u8 min_width;
+   u8 max_width;
 };
 
 void init_default_drawstate(struct DrawState * state);
 void free_drawstate(struct DrawState * state);
+void shift_drawstate_color(struct DrawState * state, s16 ofs);
+void shift_drawstate_width(struct DrawState * state, s16 ofs);
+u16 get_drawstate_color(struct DrawState * state);
+void set_drawstate_tool(struct DrawState * state, u8 tool);
 
 #endif
