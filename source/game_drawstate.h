@@ -15,8 +15,13 @@
 //Some default configuration (can probably be set during runtime)
 #define DEFAULT_SCREEN_COLOR C2D_Color32(90,90,90,255)
 #define DEFAULT_BG_COLOR C2D_Color32(255,255,255,255)
+
 #define DEFAULT_LAYER_WIDTH 1024
 #define DEFAULT_LAYER_HEIGHT 1024
+#define DEFAULT_LAYER_COUNT 2
+
+#define DEFAULT_PALETTE_STARTINDEX 1
+
 
 //An array of STANDARD rgb colors representing the full master palette
 extern u32 default_master_palette[];
@@ -65,6 +70,8 @@ struct DrawState
    u16 page;
    u8 layer;
 
+   u8 layer_count;
+
    u16 * master_palette;
    u16 master_palette_index; //This tells us the exact color for drawing
 
@@ -77,5 +84,8 @@ struct DrawState
    struct ToolData * tools;
    u8 tool_index; //the current selected tool
 };
+
+void init_default_drawstate(struct DrawState * state);
+void free_drawstate(struct DrawState * state);
 
 #endif

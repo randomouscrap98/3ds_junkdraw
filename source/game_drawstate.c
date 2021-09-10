@@ -2,53 +2,9 @@
 #include <citro2d.h>
 #include <stdlib.h>
 
+#include "lib/myutils.h"
 #include "game_drawstate.h"
 
-void set_screenstate_defaults(struct ScreenState * state)
-{
-   state->offset_x = 0;
-   state->offset_y = 0;
-   state->zoom = 1;
-   state->layer_width = DEFAULT_LAYER_WIDTH;
-   state->layer_height = DEFAULT_LAYER_HEIGHT;
-   state->screen_width = 320;  //These two should literally never change 
-   state->screen_height = 240; //GSP_SCREEN_WIDTH; //GSP_SCREEN_HEIGHT_BOTTOM;
-   state->screen_color = DEFAULT_SCREEN_COLOR;
-   state->bg_color = DEFAULT_BG_COLOR;
-}
-
-void set_screenstate_offset(struct ScreenState * state, u16 offset_x, u16 offset_y)
-{
-   float maxofsx = state->layer_width * state->zoom - state->screen_width;
-   float maxofsy = state->layer_height * state->zoom - state->screen_height;
-   state->offset_x = C2D_Clamp(offset_x, 0, maxofsx < 0 ? 0 : maxofsx);
-   state->offset_y = C2D_Clamp(offset_y, 0, maxofsy < 0 ? 0 : maxofsy);
-}
-
-void set_screenstate_zoom(struct ScreenState * state, float zoom)
-{
-   float zoom_ratio = zoom / state->zoom;
-   u16 center_x = state->screen_width >> 1;
-   u16 center_y = state->screen_height >> 1;
-   u16 new_ofsx = zoom_ratio * (state->offset_x + center_x) - center_x;
-   u16 new_ofsy = zoom_ratio * (state->offset_y + center_y) - center_y;
-   state->zoom = zoom;
-   set_screenstate_ofs(state, new_ofsx, new_ofsy);
-}
-
-//void malloc_default_tooldata(struct ToolData * tool_data)
-//{
-//   tool_data = malloc(sizeof(struct ToolData) * TOOL_COUNT);
-//
-//   tool_data[TOOL_PENCIL].width = 2;
-//   tool_data[TOOL_PENCIL].style = LINESTYLE_STROKE;
-//   tool_data[TOOL_PENCIL].has_static_color = false;
-//
-//   tool_data[TOOL_ERASER].width = 4;
-//   tool_data[TOOL_ERASER].static_color = 0;
-//   tool_data[TOOL_ERASER].style = LINESTYLE_STROKE;
-//   tool_data[TOOL_ERASER].has_static_color = true;
-//}
 
 struct ToolData default_tooldata[] = {
    //Pencil
@@ -119,4 +75,60 @@ u32 default_master_palette[] = {
    0x151d28, 0x202e37, 0x394a50, 0x577277, 0x819796, 0xa8b5b2, 0xc7cfcc, 0xebede9
 
 };
+
+
+void set_screenstate_defaults(struct ScreenState * state)
+{
+   state->offset_x = 0;
+   state->offset_y = 0;
+   state->zoom = 1;
+   state->layer_width = DEFAULT_LAYER_WIDTH;
+   state->layer_height = DEFAULT_LAYER_HEIGHT;
+   state->screen_width = 320;  //These two should literally never change 
+   state->screen_height = 240; //GSP_SCREEN_WIDTH; //GSP_SCREEN_HEIGHT_BOTTOM;
+   state->screen_color = DEFAULT_SCREEN_COLOR;
+   state->bg_color = DEFAULT_BG_COLOR;
+}
+
+void set_screenstate_offset(struct ScreenState * state, u16 offset_x, u16 offset_y)
+{
+   float maxofsx = state->layer_width * state->zoom - state->screen_width;
+   float maxofsy = state->layer_height * state->zoom - state->screen_height;
+   state->offset_x = C2D_Clamp(offset_x, 0, maxofsx < 0 ? 0 : maxofsx);
+   state->offset_y = C2D_Clamp(offset_y, 0, maxofsy < 0 ? 0 : maxofsy);
+}
+
+void set_screenstate_zoom(struct ScreenState * state, float zoom)
+{
+   float zoom_ratio = zoom / state->zoom;
+   u16 center_x = state->screen_width >> 1;
+   u16 center_y = state->screen_height >> 1;
+   u16 new_ofsx = zoom_ratio * (state->offset_x + center_x) - center_x;
+   u16 new_ofsy = zoom_ratio * (state->offset_y + center_y) - center_y;
+   state->zoom = zoom;
+   set_screenstate_ofs(state, new_ofsx, new_ofsy);
+}
+
+void init_default_drawstate(struct DrawState * state)
+{
+   state->zoom_power = 0;
+   state->page = 0;
+   state->layer_count = DEFAULT_LAYER_COUNT;
+   state->layer = state->layer_count - 1; //Start on top layer
+
+   u16 color_count = sizeof(default_master_palette) / sizeof(u32);
+   state->master_palette = malloc(color_count * sizeof(u16));
+   convert_palette(default_master_palette, state->master_palette, color_count);
+   state->master_palette_index = DEFAULT_PALETTE_STARTINDEX;
+
+   state->tools = malloc(sizeof(default_tooldata));
+   memcpy(state->tools, default_tooldata, sizeof(default_tooldata));
+   state->tool_index = TOOL_PENCIL;
+}
+
+void free_drawstate(struct DrawState * state)
+{
+   free(state->tools);
+   free(state->master_palette);
+}
 
