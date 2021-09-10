@@ -34,6 +34,17 @@
 #define UTILS_CLAMP(x, mn, mx) (x <= mn ? mn : x >= mx ? mx : x)
 u32 char_occurrences(const char * string, char c);
 
+// DRAWING STUFF
+
+#define CENTER_RECT_ALIGNPIXEL(x,y,width) \
+   float __c_r_ap_ofs = (width / 2.0) - 0.5; \
+   x = floor(x - __c_r_ap_ofs); y = floor(y - __c_r_ap_ofs);
+
+struct SimpleLine { u16 x1, y1, x2, y2; };
+
+typedef void (* rectangle_func)(float, float, u16, u32); //X,Y,width,32-bit color
+void custom_drawline(const struct SimpleLine * line, u16 width, u32 color, rectangle_func rect_f);
+
 // COLOR STUFF
 u32 rgb24_to_rgba32c(u32 rgb);
 u32 rgba32c_to_rgba16c_32(u32 val);
@@ -124,5 +135,18 @@ s32 get_directories(char * directory, char * container, u32 c_size);
 char * read_file(const char * filename, char * container, u32 maxread);
 int write_file(const char * filename, const char * data);
 int write_citropng(u32 * rawdata, u16 width, u16 height, char * filepath);
+
+// INPUT (cpad/etc)
+
+struct CpadProfile
+{
+   u16 deadzone;
+   float mod_constant;
+   float mod_multiplier;
+   float mod_curve;
+   float mod_general;
+};
+
+float cpad_translate(struct CpadProfile * profile, s16 cpad_magnitude, float existing_pos);
 
 #endif

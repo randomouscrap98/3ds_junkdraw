@@ -20,6 +20,7 @@
 #include "constants.h"
 #include "gamemain.h"
 #include "game_input.h"
+#include "game_drawstate.h"
 
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
@@ -95,9 +96,9 @@ void update_screenmodifier(struct ScreenModifier * mod, circlePosition pos)
 
 //A line doesn't contain all the data needed to draw itself. That would be a
 //line package
-struct SimpleLine {
-   u16 x1, y1, x2, y2;
-};
+//struct SimpleLine {
+//   u16 x1, y1, x2, y2;
+//};
 
 // A basic representation of a collection of lines. Doesn't understand "tools"
 // or any of that, it JUST has the information required to draw the lines.
@@ -330,46 +331,48 @@ u32 _drw_cmd_cnt = 0;
 #define MY_FLUSHCHECK() if(_drw_cmd_cnt > MY_C2DOBJLIMITSAFETY) { \
    LOGDBG("FLUSHING %ld DRAW CMDS PREMATURELY\n", _drw_cmd_cnt); \
    MY_FLUSH(); }
-#define MY_SOLIDRECT(x,y,d,w,h,c) { \
-   C2D_DrawRectSolid(x, y, d, w, h, c); \
-   _drw_cmd_cnt++; MY_FLUSHCHECK(); }
+//#define MY_SOLIDRECT(x,y,d,w,h,c) { C2D_DrawRectSolid(x, y, d, w, h, c); _drw_cmd_cnt++; MY_FLUSHCHECK(); }
 
-float cr_lx = -1;
-float cr_ly = -1;
-u32 cr_cl = 0;
-
-typedef void (* rectangle_func)(float, float, u16, u32);
-
-//Draw a rectangle centered and pixel aligned around the given point.
-void draw_centeredrect(float x, float y, u16 width, u32 color, 
-      rectangle_func rect_f)
+void MY_SOLIDRECT(float x, float y, u16 width, u32 color)
 {
-   float ofs = (width / 2.0) - 0.5;
-   x = floor(x - ofs);
-   y = floor(y - ofs);
-   if(x < LAYER_EDGEBUF || y < LAYER_EDGEBUF || 
-         (cr_lx == x && cr_ly == y && cr_cl == color)) return;
-   if(rect_f != NULL) (*rect_f)(x,y,width,color);
-   else MY_SOLIDRECT(x, y, 0.5f, width, width, color);
-   cr_lx = x; cr_ly = y; cr_cl = color;
+   C2D_DrawRectSolid(x, y, 0.5, width, width, color);
+   _drw_cmd_cnt++; 
+   MY_FLUSHCHECK();
 }
-
-//Draw a line using a custom line drawing system (required like this because of
-//javascript's general inability to draw non anti-aliased lines, and I want the
-//strokes saved by this program to be 100% accurately reproducible on javascript)
-void custom_drawline(const struct SimpleLine * line, u16 width, u32 color,
-      rectangle_func rect_f)
-{
-   float xdiff = line->x2 - line->x1;
-   float ydiff = line->y2 - line->y1;
-   float dist = sqrt(xdiff * xdiff + ydiff * ydiff);
-   float ang = atan(ydiff/(xdiff?xdiff:0.0001))+(xdiff<0?M_PI:0);
-   float xang = cos(ang);
-   float yang = sin(ang);
-
-   for(float i = 0; i <= dist; i+=0.5)
-      draw_centeredrect(line->x1+xang*i, line->y1+yang*i, width, color, rect_f);
-}
+//float cr_lx = -1;
+//float cr_ly = -1;
+//u32 cr_cl = 0;
+//
+//typedef void (* rectangle_func)(float, float, u16, u32);
+//
+////Draw a rectangle centered and pixel aligned around the given point.
+//void draw_centeredrect(float x, float y, u16 width, u32 color, 
+//      rectangle_func rect_f)
+//{
+//   CENTER_RECT_ALIGNPIXEL(x, y);
+//   if(x < LAYER_EDGEBUF || y < LAYER_EDGEBUF || 
+//         (cr_lx == x && cr_ly == y && cr_cl == color)) return;
+//   if(rect_f != NULL) (*rect_f)(x,y,width,color);
+//   else MY_SOLIDRECT(x, y, 0.5f, width, width, color);
+//   cr_lx = x; cr_ly = y; cr_cl = color;
+//}
+//
+////Draw a line using a custom line drawing system (required like this because of
+////javascript's general inability to draw non anti-aliased lines, and I want the
+////strokes saved by this program to be 100% accurately reproducible on javascript)
+//void custom_drawline(const struct SimpleLine * line, u16 width, u32 color,
+//      rectangle_func rect_f)
+//{
+//   float xdiff = line->x2 - line->x1;
+//   float ydiff = line->y2 - line->y1;
+//   float dist = sqrt(xdiff * xdiff + ydiff * ydiff);
+//   float ang = atan(ydiff/(xdiff?xdiff:0.0001))+(xdiff<0?M_PI:0);
+//   float xang = cos(ang);
+//   float yang = sin(ang);
+//
+//   for(float i = 0; i <= dist; i+=0.5)
+//      draw_centeredrect(line->x1+xang*i, line->y1+yang*i, width, color, rect_f);
+//}
 
 //Draw the collection of lines given, starting at the given line and ending
 //before the other given line (first inclusive, last exclusive)
@@ -711,7 +714,7 @@ u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount,
                packagedrawlines = leftover_drawcount;
             }
 
-            draw_lines(p, 0, packagedrawlines, NULL);
+            draw_lines(p, 0, packagedrawlines, MY_SOLIDRECT);
             line_drawcount += packagedrawlines;
 
             //If we didn't draw ALL the lines, move the line pointer forward.
@@ -1421,7 +1424,7 @@ int main(int argc, char** argv)
                //This is for a stroke, do different things if we have different tools!
                add_stroke(&pending, &current_touch, &screen_mod);
                //Draw ONLY the current line
-               draw_lines(&pending, pending.line_count - 1, pending.line_count, NULL);
+               draw_lines(&pending, pending.line_count - 1, pending.line_count, MY_SOLIDRECT);
             }
          }
       }

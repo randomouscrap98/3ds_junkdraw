@@ -27,6 +27,50 @@ u32 char_occurrences(const char * string, char c)
 }
 
 
+// ----------------
+// -- DRAW UTILS --
+// ----------------
+
+//Draw a line using a custom line drawing system (required like this because of
+//javascript's general inability to draw non anti-aliased lines, and I want the
+//strokes saved by this program to be 100% accurately reproducible on javascript)
+void custom_drawline(const struct SimpleLine * line, u16 width, u32 color,
+      rectangle_func rect_f)
+{
+   float xdiff = line->x2 - line->x1;
+   float ydiff = line->y2 - line->y1;
+   float dist = sqrt(xdiff * xdiff + ydiff * ydiff);
+   float ang = atan(ydiff/(xdiff?xdiff:0.0001))+(xdiff<0?M_PI:0);
+   float xang = cos(ang);
+   float yang = sin(ang);
+
+   float x, y; 
+   float ox = -1;
+   float oy = -1;
+
+   //Where the "edge" of each rectangle to be drawn is
+   float ofs = (width / 2.0) - 0.5;
+
+   //Iterate over an acceptable amount of points on the line and draw
+   //rectangles to create a line.
+   for(float i = 0; i <= dist; i+=0.5)
+   {
+      x = floor(line->x1+xang*i - ofs);
+      y = floor(line->y1+yang*i - ofs);
+
+      //If we align to the same pixel as before, no need to draw again.
+      if(ox == x && oy == y) continue;
+
+      //Actually draw a centered rect... however you want to.
+      (*rect_f)(x,y,width,color);
+
+      ox = x; oy = y;
+   }
+   //if(x < LAYER_EDGEBUF || y < LAYER_EDGEBUF || (ox == x && oy == y)) 
+   //draw_centeredrect(line->x1+xang*i, line->y1+yang*i, width, color, rect_f);
+   //else MY_SOLIDRECT(x, y, 0.5f, width, width, color);
+}
+
 
 // -----------------
 // -- COLOR UTILS --
@@ -629,3 +673,21 @@ finalise:
 }
 
 
+// -----------------
+// -- INPUT UTILS --
+// -----------------
+
+float cpad_translate(struct CpadProfile * profile, s16 cpad_magnitude, float existing_pos)
+{
+   u16 cpadmag = abs(cpad_magnitude);
+
+   if(cpadmag > profile->deadzone)
+   {
+      return existing_pos + (cpad_magnitude < 0 ? -profile->mod_general : profile->mod_general) * 
+            (profile->mod_constant + pow(cpadmag * profile->mod_multiplier, profile->mod_curve));
+   }
+   else
+   {
+      return existing_pos;
+   }
+}

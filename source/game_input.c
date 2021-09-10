@@ -1,4 +1,7 @@
 
+#include <stdlib.h>
+#include <math.h>
+
 #include "game_input.h"
 
 //NOTE: assumes input has already been prepared for retrieval
@@ -39,5 +42,14 @@ u32 input_to_action(struct InputSet * input)
       result |= (rmod ? IUA_EXPORTPAGE : IUA_NEXTLAYER);
 
    return result;
+}
+
+void set_cpadprofile_canvas(struct CpadProfile * profile)
+{
+   profile->deadzone = 40;
+   profile->mod_constant = 1;
+   profile->mod_multiplier = 0.02f;
+   profile->mod_curve = 3.2f;
+   profile->mod_general = 1;
 }
 
