@@ -18,6 +18,7 @@ struct DefaultEventPriority default_event_priorities[] = {
    { draw_controls, HIGH_EVENT_PRIORITY }
 };
 
+
 void set_gstate_inputs(gs gstate)
 {
    gstate->k_down = hidKeysDown();

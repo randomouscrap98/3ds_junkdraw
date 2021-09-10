@@ -42,8 +42,9 @@ struct DefaultEventPriority
 {
    game_event_handler handler;
    u8 priority;
-};  /* C's shortcut struct define/initialization */
+}; 
 
+//The container which describes the default event list
 extern struct DefaultEventPriority default_event_priorities[];
 
 #endif

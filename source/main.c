@@ -19,6 +19,7 @@
 
 #include "constants.h"
 #include "gamemain.h"
+#include "game_input.h"
 
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
