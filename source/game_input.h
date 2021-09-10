@@ -25,19 +25,6 @@
 #define IUA_PAGEUPBIG      0x08000
 #define IUA_PAGEDOWNBIG    0x10000
 
-struct InputSet
-{
-   circlePosition circle_position;
-   touchPosition touch_position;
-   u32 k_down;
-   u32 k_repeat;
-   u32 k_up; 
-   u32 k_held; 
-};
-
-//Retrieve the standard inputs and fill the given struct
-void input_std_get(struct InputSet * input);
-
 //Returns a bitfield representing all "game actions" taken based on the given input.
 u32 input_to_action(struct InputSet * input); //, struct InputAction * mapping);
 

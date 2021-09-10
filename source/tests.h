@@ -399,6 +399,35 @@ int test_removeevent()
    return 0;
 }
 
+//assumes a temp variable t exists
+#define TST_BTFLP(x, p1, p2, e) \
+   t = swap_bits(x, p1, p2); if(t != e) { \
+      printf("Flip %#010lx (%d,%d), expected %#010lx, got %#010lx", \
+            (long unsigned int)x, p1, p2, (long unsigned int)e, (long unsigned int)t); return 1; } \
+   printf(".");
+
+#define TST_BTFLPM(x, m1, m2, e) \
+   t = swap_bits_mask(x, m1, m2); if(t != e) { \
+      printf("Flip-m %#010lx (%#010lx,%#010lx), expected %#010lx, got %#010lx", \
+            (long unsigned int)x, (long unsigned int)m1, (long unsigned int)m2, (long unsigned int)e, \
+            (long unsigned int)t); return 1; } \
+   printf(".");
+
+int test_bitflip()
+{
+   u32 t;
+
+   TST_BTFLP(0x0000, 1, 2, 0x0000);
+   TST_BTFLP(0x0110, 4, 8, 0x0110);
+   TST_BTFLP(0x00F7, 3, 5, 0x00DF);
+
+   TST_BTFLPM(0x0000, 0x0002, 0x0004, 0x0000);
+   TST_BTFLPM(0x0110, 0x0010, 0x0100, 0x0110);
+   TST_BTFLPM(0x00F7, 0x0008, 0x0020, 0x00DF);
+
+   return 0;
+}
+
 void run_tests()
 {
    printf("Running tests; only errors will be displayed\n");
@@ -411,6 +440,7 @@ void run_tests()
    if(test_convertlines()) return; 
    if(test_insertevent()) return;
    if(test_removeevent()) return;
+   if(test_bitflip()) return;
    printf("\nAll tests passed\n");
 }
 

@@ -4,17 +4,6 @@
 
 #include "game_input.h"
 
-//NOTE: assumes input has already been prepared for retrieval
-void input_std_get(struct InputSet * input)
-{
-   input->k_down = hidKeysDown();
-   input->k_up = hidKeysUp();
-   input->k_held = hidKeysHeld();
-   input->k_repeat = hidKeysDownRepeat();
-   hidTouchRead(&input->touch_position);
-   hidCircleRead(&input->circle_position);
-}
-
 u32 input_to_action(struct InputSet * input)
 {
    u32 result = 0;

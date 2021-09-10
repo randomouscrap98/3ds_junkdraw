@@ -33,6 +33,8 @@
 // GENERAL STUFF
 #define UTILS_CLAMP(x, mn, mx) (x <= mn ? mn : x >= mx ? mx : x)
 u32 char_occurrences(const char * string, char c);
+u32 swap_bits(u32 x, u8 p1, u8 p2);
+u32 swap_bits_mask(u32 x, u32 m1, u32 m2);
 
 // DRAWING STUFF
 
@@ -137,6 +139,21 @@ int write_file(const char * filename, const char * data);
 int write_citropng(u32 * rawdata, u16 width, u16 height, char * filepath);
 
 // INPUT (cpad/etc)
+
+struct InputSet
+{
+   circlePosition circle_position;
+   touchPosition touch_position;
+   u32 k_down;
+   u32 k_repeat;
+   u32 k_up; 
+   u32 k_held; 
+};
+
+//Retrieve the standard inputs and fill the given struct
+void input_std_get(struct InputSet * input);
+u32 input_mod_lefty_single(u32 input);
+void input_mod_lefty(struct InputSet * input);
 
 struct CpadProfile
 {
