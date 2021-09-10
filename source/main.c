@@ -35,60 +35,60 @@ u8 _db_prnt_row = 0;
 
 // -- SCREEN UTILS? --
 
-//Represents a transformation of the screen
-struct ScreenModifier
-{
-   float ofs_x;
-   float ofs_y;
-   float zoom;
-};
+////Represents a transformation of the screen
+//struct ScreenModifier
+//{
+//   float ofs_x;
+//   float ofs_y;
+//   float zoom;
+//};
 
 //Generic page difference using cpad values, return the new page position given 
 //the existing position and the circlepad input
-float calc_pagepos(s16 d, float existing_pos)
-{
-   u16 cpadmag = abs(d);
-
-   if(cpadmag > CPAD_DEADZONE)
-   {
-      return existing_pos + (d < 0 ? -1 : 1) * 
-            (CPAD_PAGECONST + pow(cpadmag * CPAD_PAGEMULT, CPAD_PAGECURVE));
-   }
-   else
-   {
-      return existing_pos;
-   }
-}
-
-//Easy way to set the screen offset (translation) safely for the given screen
-//modifier. Clamps the values appropriately
-void set_screenmodifier_ofs(struct ScreenModifier * mod, u16 ofs_x, u16 ofs_y)
-{
-   float maxofsx = LAYER_WIDTH * mod->zoom - SCREENWIDTH;
-   float maxofsy = LAYER_HEIGHT * mod->zoom - SCREENHEIGHT;
-   mod->ofs_x = C2D_Clamp(ofs_x, 0, maxofsx < 0 ? 0 : maxofsx);
-   mod->ofs_y = C2D_Clamp(ofs_y, 0, maxofsy < 0 ? 0 : maxofsy);
-}
-
-//Easy way to set the screen zoom while preserving the center of the screen.
-//So, the image should not appear to shift too much while zooming. The offsets
-//WILL be modified after this function is completed!
-void set_screenmodifier_zoom(struct ScreenModifier * mod, float zoom)
-{
-   float zoom_ratio = zoom / mod->zoom;
-   u16 center_x = SCREENWIDTH >> 1;
-   u16 center_y = SCREENHEIGHT >> 1;
-   u16 new_ofsx = zoom_ratio * (mod->ofs_x + center_x) - center_x;
-   u16 new_ofsy = zoom_ratio * (mod->ofs_y + center_y) - center_y;
-   mod->zoom = zoom;
-   set_screenmodifier_ofs(mod, new_ofsx, new_ofsy);
-}
+//float calc_pagepos(s16 d, float existing_pos)
+//{
+//   u16 cpadmag = abs(d);
+//
+//   if(cpadmag > CPAD_DEADZONE)
+//   {
+//      return existing_pos + (d < 0 ? -1 : 1) * 
+//            (CPAD_PAGECONST + pow(cpadmag * CPAD_PAGEMULT, CPAD_PAGECURVE));
+//   }
+//   else
+//   {
+//      return existing_pos;
+//   }
+//}
+//
+////Easy way to set the screen offset (translation) safely for the given screen
+////modifier. Clamps the values appropriately
+//void set_screenmodifier_ofs(struct ScreenModifier * mod, u16 ofs_x, u16 ofs_y)
+//{
+//   float maxofsx = LAYER_WIDTH * mod->zoom - SCREENWIDTH;
+//   float maxofsy = LAYER_HEIGHT * mod->zoom - SCREENHEIGHT;
+//   mod->ofs_x = C2D_Clamp(ofs_x, 0, maxofsx < 0 ? 0 : maxofsx);
+//   mod->ofs_y = C2D_Clamp(ofs_y, 0, maxofsy < 0 ? 0 : maxofsy);
+//}
+//
+////Easy way to set the screen zoom while preserving the center of the screen.
+////So, the image should not appear to shift too much while zooming. The offsets
+////WILL be modified after this function is completed!
+//void set_screenmodifier_zoom(struct ScreenModifier * mod, float zoom)
+//{
+//   float zoom_ratio = zoom / mod->zoom;
+//   u16 center_x = SCREENWIDTH >> 1;
+//   u16 center_y = SCREENHEIGHT >> 1;
+//   u16 new_ofsx = zoom_ratio * (mod->ofs_x + center_x) - center_x;
+//   u16 new_ofsy = zoom_ratio * (mod->ofs_y + center_y) - center_y;
+//   mod->zoom = zoom;
+//   set_screenmodifier_ofs(mod, new_ofsx, new_ofsy);
+//}
 
 //Update screen translation based on cpad input
-void update_screenmodifier(struct ScreenModifier * mod, circlePosition pos)
-{
-   set_screenmodifier_ofs(mod, calc_pagepos(pos.dx, mod->ofs_x), calc_pagepos(-pos.dy, mod->ofs_y));
-}
+//void update_screenmodifier(struct ScreenModifier * mod, circlePosition pos)
+//{
+//   set_screenmodifier_ofs(mod, calc_pagepos(pos.dx, mod->ofs_x), calc_pagepos(-pos.dy, mod->ofs_y));
+//}
 
 
 
@@ -114,13 +114,13 @@ struct LinePackage {
 //Add another stroke to a line collection (that represents a stroke). Works for
 //the first stroke too.
 struct SimpleLine * add_stroke(struct LinePackage * pending, 
-      const touchPosition * pos, const struct ScreenModifier * mod)
+      const touchPosition * pos, const struct ScreenState * mod)
 {
    //This is for a stroke, do different things if we have different tools!
    struct SimpleLine * line = pending->lines + pending->line_count;
 
-   line->x2 = pos->px / mod->zoom + mod->ofs_x / mod->zoom;
-   line->y2 = pos->py / mod->zoom + mod->ofs_y / mod->zoom;
+   line->x2 = pos->px / mod->zoom + mod->offset_x / mod->zoom;
+   line->y2 = pos->py / mod->zoom + mod->offset_y / mod->zoom;
 
    if(pending->line_count == 0)
    {
@@ -396,25 +396,25 @@ void draw_all_lines(const struct LinePackage * linepack, rectangle_func rect_f)
 
 //Draw the scrollbars on the sides of the screen for the given screen
 //modification (translation AND zoom affect the scrollbars)
-void draw_scrollbars(const struct ScreenModifier * mod)
+void draw_scrollbars(const struct ScreenState * mod)
 {
    //Need to draw an n-thickness scrollbar on the right and bottom. Assumes
    //standard page size for screen modifier.
 
    //Bottom and right scrollbar bg
-   C2D_DrawRectSolid(0, SCREENHEIGHT - SCROLL_WIDTH, 0.5f, 
-         SCREENWIDTH, SCROLL_WIDTH, SCROLL_BG);
-   C2D_DrawRectSolid(SCREENWIDTH - SCROLL_WIDTH, 0, 0.5f, 
-         SCROLL_WIDTH, SCREENHEIGHT, SCROLL_BG);
+   C2D_DrawRectSolid(0, mod->screen_height - SCROLL_WIDTH, 0.5f, 
+         mod->screen_width, SCROLL_WIDTH, SCROLL_BG);
+   C2D_DrawRectSolid(mod->screen_width - SCROLL_WIDTH, 0, 0.5f, 
+         SCROLL_WIDTH, mod->screen_height, SCROLL_BG);
 
-   u16 sofs_x = (float)mod->ofs_x / LAYER_WIDTH / mod->zoom * SCREENWIDTH;
-   u16 sofs_y = (float)mod->ofs_y / LAYER_HEIGHT / mod->zoom * SCREENHEIGHT;
+   u16 sofs_x = (float)mod->offset_x / LAYER_WIDTH / mod->zoom * mod->screen_width;
+   u16 sofs_y = (float)mod->offset_y / LAYER_HEIGHT / mod->zoom * mod->screen_height;
 
    //bottom and right scrollbar bar
-   C2D_DrawRectSolid(sofs_x, SCREENHEIGHT - SCROLL_WIDTH, 0.5f, 
-         SCREENWIDTH * SCREENWIDTH / (float)LAYER_WIDTH / mod->zoom, SCROLL_WIDTH, SCROLL_BAR);
-   C2D_DrawRectSolid(SCREENWIDTH - SCROLL_WIDTH, sofs_y, 0.5f, 
-         SCROLL_WIDTH, SCREENHEIGHT * SCREENHEIGHT / (float)LAYER_HEIGHT / mod->zoom, SCROLL_BAR);
+   C2D_DrawRectSolid(sofs_x, mod->screen_height - SCROLL_WIDTH, 0.5f, 
+         mod->screen_width * mod->screen_width / (float)mod->layer_width / mod->zoom, SCROLL_WIDTH, SCROLL_BAR);
+   C2D_DrawRectSolid(mod->screen_width - SCROLL_WIDTH, sofs_y, 0.5f, 
+         SCROLL_WIDTH, mod->screen_height * mod->screen_height / (float)mod->layer_height / mod->zoom, SCROLL_BAR);
 }
 
 //Draw (JUST draw) the entire color picker area, which may include other
@@ -462,13 +462,13 @@ void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index,
 }
 
 void draw_layers(const struct LayerData * layers, layer_num layer_count, 
-      const struct ScreenModifier * mod, u32 bg_color)
+      const struct ScreenState * mod, u32 bg_color)
 {
-   C2D_DrawRectSolid(-mod->ofs_x, -mod->ofs_y, 0.5f,
-         LAYER_WIDTH * mod->zoom, LAYER_HEIGHT * mod->zoom, bg_color); //The bg color
+   C2D_DrawRectSolid(-mod->offset_x, -mod->offset_y, 0.5f,
+         mod->layer_width * mod->zoom, mod->layer_height * mod->zoom, bg_color); //The bg color
    for(layer_num i = 0; i < layer_count; i++)
    {
-      C2D_DrawImageAt(layers[i].image, -mod->ofs_x, -mod->ofs_y, 0.5f, 
+      C2D_DrawImageAt(layers[i].image, -mod->offset_x, -mod->offset_y, 0.5f, 
             NULL, mod->zoom, mod->zoom);
    }
 }
@@ -477,29 +477,29 @@ void draw_layers(const struct LayerData * layers, layer_num layer_count,
 
 // -- CONTROL UTILS --
 
-//Saved data for a tool. Each tool may (if it so desires) have different
-//colors, widths, etc.
-struct ToolData {
-   s8 width;
-   u16 color;
-   u8 style;
-   bool color_settable;
-   //u8 color_redirect;
-};
-
-//Fill tools with default values for the start of the program.
-void fill_defaulttools(struct ToolData * tool_data, u16 default_color)
-{
-   tool_data[TOOL_PENCIL].width = 2;
-   tool_data[TOOL_PENCIL].color = default_color;
-   tool_data[TOOL_PENCIL].style = LINESTYLE_STROKE;
-   tool_data[TOOL_PENCIL].color_settable = true;
-   //tool_data[TOOL_PENCIL].color_redirect = TOOL_PENCIL;
-   tool_data[TOOL_ERASER].width = 4;
-   tool_data[TOOL_ERASER].color = 0;
-   tool_data[TOOL_ERASER].style = LINESTYLE_STROKE;
-   tool_data[TOOL_ERASER].color_settable = false;
-}
+////Saved data for a tool. Each tool may (if it so desires) have different
+////colors, widths, etc.
+//struct ToolData {
+//   s8 width;
+//   u16 color;
+//   u8 style;
+//   bool color_settable;
+//   //u8 color_redirect;
+//};
+//
+////Fill tools with default values for the start of the program.
+//void fill_defaulttools(struct ToolData * tool_data, u16 default_color)
+//{
+//   tool_data[TOOL_PENCIL].width = 2;
+//   tool_data[TOOL_PENCIL].color = default_color;
+//   tool_data[TOOL_PENCIL].style = LINESTYLE_STROKE;
+//   tool_data[TOOL_PENCIL].color_settable = true;
+//   //tool_data[TOOL_PENCIL].color_redirect = TOOL_PENCIL;
+//   tool_data[TOOL_ERASER].width = 4;
+//   tool_data[TOOL_ERASER].color = 0;
+//   tool_data[TOOL_ERASER].style = LINESTYLE_STROKE;
+//   tool_data[TOOL_ERASER].color_settable = false;
+//}
 
 //Given a touch position (presumably on the color palette), update the selected
 //palette index. 
@@ -509,16 +509,16 @@ void update_paletteindex(const touchPosition * pos, u8 * index)
    u16 xind = (pos->px - PALETTE_OFSX) / shift;
    u16 yind = (pos->py - PALETTE_OFSY) / shift;
    u16 new_index = (yind << 3) + xind;
-   if(new_index >= 0 && new_index < PALETTE_COLORS)
+   if(new_index >= 0 && new_index < DEFAULT_PALETTE_SPLIT) //PALETTE_COLORS)
       *index = new_index;
 }
 
-void update_package_with_tool(struct LinePackage * pending, const struct ToolData * tool_data)
-{
-   pending->color = tool_data->color;
-   pending->style = tool_data->style;
-   pending->width = tool_data->width;
-}
+//void update_package_with_tool(struct LinePackage * pending, const struct DrawState * state) //const struct ToolData * tool_data)
+//{
+//   pending->color = state->master_palette[state->master_palette_index]; //tool_data->color;
+//   pending->style = state->tools[state->tool_index].style; //tool_data->style;
+//   pending->width = state->tools[state->tool_index].width; //tool_data->width;
+//}
 
 
 
@@ -1163,18 +1163,19 @@ s8 host_local(udsNetworkStruct * networkstruct, udsBindContext * bindctx)
 // Some macros used ONLY for main (think lambdas)
 #define MAIN_UPDOWN(x) {   \
    if(kHeld & KEY_R) {     \
-      current_page = UTILS_CLAMP(current_page + x * ((kHeld&KEY_L)?10:1), 0, MAX_PAGE);    \
+      drwst.page = UTILS_CLAMP(drwst.page + x * ((kHeld&KEY_L)?10:1), 0, MAX_PAGE);    \
       draw_pointer = draw_data;     \
       flush_layers = true;          \
    } else {                \
-      zoom_power = UTILS_CLAMP(zoom_power + x, MIN_ZOOMPOWER, MAX_ZOOMPOWER);    \
+      drwst.zoom_power = UTILS_CLAMP(drwst.zoom_power + x, MIN_ZOOMPOWER, MAX_ZOOMPOWER);    \
    } }
 
 #define PRINT_DATAUSAGE() print_data(draw_data, draw_data_end, saved_last);
 
 #define MAIN_NEWDRAW() { \
    draw_data_end = draw_pointer = saved_last = draw_data; \
-   current_page = 0;          \
+   free_drawstate(&drwst); \
+   init_default_drawstate(&drwst); \
    flush_layers = true;       \
    save_filename[0] = '\0';   \
    pending.lines = pending_lines; \
@@ -1218,15 +1219,17 @@ int main(int argc, char** argv)
    //struct GameState estate;            //The state passed to events
    struct GameEvent * equeue = NULL;   //The head of the event queue
 
+   struct DrawState drwst;
+
    //weird byte order? 16 bits of color are at top
-   const u32 screen_color = SCREEN_COLOR;
-   const u32 bg_color = CANVAS_BG_COLOR;
+   //const u32 screen_color = SCREEN_COLOR;
+   //const u32 bg_color = CANVAS_BG_COLOR;
    const u32 layer_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
 
-   u16 palette_offset = 0;
-   u16 palette [PALETTE_COLORS];
-   convert_palette(base_palette + palette_offset, palette, PALETTE_COLORS);
-   u8 palette_index = PALETTE_STARTINDEX;
+   //u16 palette_offset = 0;
+   //u16 palette [PALETTE_COLORS];
+   //convert_palette(base_palette + palette_offset, palette, PALETTE_COLORS);
+   //u8 palette_index = PALETTE_STARTINDEX;
 
    const Tex3DS_SubTexture subtex = {
       LAYER_WIDTH, LAYER_HEIGHT,
@@ -1238,7 +1241,10 @@ int main(int argc, char** argv)
    for(int i = 0; i < LAYER_COUNT; i++)
       create_layer(layers + i, subtex);
 
-   struct ScreenModifier screen_mod = {0,0,1}; 
+   struct ScreenState scrst; // = {0,0,1}; 
+   set_screenstate_defaults(&scrst);
+   struct CpadProfile cpdpr;
+   set_cpadprofile_canvas(&cpdpr);
 
    bool touching = false;
    bool palette_active = false;
@@ -1248,13 +1254,13 @@ int main(int argc, char** argv)
    //touchPosition current_touch;
    u32 current_frame = 0;
    u32 end_frame = 0;
-   s8 zoom_power = 0;
+   //s8 zoom_power = 0;
    s8 last_zoom_power = 0;
-   u16 current_page = 0;
+   //u16 current_page = 0;
 
-   u8 current_tool = 0;
-   struct ToolData tool_data[TOOL_COUNT];
-   fill_defaulttools(tool_data, palette[palette_index]);
+   //u8 current_tool = 0;
+   //struct ToolData tool_data[TOOL_COUNT];
+   //fill_defaulttools(tool_data, palette[palette_index]);
 
    struct LinePackage pending;
    struct SimpleLine * pending_lines = malloc(MAX_STROKE_LINES * sizeof(struct SimpleLine));
@@ -1299,24 +1305,28 @@ int main(int argc, char** argv)
       circlePosition pos = gstate.circle_position;
       touchPosition current_touch = gstate.touch_position;
 
+            u16 po = drwst.palette_index / DEFAULT_PALETTE_SPLIT;
+            u8 pi = drwst.palette_index % DEFAULT_PALETTE_SPLIT;
+
       // Respond to user input
       if(kDown & KEY_L && !(kHeld & KEY_R)) palette_active = !palette_active;
       if(kRepeat & KEY_DUP) MAIN_UPDOWN(1)
       if(kRepeat & KEY_DDOWN) MAIN_UPDOWN(-1)
-      if(kRepeat & KEY_DRIGHT) tool_data[current_tool].width += (kHeld & KEY_R ? 5 : 1);
-      if(kRepeat & KEY_DLEFT) tool_data[current_tool].width -= (kHeld & KEY_R ? 5 : 1);
-      if(kDown & KEY_A) current_tool = TOOL_PENCIL;
-      if(kDown & KEY_B) current_tool = TOOL_ERASER;
+      if(kRepeat & KEY_DRIGHT) drwst.tools[drwst.tool_index].width += (kHeld & KEY_R ? 5 : 1);
+      if(kRepeat & KEY_DLEFT) drwst.tools[drwst.tool_index].width -= (kHeld & KEY_R ? 5 : 1);
+      if(kDown & KEY_A) drwst.tool_index = TOOL_PENCIL; //current_tool = TOOL_PENCIL;
+      if(kDown & KEY_B) drwst.tool_index = TOOL_ERASER; //current_tool = TOOL_ERASER;
       if(kHeld & KEY_L && kDown & KEY_R && palette_active) {
-         palette_offset = (palette_offset + PALETTE_COLORS) % 
-            (sizeof(base_palette) / sizeof(base_palette[0]));
-         convert_palette(base_palette + palette_offset, palette, PALETTE_COLORS);
-         if(tool_data[current_tool].color_settable)
-            tool_data[current_tool].color = palette[palette_index];
+         drwst.palette_index = (drwst.palette_index + DEFAULT_PALETTE_SPLIT) % (drwst.palette_count);
+         //palette_offset = (palette_offset + PALETTE_COLORS) % 
+         //   (sizeof(base_palette) / sizeof(base_palette[0]));
+         //convert_palette(base_palette + palette_offset, palette, PALETTE_COLORS);
+         //if(tool_data[current_tool].color_settable)
+         //   tool_data[current_tool].color = palette[palette_index];
       }
       if(kDown & KEY_SELECT) {
-         if(kHeld & KEY_R) { export_page(current_page, draw_data, draw_data_end, save_filename); } 
-         else { pending.layer = (pending.layer + 1) % LAYER_COUNT; }
+         if(kHeld & KEY_R) { export_page(drwst.page, draw_data, draw_data_end, save_filename); } 
+         else { drwst.layer = (drwst.layer + 1) % LAYER_COUNT; }
       }
       if(kDown & KEY_START) 
       {
@@ -1370,22 +1380,33 @@ int main(int argc, char** argv)
             PRINTWARN("Not implemented yet");
          }
       }
-      if(kDown & KEY_TOUCH) update_package_with_tool(&pending, &tool_data[current_tool]);
+      if(kDown & KEY_TOUCH) {
+         struct ToolData t = drwst.tools[drwst.tool_index];
+         pending.color = t.has_static_color ? t.static_color : drwst.palette[drwst.palette_index]; //tool_data->color;
+         pending.style = t.style; //tool_data->style;
+         pending.width = t.width; //tool_data->width;
+         pending.layer = drwst.layer;
+      }
+         //update_package_with_tool(&pending, &tool_data[current_tool]);
       if(kUp & KEY_TOUCH) end_frame = current_frame;
 
       //Update zoom separately, since the update is always the same
-      if(zoom_power != last_zoom_power) set_screenmodifier_zoom(&screen_mod, pow(2, zoom_power));
-      tool_data[current_tool].width = C2D_Clamp(tool_data[current_tool].width, MIN_WIDTH, MAX_WIDTH);
+      if(drwst.zoom_power != last_zoom_power) set_screenstate_zoom(&scrst, pow(2, drwst.zoom_power));
+      drwst.tools[drwst.tool_index].width = C2D_Clamp(drwst.tools[drwst.tool_index].width, MIN_WIDTH, MAX_WIDTH);
 
       if(kRepeat & ~(KEY_TOUCH) || !current_frame)
       {
-         print_status(tool_data[current_tool].width, pending.layer, zoom_power, 
-               current_tool, tool_data[current_tool].color, current_page);
+         print_status(drwst.tools[drwst.tool_index].width, drwst.layer, drwst.zoom_power, 
+               drwst.tool_index, drwst.palette[drwst.palette_index], drwst.page);
       }
 
       touching = (kHeld & KEY_TOUCH) > 0;
 
-      update_screenmodifier(&screen_mod, pos);
+      //update_screenmodifier(&scrst, pos);
+//float cpad_translate(struct CpadProfile * profile, s16 cpad_magnitude, float existing_pos)
+      set_screenstate_offset(&scrst, 
+            cpad_translate(&cpdpr, pos.dx, scrst.offset_x), 
+            cpad_translate(&cpdpr, -pos.dy, scrst.offset_y));
 
 
 
@@ -1394,6 +1415,7 @@ int main(int argc, char** argv)
 
       // -- LAYER DRAW SECTION --
       C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
+
 
       //Apparently (not sure), all clearing should be done within our main loop?
       if(flush_layers)
@@ -1407,22 +1429,19 @@ int main(int argc, char** argv)
       {
          if(palette_active)
          {
-            if(tool_data[current_tool].color_settable)
-            {
-               update_paletteindex(&current_touch, &palette_index);
-               tool_data[current_tool].color = palette[palette_index];
-            }
+            update_paletteindex(&current_touch, &pi);
+            drwst.palette_index = po + pi;
          }
          else
          {
             //Keep this outside the if statement below so it can be used for
             //background drawing too (draw commands from other people)
-            C2D_SceneBegin(layers[pending.layer].target);
+            C2D_SceneBegin(layers[drwst.layer].target);
 
             if(pending.line_count < MAX_STROKE_LINES)
             {
                //This is for a stroke, do different things if we have different tools!
-               add_stroke(&pending, &current_touch, &screen_mod);
+               add_stroke(&pending, &current_touch, &scrst);
                //Draw ONLY the current line
                draw_lines(&pending, pending.line_count - 1, pending.line_count, MY_SOLIDRECT);
             }
@@ -1435,7 +1454,7 @@ int main(int argc, char** argv)
          u32 maxdraw = MAX_FRAMELINES;
          maxdraw -= scandata_draw(&scandata, maxdraw, layers, LAYER_COUNT);
          draw_pointer = scandata_parse(&scandata, draw_pointer, draw_data_end,
-               maxdraw, current_page);
+               maxdraw, drwst.page);
          scandata_draw(&scandata, maxdraw, layers, LAYER_COUNT); 
       }
 
@@ -1478,7 +1497,7 @@ int main(int argc, char** argv)
          else
          {
             char * previous_end = draw_data_end;
-            draw_data_end = write_to_datamem(stroke_data, cvl_end, current_page, draw_data, draw_data_end);
+            draw_data_end = write_to_datamem(stroke_data, cvl_end, drwst.page, draw_data, draw_data_end);
             //An optimization: if draw_pointer was already at the end, don't
             //need to RE-draw what we've already drawn, move it forward with
             //the mem write. Note: there are instances where we WILL be drawing
@@ -1493,17 +1512,17 @@ int main(int argc, char** argv)
          pending.line_count = 0;
       }
 
-      C2D_TargetClear(screen, screen_color);
+      C2D_TargetClear(screen, scrst.screen_color);
       C2D_SceneBegin(screen);
 
-      draw_layers(layers, LAYER_COUNT, &screen_mod, bg_color);
-      draw_scrollbars(&screen_mod);
-      draw_colorpicker(palette, PALETTE_COLORS, tool_data[current_tool].color_settable ?
-            palette_index : PALETTE_COLORS + 1, !palette_active);
+      draw_layers(layers, LAYER_COUNT, &scrst, scrst.bg_color);
+      draw_scrollbars(&scrst);
+      draw_colorpicker(drwst.palette + po, DEFAULT_PALETTE_SPLIT, drwst.tools[drwst.tool_index].has_static_color ?
+            DEFAULT_PALETTE_SPLIT + 1 : pi, !palette_active);
 
       C3D_FrameEnd(0);
 
-      last_zoom_power = zoom_power;
+      last_zoom_power = drwst.zoom_power;
       current_frame++;
    }
 

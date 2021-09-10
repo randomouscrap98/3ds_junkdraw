@@ -18,13 +18,16 @@
 
 #define DEFAULT_LAYER_WIDTH 1024
 #define DEFAULT_LAYER_HEIGHT 1024
-#define DEFAULT_LAYER_COUNT 2
 
+#define DEFAULT_START_LAYER 1
 #define DEFAULT_PALETTE_STARTINDEX 1
+
+//palette split is arbitrary, but I personally have them in blocks of 64 colors
+#define DEFAULT_PALETTE_SPLIT 64 
 
 
 //An array of STANDARD rgb colors representing the full master palette
-extern u32 default_master_palette[];
+extern u32 default_palette[];
 
 //Variables for modifying display of drawing
 struct ScreenState
@@ -49,7 +52,7 @@ void set_screenstate_defaults(struct ScreenState * state);
 
 //Safely adjust the screen offset given new desired offsets (doesn't let you
 //set to unsafe values, etc)
-void set_screenstate_ofs(struct ScreenState * state, u16 offset_x, u16 offset_y);
+void set_screenstate_offset(struct ScreenState * state, u16 offset_x, u16 offset_y);
 
 //Adjust the zoom while preserving subjective location in some manner.
 void set_screenstate_zoom(struct ScreenState * state, float zoom);
@@ -70,15 +73,11 @@ struct DrawState
    u16 page;
    u8 layer;
 
-   u8 layer_count;
+   //u8 layer_count;
 
-   u16 * master_palette;
-   u16 master_palette_index; //This tells us the exact color for drawing
-
-   //The palette available currently? Why is this part of the draw state?
-   //u16 * palette;
-   //u16 pallete_count;
-   //u16 palette_index; //Selected index
+   u16 * palette;
+   u16 palette_count;
+   u16 palette_index; //This tells us the exact color for drawing
 
    //The tool states; each tool can have its own modifiable state
    struct ToolData * tools;

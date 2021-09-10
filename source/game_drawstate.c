@@ -13,7 +13,7 @@ struct ToolData default_tooldata[] = {
    { 4, LINESTYLE_STROKE, true, 0 }
 };
 
-u32 default_master_palette[] = { 
+u32 default_palette[] = { 
    //Endesga 64
    0xff0040, 0x131313, 0x1b1b1b, 0x272727, 0x3d3d3d, 0x5d5d5d, 0x858585, 0xb4b4b4,
    0xffffff, 0xc7cfdd, 0x92a1b9, 0x657392, 0x424c6e, 0x2a2f4e, 0x1a1932, 0x0e071b,
@@ -106,29 +106,30 @@ void set_screenstate_zoom(struct ScreenState * state, float zoom)
    u16 new_ofsx = zoom_ratio * (state->offset_x + center_x) - center_x;
    u16 new_ofsy = zoom_ratio * (state->offset_y + center_y) - center_y;
    state->zoom = zoom;
-   set_screenstate_ofs(state, new_ofsx, new_ofsy);
+   set_screenstate_offset(state, new_ofsx, new_ofsy);
 }
 
 void init_default_drawstate(struct DrawState * state)
 {
    state->zoom_power = 0;
    state->page = 0;
-   state->layer_count = DEFAULT_LAYER_COUNT;
-   state->layer = state->layer_count - 1; //Start on top layer
+   //state->layer_count = DEFAULT_LAYER_COUNT;
+   state->layer = DEFAULT_START_LAYER; //state->layer_count - 1; //Start on top layer
 
-   u16 color_count = sizeof(default_master_palette) / sizeof(u32);
-   state->master_palette = malloc(color_count * sizeof(u16));
-   convert_palette(default_master_palette, state->master_palette, color_count);
-   state->master_palette_index = DEFAULT_PALETTE_STARTINDEX;
+   state->palette_count = sizeof(default_palette) / sizeof(u32);
+   state->palette = malloc(state->palette_count * sizeof(u16));
+   convert_palette(default_palette, state->palette, state->palette_count);
+   state->palette_index = DEFAULT_PALETTE_STARTINDEX;
 
    state->tools = malloc(sizeof(default_tooldata));
    memcpy(state->tools, default_tooldata, sizeof(default_tooldata));
    state->tool_index = TOOL_PENCIL;
 }
 
+//Only really applies to default initialized states
 void free_drawstate(struct DrawState * state)
 {
    free(state->tools);
-   free(state->master_palette);
+   free(state->palette);
 }
 
