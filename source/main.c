@@ -1430,7 +1430,7 @@ int main(int argc, char** argv)
          if(palette_active)
          {
             update_paletteindex(&current_touch, &pi);
-            drwst.palette_index = po + pi;
+            drwst.palette_index = po * DEFAULT_PALETTE_SPLIT + pi;
          }
          else
          {
@@ -1517,7 +1517,7 @@ int main(int argc, char** argv)
 
       draw_layers(layers, LAYER_COUNT, &scrst, scrst.bg_color);
       draw_scrollbars(&scrst);
-      draw_colorpicker(drwst.palette + po, DEFAULT_PALETTE_SPLIT, drwst.tools[drwst.tool_index].has_static_color ?
+      draw_colorpicker(drwst.palette + po * DEFAULT_PALETTE_SPLIT, DEFAULT_PALETTE_SPLIT, drwst.tools[drwst.tool_index].has_static_color ?
             DEFAULT_PALETTE_SPLIT + 1 : pi, !palette_active);
 
       C3D_FrameEnd(0);
