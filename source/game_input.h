@@ -5,24 +5,23 @@
 #include <3ds.h>
 
 // User Actions 
-#define IUA_PAGEUP         0x0001
-#define IUA_PAGEDOWN       0x0002
-#define IUA_PALETTETOGGLE  0x0004
-#define IUA_WIDTHUP        0x0008
-#define IUA_WIDTHDOWN      0x0010
-#define IUA_TOOLA          0x0020
-#define IUA_TOOLB          0x0040
-#define IUA_PALETTESWAP    0x0080
-#define IUA_MENU           0x0100
-#define IUA_EXPORTPAGE     0x0200
-#define IUA_NEXTLAYER      0x0400
-#define IUA_WIDTHUPBIG     0x0800
-#define IUA_WIDTHDOWNBIG   0x1000
-
-//#define U_KDOWN      0x01
-//#define U_KUP        0x02
-//#define U_KREPEAT    0x04
-//#define U_KHELD      0x08
+#define IUA_PAGEUP         0x00001
+#define IUA_PAGEDOWN       0x00002
+#define IUA_PALETTETOGGLE  0x00004
+#define IUA_WIDTHUP        0x00008
+#define IUA_WIDTHDOWN      0x00010
+#define IUA_TOOLA          0x00020
+#define IUA_TOOLB          0x00040
+#define IUA_PALETTESWAP    0x00080
+#define IUA_MENU           0x00100
+#define IUA_EXPORTPAGE     0x00200
+#define IUA_NEXTLAYER      0x00400
+#define IUA_WIDTHUPBIG     0x00800
+#define IUA_WIDTHDOWNBIG   0x01000
+#define IUA_ZOOMIN         0x02000
+#define IUA_ZOOMOUT        0x04000
+#define IUA_PAGEUPBIG      0x08000
+#define IUA_PAGEDOWNBIG    0x10000
 
 struct InputSet
 {
@@ -34,23 +33,11 @@ struct InputSet
    u32 k_held; 
 };
 
-//struct InputAction
-//{
-//   u32 k_held_combo;
-//   u32 k_down_combo;
-//   u32 k_repeat_combo;
-//   u32 action;
-//};
-
 //Retrieve the standard inputs and fill the given struct
 void input_std_get(struct InputSet * input);
 
 //Returns a bitfield representing all "game actions" taken based on the given input.
 u32 input_to_action(struct InputSet * input); //, struct InputAction * mapping);
 
-//Set a pointer to point to a malloc'd array of the default input actions. You
-//can manually free the result yourself if you want. The return value is the
-//array size.
-//u32 malloc_inputactions_default(struct InputAction * result);
 
 #endif

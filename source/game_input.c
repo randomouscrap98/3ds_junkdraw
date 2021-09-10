@@ -15,48 +15,29 @@ void input_std_get(struct InputSet * input)
 u32 input_to_action(struct InputSet * input)
 {
    u32 result = 0;
+   bool rmod = input->k_held & KEY_R;
+   bool lmod = input->k_held & KEY_L;
 
-   if(input->k_repeat & KEY_DUP) 
-      result |= IUA_PAGEUP;
-   if(input->k_repeat & KEY_DDOWN) 
-      result |= IUA_PAGEDOWN;
    if(input->k_repeat & KEY_DRIGHT) 
-      result |= (input->k_held & KEY_R ? IUA_WIDTHUPBIG : IUA_WIDTHUP);
+      result |= (rmod ? IUA_WIDTHUPBIG : IUA_WIDTHUP);
    if(input->k_repeat & KEY_DLEFT) 
-      result |= (input->k_held & KEY_R ? IUA_WIDTHDOWNBIG : IUA_WIDTHDOWN);
+      result |= (rmod ? IUA_WIDTHDOWNBIG : IUA_WIDTHDOWN);
+   if(input->k_repeat & KEY_DUP) 
+      result |= (rmod ? (lmod ? IUA_PAGEUPBIG : IUA_PAGEUP) : IUA_ZOOMIN);
+   if(input->k_repeat & KEY_DDOWN) 
+      result |= (rmod ? (lmod ? IUA_PAGEDOWNBIG : IUA_PAGEDOWN) : IUA_ZOOMOUT);
+
    if(input->k_down & KEY_A) 
       result |= IUA_TOOLA;
    if(input->k_down & KEY_B) 
       result |= IUA_TOOLB;
    if(input->k_down & KEY_START) 
       result |= IUA_MENU;
-
    if(input->k_down & KEY_L)
-   {
-      if(input->k_held & KEY_R)
-         result |= IUA_PALETTESWAP;
-      else
-         result |= IUA_PALETTETOGGLE;
-   }
-
+      result |= (rmod ? IUA_PALETTESWAP : IUA_PALETTETOGGLE);
    if(input->k_down & KEY_SELECT)
-   {
-      if(input->k_held & KEY_R)
-         result |= IUA_EXPORTPAGE;
-      else
-         result |= IUA_NEXTLAYER;
-   }
+      result |= (rmod ? IUA_EXPORTPAGE : IUA_NEXTLAYER);
 
    return result;
 }
 
-////This is too big to put on the stack, and I want it all in one place, so here
-////we are doing it this way. This is like... 150 bytes max, come on.
-//struct InputAction[] game_input_default_actions {
-//   { , }
-//};
-//
-//u32 malloc_inputactions_default(struct InputAction * result)
-//{
-//
-//}
