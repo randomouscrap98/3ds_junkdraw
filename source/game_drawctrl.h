@@ -1,6 +1,6 @@
 
-#ifndef __HEADER_GAMEDRAWSTATE
-#define __HEADER_GAMEDRAWSTATE
+#ifndef __HEADER_GAMEDRAWCONTROL
+#define __HEADER_GAMEDRAWCONTROL
 
 #include <3ds.h>
 
@@ -10,25 +10,6 @@
 //#define TOOL_CHARS "pe"
 
 #define LINESTYLE_STROKE 0
-
-//Some default configuration (can probably be set during runtime)
-#define DEFAULT_SCREEN_COLOR C2D_Color32(90,90,90,255)
-#define DEFAULT_BG_COLOR C2D_Color32(255,255,255,255)
-
-#define DEFAULT_LAYER_WIDTH 1024
-#define DEFAULT_LAYER_HEIGHT 1024
-
-#define DEFAULT_START_LAYER 1
-#define DEFAULT_PALETTE_STARTINDEX 1
-#define DEFAULT_MIN_WIDTH 1
-#define DEFAULT_MAX_WIDTH 64
-
-//palette split is arbitrary, but I personally have them in blocks of 64 colors
-#define DEFAULT_PALETTE_SPLIT 64 
-
-
-//An array of STANDARD rgb colors representing the full master palette
-extern u32 default_palette[];
 
 //Variables for modifying display of drawing
 struct ScreenState
@@ -49,7 +30,6 @@ struct ScreenState
    u32 bg_color;
 };
 
-void set_screenstate_defaults(struct ScreenState * state);
 
 //Safely adjust the screen offset given new desired offsets (doesn't let you
 //set to unsafe values, etc)
@@ -64,9 +44,6 @@ struct ToolData {
    bool has_static_color;
    u16 static_color;
 };
-
-extern struct ToolData default_tooldata[];
-
 
 struct DrawState
 {
@@ -87,8 +64,6 @@ struct DrawState
    u8 max_width;
 };
 
-void init_default_drawstate(struct DrawState * state);
-void free_drawstate(struct DrawState * state);
 void shift_drawstate_color(struct DrawState * state, s16 ofs);
 void shift_drawstate_width(struct DrawState * state, s16 ofs);
 u16 get_drawstate_color(struct DrawState * state);

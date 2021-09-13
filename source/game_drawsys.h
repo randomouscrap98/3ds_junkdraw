@@ -4,7 +4,7 @@
 
 #include <3ds.h>
 #include "lib/myutils.h"
-#include "game_drawstate.h"
+#include "game_drawctrl.h"
 
 // A basic representation of a collection of lines. Doesn't understand "tools"
 // or any of that, it JUST has the information required to draw the lines.

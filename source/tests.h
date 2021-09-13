@@ -443,6 +443,6 @@ void run_tests()
    if(test_insertevent()) return;
    if(test_removeevent()) return;
    if(test_bitflip()) return;
-   printf("\nAll tests passed\n");
+   printf("\nAll tests passed, hooray!\n");
 }
 

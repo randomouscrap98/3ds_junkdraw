@@ -20,8 +20,9 @@
 #include "constants.h"
 #include "gamemain.h"
 #include "game_input.h"
-#include "game_drawstate.h"
+#include "game_drawctrl.h"
 #include "game_drawsys.h"
+#include "game_defaults.h"
 
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
@@ -835,13 +836,11 @@ s8 host_local(udsNetworkStruct * networkstruct, udsBindContext * bindctx)
 
 #define MAIN_NEWDRAW() { \
    draw_data_end = draw_pointer = saved_last = draw_data; \
-   free_drawstate(&drwst); \
+   free_default_drawstate(&drwst); \
    init_default_drawstate(&drwst); \
    flush_layers = true;       \
    save_filename[0] = '\0';   \
-   pending.lines = pending_lines; \
    pending.line_count = 0;        \
-   pending.layer = LAYER_COUNT - 1; /*Always start on the top page */ \
    current_frame = end_frame = 0; \
    printf("\x1b[1;1H");       \
    print_controls();          \
@@ -881,6 +880,11 @@ int main(int argc, char** argv)
    //struct GameEvent * equeue = NULL;   //The head of the event queue
 
    struct DrawState drwst;
+   struct ScreenState scrst;
+   struct CpadProfile cpdpr;
+
+   set_screenstate_defaults(&scrst);
+   set_cpadprofile_canvas(&cpdpr);
 
    //weird byte order? 16 bits of color are at top
    const u32 layer_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
@@ -895,10 +899,6 @@ int main(int argc, char** argv)
    for(int i = 0; i < LAYER_COUNT; i++)
       create_layer(layers + i, subtex);
 
-   struct ScreenState scrst;
-   set_screenstate_defaults(&scrst);
-   struct CpadProfile cpdpr;
-   set_cpadprofile_canvas(&cpdpr);
 
    bool touching = false;
    bool palette_active = false;
@@ -910,6 +910,7 @@ int main(int argc, char** argv)
 
    struct LinePackage pending;
    struct SimpleLine * pending_lines = malloc(MAX_STROKE_LINES * sizeof(struct SimpleLine));
+   pending.lines = pending_lines;
 
    struct ScanDrawData scandata;
    scandata_initialize(&scandata, MAX_FRAMELINES);

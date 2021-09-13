@@ -6,6 +6,7 @@
 
 #include "lib/myutils.h"
 
+
 // User Actions 
 #define IUA_PAGEUP         0x00001
 #define IUA_PAGEDOWN       0x00002
@@ -28,8 +29,6 @@
 //Returns a bitfield representing all "game actions" taken based on the given input.
 u32 input_to_action(struct InputSet * input); //, struct InputAction * mapping);
 
-//This gives a profile that's good for moving the canvas around
-void set_cpadprofile_canvas(struct CpadProfile * profile);
 
 
 #endif
