@@ -192,9 +192,9 @@ bool test_linearr_eq(struct SimpleLine * l1, struct SimpleLine * l2, u16 cnt)
    return 1; }
 
 #define TST_CVLTST \
-   endptr = convert_lines_to_data(&package1, data, TST_CVLDAT); \
+   endptr = convert_linepack_to_data(&package1, data, TST_CVLDAT); \
    if(endptr == NULL) return 1; \
-   endptr2 = convert_data_to_lines(&package2, data, endptr); \
+   endptr2 = convert_data_to_linepack(&package2, data, endptr); \
    if(endptr2 == NULL) return 1; \
    TST_CVLEQ(package1, package2) \
    printf(".");
@@ -207,6 +207,8 @@ int test_convertlines()
    struct LinePackage package2;
    package1.lines = lines1;
    package2.lines = lines2;
+   package1.max_lines = 50;
+   package2.max_lines = 50;
    char data[TST_CVLDAT];
    char * endptr;
    char * endptr2;

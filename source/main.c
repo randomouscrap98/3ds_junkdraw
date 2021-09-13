@@ -21,6 +21,7 @@
 #include "gamemain.h"
 #include "game_input.h"
 #include "game_drawstate.h"
+#include "game_drawsys.h"
 
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
@@ -32,265 +33,6 @@
 
 //Some globals for the um... idk.
 u8 _db_prnt_row = 0;
-
-// -- SCREEN UTILS? --
-
-////Represents a transformation of the screen
-//struct ScreenModifier
-//{
-//   float ofs_x;
-//   float ofs_y;
-//   float zoom;
-//};
-
-//Generic page difference using cpad values, return the new page position given 
-//the existing position and the circlepad input
-//float calc_pagepos(s16 d, float existing_pos)
-//{
-//   u16 cpadmag = abs(d);
-//
-//   if(cpadmag > CPAD_DEADZONE)
-//   {
-//      return existing_pos + (d < 0 ? -1 : 1) * 
-//            (CPAD_PAGECONST + pow(cpadmag * CPAD_PAGEMULT, CPAD_PAGECURVE));
-//   }
-//   else
-//   {
-//      return existing_pos;
-//   }
-//}
-//
-////Easy way to set the screen offset (translation) safely for the given screen
-////modifier. Clamps the values appropriately
-//void set_screenmodifier_ofs(struct ScreenModifier * mod, u16 ofs_x, u16 ofs_y)
-//{
-//   float maxofsx = LAYER_WIDTH * mod->zoom - SCREENWIDTH;
-//   float maxofsy = LAYER_HEIGHT * mod->zoom - SCREENHEIGHT;
-//   mod->ofs_x = C2D_Clamp(ofs_x, 0, maxofsx < 0 ? 0 : maxofsx);
-//   mod->ofs_y = C2D_Clamp(ofs_y, 0, maxofsy < 0 ? 0 : maxofsy);
-//}
-//
-////Easy way to set the screen zoom while preserving the center of the screen.
-////So, the image should not appear to shift too much while zooming. The offsets
-////WILL be modified after this function is completed!
-//void set_screenmodifier_zoom(struct ScreenModifier * mod, float zoom)
-//{
-//   float zoom_ratio = zoom / mod->zoom;
-//   u16 center_x = SCREENWIDTH >> 1;
-//   u16 center_y = SCREENHEIGHT >> 1;
-//   u16 new_ofsx = zoom_ratio * (mod->ofs_x + center_x) - center_x;
-//   u16 new_ofsy = zoom_ratio * (mod->ofs_y + center_y) - center_y;
-//   mod->zoom = zoom;
-//   set_screenmodifier_ofs(mod, new_ofsx, new_ofsy);
-//}
-
-//Update screen translation based on cpad input
-//void update_screenmodifier(struct ScreenModifier * mod, circlePosition pos)
-//{
-//   set_screenmodifier_ofs(mod, calc_pagepos(pos.dx, mod->ofs_x), calc_pagepos(-pos.dy, mod->ofs_y));
-//}
-
-
-
-// -- Stroke/line utilities --
-
-//A line doesn't contain all the data needed to draw itself. That would be a
-//line package
-//struct SimpleLine {
-//   u16 x1, y1, x2, y2;
-//};
-
-// A basic representation of a collection of lines. Doesn't understand "tools"
-// or any of that, it JUST has the information required to draw the lines.
-struct LinePackage {
-   u8 style;
-   u8 layer;
-   u16 color;
-   u8 width;
-   struct SimpleLine * lines;
-   u16 line_count;
-};
-
-//Add another stroke to a line collection (that represents a stroke). Works for
-//the first stroke too.
-struct SimpleLine * add_stroke(struct LinePackage * pending, 
-      const touchPosition * pos, const struct ScreenState * mod)
-{
-   //This is for a stroke, do different things if we have different tools!
-   struct SimpleLine * line = pending->lines + pending->line_count;
-
-   line->x2 = pos->px / mod->zoom + mod->offset_x / mod->zoom;
-   line->y2 = pos->py / mod->zoom + mod->offset_y / mod->zoom;
-
-   if(pending->line_count == 0)
-   {
-      line->x1 = line->x2;
-      line->y1 = line->y2;
-   }
-   else
-   {
-      line->x1 = pending->lines[pending->line_count - 1].x2;
-      line->y1 = pending->lines[pending->line_count - 1].y2;
-   }
-
-   //Added a line
-   pending->line_count++;
-
-   return line;
-}
-
-//A true macro, as in just dump code into the function later. Used ONLY for 
-//convert_lines, hence "CVL"
-#define CVL_LINECHECK if(container_size - (ptr - container) < DCV_VARIMAXSCAN) { \
-   LOGDBG("ERROR: ran out of space in line conversion: original size: %ld\n",container_size); \
-   return NULL; }
-
-//Convert lines into data, but if it doesn't fit, return a null pointer.
-//Returned pointer points to end + 1 in container
-char * convert_lines_to_data(struct LinePackage * lines, char * container, u32 container_size)
-{
-   char * ptr = container;
-
-   if(lines->line_count < 1)
-   {
-      LOGDBG("WARN: NO LINES TO CONVERT!\n");
-      return NULL;
-   }
-
-   //This is a check that will need to be performed a lot
-   CVL_LINECHECK
-
-   //NOTE: the data is JUST the info for the lines, it's not "wrapped" into a
-   //package or anything. So for instance, the length of the data is not
-   //included at the start, as it may be stored in the final product
-
-   //1 byte style/layer, 1 byte width, 3 bytes color
-   //3 bits of line style, 1 bit (for now) of layers, 2 unused
-   ptr = int_to_chars((lines->style & 0x7) | (lines->layer << 3),1,ptr); 
-   //6 bits of line width (minus 1)
-   ptr = int_to_chars(lines->width - 1,1,ptr); 
-   //16 bits of color (2 unused)
-   ptr = int_to_chars(lines->color,3,ptr); 
-
-   CVL_LINECHECK
-
-   //Now for strokes, we store the first point, then move along the rest of the
-   //points doing an offset storage
-   if(lines->style == LINESTYLE_STROKE)
-   {
-      //Dump first point, save point data for later
-      u16 x = lines->lines[0].x1;
-      u16 y = lines->lines[0].y1;
-      ptr = int_to_chars(x, 2, ptr);
-      ptr = int_to_chars(y, 2, ptr);
-
-      //Now compute distances between this point and previous, store those as
-      //variable width values. This can save a significant amount for most
-      //types of drawing.
-      for(u16 i = 0; i < lines->line_count; i++)
-      {
-         CVL_LINECHECK
-
-         if(x == lines->lines[i].x2 && y == lines->lines[i].y2)
-            continue; //Don't need to store stationary lines
-
-         ptr = int_to_varwidth(signed_to_special(lines->lines[i].x2 - x), ptr);
-         ptr = int_to_varwidth(signed_to_special(lines->lines[i].y2 - y), ptr);
-
-         x = lines->lines[i].x2;
-         y = lines->lines[i].y2;
-      }
-   }
-   else
-   {
-      //We DON'T support this! 
-      LOGDBG("ERR: L2D UNSUPPORTED STROKE: %d\n", lines->style);
-      return NULL;
-   }
-
-   return ptr;
-}
-
-//A true macro, as in just dump code into the function later. Used ONLY for 
-//convert_data, hence "CVD"
-#define CVD_LINECHECK(x,msg) if((data_end - endptr) < x) { \
-   LOGDBG("ERROR: Not enough data to parse line! %s\n",msg); \
-   return NULL; }
-
-//Package needs to have a 'lines' array already assigned with enough space to
-//hold the largest stroke. Data needs to start precisely where you want it.
-//Parsed data is all stored in the given package. A partial parse may result 
-//in a partially modified package. Converts a single chunk of line data.
-//Returns the next position in the data to start reading a chunk
-char * convert_data_to_lines(struct LinePackage * package, char * data, char * data_end)
-{
-   char * endptr = data;
-   package->line_count = 0;
-
-   //If data is so short that it can't even parse the preamble, quit
-   CVD_LINECHECK(5,"PREAMBLE")
-
-   u32 temp = chars_to_int(endptr, 1);
-   package->style = temp & 0x7;
-   package->layer = (temp >> 3) & 0x1; 
-   package->width = chars_to_int(endptr + 1, 1) + 1;
-   package->color = chars_to_int(endptr + 2, 3);
-   endptr += 5;
-
-   if(package->style == LINESTYLE_STROKE)
-   {
-      CVD_LINECHECK(4,"STROKE FIRST POINT")
-
-      //First point is regular simple 4 byte data point.
-      u16 x = chars_to_int(endptr, 2);
-      u16 y = chars_to_int(endptr + 2, 2);
-      endptr += 4;
-
-      u8 scanned = 0;
-
-      //This could be VERY VERY UNSAFE!!
-      while(endptr < data_end)
-      {
-         struct SimpleLine * line = package->lines + package->line_count;
-
-         //Store current end as first point
-         line->x1 = x; line->y1 = y;
-         //Read next endpoint
-         x = x + special_to_signed(varwidth_to_int(endptr, &scanned)); 
-         endptr += scanned;
-         y = y + special_to_signed(varwidth_to_int(endptr, &scanned)); 
-         endptr += scanned;
-         //The end of us is the next endpoint
-         line->x2 = x; line->y2 = y;
-
-         //We added another line
-         package->line_count++;
-
-         if(package->line_count > MAX_STROKE_LINES)
-         {
-            LOGDBG("ERR: got a stroke that's too long!");
-            return NULL;
-         }
-      }
-
-      //The special case where there's no additional strokes
-      if(package->line_count == 0)
-      {
-         package->lines[0].x1 = package->lines[0].x2 = x; 
-         package->lines[0].y1 = package->lines[0].y2 = y;
-         package->line_count++;
-      }
-   }
-   else
-   {
-      //We DON'T support this! 
-      LOGDBG("ERR: D2L UNSUPPORTED STROKE: %d\n", package->style);
-      return NULL;
-   }
-
-   return endptr;
-}
-
 
 
 // -- LAYER UTILS --
@@ -331,67 +73,12 @@ u32 _drw_cmd_cnt = 0;
 #define MY_FLUSHCHECK() if(_drw_cmd_cnt > MY_C2DOBJLIMITSAFETY) { \
    LOGDBG("FLUSHING %ld DRAW CMDS PREMATURELY\n", _drw_cmd_cnt); \
    MY_FLUSH(); }
-//#define MY_SOLIDRECT(x,y,d,w,h,c) { C2D_DrawRectSolid(x, y, d, w, h, c); _drw_cmd_cnt++; MY_FLUSHCHECK(); }
 
 void MY_SOLIDRECT(float x, float y, u16 width, u32 color)
 {
    C2D_DrawRectSolid(x, y, 0.5, width, width, color);
    _drw_cmd_cnt++; 
    MY_FLUSHCHECK();
-}
-//float cr_lx = -1;
-//float cr_ly = -1;
-//u32 cr_cl = 0;
-//
-//typedef void (* rectangle_func)(float, float, u16, u32);
-//
-////Draw a rectangle centered and pixel aligned around the given point.
-//void draw_centeredrect(float x, float y, u16 width, u32 color, 
-//      rectangle_func rect_f)
-//{
-//   CENTER_RECT_ALIGNPIXEL(x, y);
-//   if(x < LAYER_EDGEBUF || y < LAYER_EDGEBUF || 
-//         (cr_lx == x && cr_ly == y && cr_cl == color)) return;
-//   if(rect_f != NULL) (*rect_f)(x,y,width,color);
-//   else MY_SOLIDRECT(x, y, 0.5f, width, width, color);
-//   cr_lx = x; cr_ly = y; cr_cl = color;
-//}
-//
-////Draw a line using a custom line drawing system (required like this because of
-////javascript's general inability to draw non anti-aliased lines, and I want the
-////strokes saved by this program to be 100% accurately reproducible on javascript)
-//void custom_drawline(const struct SimpleLine * line, u16 width, u32 color,
-//      rectangle_func rect_f)
-//{
-//   float xdiff = line->x2 - line->x1;
-//   float ydiff = line->y2 - line->y1;
-//   float dist = sqrt(xdiff * xdiff + ydiff * ydiff);
-//   float ang = atan(ydiff/(xdiff?xdiff:0.0001))+(xdiff<0?M_PI:0);
-//   float xang = cos(ang);
-//   float yang = sin(ang);
-//
-//   for(float i = 0; i <= dist; i+=0.5)
-//      draw_centeredrect(line->x1+xang*i, line->y1+yang*i, width, color, rect_f);
-//}
-
-//Draw the collection of lines given, starting at the given line and ending
-//before the other given line (first inclusive, last exclusive)
-//Assumes you're already on the appropriate page you want and all that
-void draw_lines(const struct LinePackage * linepack, u16 pack_start, u16 pack_end,
-      rectangle_func rect_f)
-{
-   u32 color = rgba16_to_rgba32c(linepack->color);
-
-   if(pack_end > linepack->line_count)
-      pack_end = linepack->line_count;
-
-   for(u16 i = pack_start; i < pack_end; i++)
-      custom_drawline(&linepack->lines[i], linepack->width, color, rect_f);
-}
-
-void draw_all_lines(const struct LinePackage * linepack, rectangle_func rect_f)
-{
-   draw_lines(linepack, 0, linepack->line_count, rect_f);
 }
 
 //Draw the scrollbars on the sides of the screen for the given screen
@@ -477,29 +164,6 @@ void draw_layers(const struct LayerData * layers, layer_num layer_count,
 
 // -- CONTROL UTILS --
 
-////Saved data for a tool. Each tool may (if it so desires) have different
-////colors, widths, etc.
-//struct ToolData {
-//   s8 width;
-//   u16 color;
-//   u8 style;
-//   bool color_settable;
-//   //u8 color_redirect;
-//};
-//
-////Fill tools with default values for the start of the program.
-//void fill_defaulttools(struct ToolData * tool_data, u16 default_color)
-//{
-//   tool_data[TOOL_PENCIL].width = 2;
-//   tool_data[TOOL_PENCIL].color = default_color;
-//   tool_data[TOOL_PENCIL].style = LINESTYLE_STROKE;
-//   tool_data[TOOL_PENCIL].color_settable = true;
-//   //tool_data[TOOL_PENCIL].color_redirect = TOOL_PENCIL;
-//   tool_data[TOOL_ERASER].width = 4;
-//   tool_data[TOOL_ERASER].color = 0;
-//   tool_data[TOOL_ERASER].style = LINESTYLE_STROKE;
-//   tool_data[TOOL_ERASER].color_settable = false;
-//}
 
 //Given a touch position (presumably on the color palette), update the selected
 //palette index. 
@@ -512,14 +176,6 @@ void update_paletteindex(const touchPosition * pos, u8 * index)
    if(new_index >= 0 && new_index < DEFAULT_PALETTE_SPLIT) //PALETTE_COLORS)
       *index = new_index;
 }
-
-//void update_package_with_tool(struct LinePackage * pending, const struct DrawState * state) //const struct ToolData * tool_data)
-//{
-//   pending->color = state->master_palette[state->master_palette_index]; //tool_data->color;
-//   pending->style = state->tools[state->tool_index].style; //tool_data->style;
-//   pending->width = state->tools[state->tool_index].width; //tool_data->width;
-//}
-
 
 
 // -- DATA TRANSFER UTILS --
@@ -654,6 +310,11 @@ void scandata_initialize(struct ScanDrawData * data, u32 max_line_buffer)
    data->current_package = NULL;
    data->last_package = data->packages;
    data->last_line = data->all_lines;
+
+   //Even though each package TECHNICALLY points to the mega line array, we
+   //still don't want any individual package to go over our max
+   for(int i = 0; i < data->packages_capacity; i++)
+      data->packages[i].max_lines = MAX_STROKE_LINES;
 }
 
 void scandata_free(struct ScanDrawData * data)
@@ -714,7 +375,7 @@ u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount,
                packagedrawlines = leftover_drawcount;
             }
 
-            draw_lines(p, 0, packagedrawlines, MY_SOLIDRECT);
+            pixaligned_linepackfunc(p, 0, packagedrawlines, MY_SOLIDRECT);
             line_drawcount += packagedrawlines;
 
             //If we didn't draw ALL the lines, move the line pointer forward.
@@ -781,7 +442,7 @@ char * scandata_parse(struct ScanDrawData * scandata, char * drawdata,
       //I don't know when this wouldn't be the case, but the parse_pointer
       //SHOULD point to the start of the next stroke, or in other words, 1 past
       //the last character in the stroke data, which is perfect for this.
-      convert_data_to_lines(scandata->last_package, stroke_pointer, parse_pointer);
+      convert_data_to_linepack(scandata->last_package, stroke_pointer, parse_pointer);
 
       //Move the "last" pointers forward
       scandata->last_line += scandata->last_package->line_count;
@@ -805,7 +466,6 @@ char * scandata_parse(struct ScanDrawData * scandata, char * drawdata,
    printf_flush("\x1b[%d;1H%-150s\x1b[%d;2H\x1b[%dm", MAINMENU_TOP, "", MAINMENU_TOP, col); \
    printf_flush(x, ## __VA_ARGS__); } \
 
-//#define LOGDBG(f_, ...) {DEBUG_PRINT_SPECIAL();LOGTIME();printf((f_), ## __VA_ARGS__);}
 #define PRINTERR(x, ...) PRINTGENERAL(x, 31, ## __VA_ARGS__)
 #define PRINTWARN(x, ...) PRINTGENERAL(x, 33, ## __VA_ARGS__)
 #define PRINTINFO(x, ...) PRINTGENERAL(x, 37, ## __VA_ARGS__)
@@ -1053,6 +713,7 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
    char * stroke_start = NULL;
    struct LinePackage package;
    package.lines = malloc(sizeof(struct SimpleLine) * MAX_STROKE_LINES);
+   package.max_lines = MAX_STROKE_LINES;
 
    if(!package.lines)
    {
@@ -1069,11 +730,11 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
       //Is this the normal way to do this? idk
       if(stroke_start == NULL) continue;
 
-      convert_data_to_lines(&package, stroke_start, current_data);
+      convert_data_to_linepack(&package, stroke_start, current_data);
       _exp_layer_dt = layerdata[package.layer];
 
       //At this point, we draw the line.
-      draw_all_lines(&package, &_exp_layer_dt_func);
+      pixaligned_linepackfunc_all(&package, &_exp_layer_dt_func);
    }
 
    //Now merge arrays together; our alpha blending is dead simple. 
@@ -1217,19 +878,12 @@ int main(int argc, char** argv)
    //to reboot the system and still have the exact same setup.
    struct GameState gstate;
    //struct GameState estate;            //The state passed to events
-   struct GameEvent * equeue = NULL;   //The head of the event queue
+   //struct GameEvent * equeue = NULL;   //The head of the event queue
 
    struct DrawState drwst;
 
    //weird byte order? 16 bits of color are at top
-   //const u32 screen_color = SCREEN_COLOR;
-   //const u32 bg_color = CANVAS_BG_COLOR;
    const u32 layer_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
-
-   //u16 palette_offset = 0;
-   //u16 palette [PALETTE_COLORS];
-   //convert_palette(base_palette + palette_offset, palette, PALETTE_COLORS);
-   //u8 palette_index = PALETTE_STARTINDEX;
 
    const Tex3DS_SubTexture subtex = {
       LAYER_WIDTH, LAYER_HEIGHT,
@@ -1241,7 +895,7 @@ int main(int argc, char** argv)
    for(int i = 0; i < LAYER_COUNT; i++)
       create_layer(layers + i, subtex);
 
-   struct ScreenState scrst; // = {0,0,1}; 
+   struct ScreenState scrst;
    set_screenstate_defaults(&scrst);
    struct CpadProfile cpdpr;
    set_cpadprofile_canvas(&cpdpr);
@@ -1250,17 +904,9 @@ int main(int argc, char** argv)
    bool palette_active = false;
    bool flush_layers = true;
 
-   //circlePosition pos;
-   //touchPosition current_touch;
    u32 current_frame = 0;
    u32 end_frame = 0;
-   //s8 zoom_power = 0;
    s8 last_zoom_power = 0;
-   //u16 current_page = 0;
-
-   //u8 current_tool = 0;
-   //struct ToolData tool_data[TOOL_COUNT];
-   //fill_defaulttools(tool_data, palette[palette_index]);
 
    struct LinePackage pending;
    struct SimpleLine * pending_lines = malloc(MAX_STROKE_LINES * sizeof(struct SimpleLine));
@@ -1376,19 +1022,15 @@ int main(int argc, char** argv)
          }
       }
       if(kDown & KEY_TOUCH) {
-         //struct ToolData t = drwst.tools[drwst.tool_index];
          pending.color = get_drawstate_color(&drwst);
-            //t.has_static_color ? t.static_color : drwst.palette[drwst.palette_index];
          pending.style = drwst.current_tool->style;
          pending.width = drwst.current_tool->width;
          pending.layer = drwst.layer;
       }
-         //update_package_with_tool(&pending, &tool_data[current_tool]);
       if(kUp & KEY_TOUCH) end_frame = current_frame;
 
       //Update zoom separately, since the update is always the same
       if(drwst.zoom_power != last_zoom_power) set_screenstate_zoom(&scrst, pow(2, drwst.zoom_power));
-      //drwst.tools[drwst.tool_index].width = C2D_Clamp(drwst.tools[drwst.tool_index].width, MIN_WIDTH, MAX_WIDTH);
 
       if(kRepeat & ~(KEY_TOUCH) || !current_frame)
       {
@@ -1398,12 +1040,9 @@ int main(int argc, char** argv)
 
       touching = (kHeld & KEY_TOUCH) > 0;
 
-      //update_screenmodifier(&scrst, pos);
-//float cpad_translate(struct CpadProfile * profile, s16 cpad_magnitude, float existing_pos)
       set_screenstate_offset(&scrst, 
             cpad_translate(&cpdpr, pos.dx, scrst.offset_x), 
             cpad_translate(&cpdpr, -pos.dy, scrst.offset_y));
-
 
 
       // Render the scene
@@ -1437,9 +1076,9 @@ int main(int argc, char** argv)
             if(pending.line_count < MAX_STROKE_LINES)
             {
                //This is for a stroke, do different things if we have different tools!
-               add_stroke(&pending, &current_touch, &scrst);
+               add_point_to_stroke(&pending, &current_touch, &scrst);
                //Draw ONLY the current line
-               draw_lines(&pending, pending.line_count - 1, pending.line_count, MY_SOLIDRECT);
+               pixaligned_linepackfunc(&pending, pending.line_count - 1, pending.line_count, MY_SOLIDRECT);
             }
          }
       }
@@ -1467,8 +1106,8 @@ int main(int argc, char** argv)
       //section (not the blit-tool-to-layer and not the draw-bottom-screen)
 
       //Run through the event queue and.. do it all
-      for(struct GameEvent * ge = equeue; ge != NULL; ge = ge->next_event)
-         ((game_event_handler)ge->handler)(&gstate);
+      //for(struct GameEvent * ge = equeue; ge != NULL; ge = ge->next_event)
+      //   ((game_event_handler)ge->handler)(&gstate);
       
       //SHALLOW COPY the gstate to our event state so changes in events don't
       //alter the real game state (is this desirable???)
@@ -1484,7 +1123,7 @@ int main(int argc, char** argv)
       //TODO: Eventually, change this to put the data in different places?
       if(end_frame == current_frame && pending.line_count > 0)
       {
-         char * cvl_end = convert_lines_to_data(&pending, stroke_data, MAX_STROKE_DATA);
+         char * cvl_end = convert_linepack_to_data(&pending, stroke_data, MAX_STROKE_DATA);
 
          if(cvl_end == NULL)
          {

@@ -45,7 +45,7 @@ u32 swap_bits_mask(u32 x, u32 m1, u32 m2);
 struct SimpleLine { u16 x1, y1, x2, y2; };
 
 typedef void (* rectangle_func)(float, float, u16, u32); //X,Y,width,32-bit color
-void custom_drawline(const struct SimpleLine * line, u16 width, u32 color, rectangle_func rect_f);
+void pixaligned_linefunc (const struct SimpleLine * line, u16 width, u32 color, rectangle_func rect_f);
 
 // COLOR STUFF
 u32 rgb24_to_rgba32c(u32 rgb);

@@ -46,7 +46,7 @@ u32 swap_bits_mask(u32 x, u32 m1, u32 m2)
 //Draw a line using a custom line drawing system (required like this because of
 //javascript's general inability to draw non anti-aliased lines, and I want the
 //strokes saved by this program to be 100% accurately reproducible on javascript)
-void custom_drawline(const struct SimpleLine * line, u16 width, u32 color,
+void pixaligned_linefunc(const struct SimpleLine * line, u16 width, u32 color,
       rectangle_func rect_f)
 {
    float xdiff = line->x2 - line->x1;
@@ -78,9 +78,6 @@ void custom_drawline(const struct SimpleLine * line, u16 width, u32 color,
 
       ox = x; oy = y;
    }
-   //if(x < LAYER_EDGEBUF || y < LAYER_EDGEBUF || (ox == x && oy == y)) 
-   //draw_centeredrect(line->x1+xang*i, line->y1+yang*i, width, color, rect_f);
-   //else MY_SOLIDRECT(x, y, 0.5f, width, width, color);
 }
 
 

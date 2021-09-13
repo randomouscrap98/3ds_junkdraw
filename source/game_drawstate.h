@@ -7,7 +7,6 @@
 
 #define TOOL_PENCIL 0
 #define TOOL_ERASER 1
-//#define TOOL_COUNT 2
 //#define TOOL_CHARS "pe"
 
 #define LINESTYLE_STROKE 0
@@ -74,8 +73,6 @@ struct DrawState
    s8 zoom_power;
    u16 page;
    u8 layer;
-
-   //u8 layer_count;
 
    u16 * palette;
    u16 * current_color; //This tells us the exact color for drawing
