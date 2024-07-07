@@ -77,6 +77,11 @@ u32 _drw_cmd_cnt = 0;
 
 void MY_SOLIDRECT(float x, float y, u16 width, u32 color)
 {
+   if(x < 8 || y < 8)
+   {
+      LOGDBG("CAN'T DRAW ALONG EDGE, IGNORING (%f, %f)", x, y);
+      return;
+   }
    C2D_DrawRectSolid(x, y, 0.5, width, width, color);
    _drw_cmd_cnt++; 
    MY_FLUSHCHECK();

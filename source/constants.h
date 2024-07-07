@@ -1,7 +1,9 @@
+#ifndef __HEADER_CONSTANTS
+#define __HEADER_CONSTANTS
 
 // -- Some SUPER IMPORTANT constants
 
-#define VERSION "0.2.1"
+#define VERSION "0.2.2"
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE"saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE"screenshots/"
@@ -169,3 +171,5 @@ u32 base_palette[] = {
    0x151d28, 0x202e37, 0x394a50, 0x577277, 0x819796, 0xa8b5b2, 0xc7cfcc, 0xebede9
 
 };
+
+#endif

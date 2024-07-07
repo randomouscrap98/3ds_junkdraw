@@ -1,3 +1,7 @@
+# NOTE: created many years ago with an old devkitpro (unknown version). The following 
+# changes have been made:
+# > 20240707 - replaced D_3DS with D__3DS__ as suggested (why??)
+
 #---------------------------------------------------------------------------------
 .SUFFIXES:
 #---------------------------------------------------------------------------------
@@ -42,8 +46,10 @@ ROMFS		:=	romfs
 GFXBUILD	:=	$(ROMFS)/gfx
 
 APP_TITLE := Junk Draw
-APP_DESCRIPTION := Draw basic art (with friends if you want)
-APP_AUTHOR := randomouscrap98
+APP_DESCRIPTION := Basic paginated drawing program
+# Draw basic art (with friends if you want)
+APP_AUTHOR := haloopdy
+# randomouscrap98
 
 #---------------------------------------------------------------------------------
 # options for code generation
@@ -54,7 +60,7 @@ CFLAGS	:=	-g -Wall -O2 -mword-relocations \
 			-fomit-frame-pointer -ffunction-sections \
 			$(ARCH)
 
-CFLAGS	+=	$(INCLUDE) -DARM11 -D_3DS
+CFLAGS	+=	$(INCLUDE) -DARM11 -D__3DS__
 
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
 
