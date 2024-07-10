@@ -1,4 +1,3 @@
-// #include "myutils.h"
 #include "draw.h"
 
 // C lets you redefine stuff... right?
