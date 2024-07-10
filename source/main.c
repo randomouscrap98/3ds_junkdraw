@@ -12,12 +12,12 @@
 //#define DEBUG_COORD
 //#define DEBUG_DATAPRINT
 
-//#include "lib/entity.h"
-#include "draw.h"
-#include "system.h"
+#include "filesys.h"
 #include "console.h"
 #include "input.h"
+#include "draw.h"
 
+#include "system.h"
 #include "setup.h"
 
 // #include "constants.h"
@@ -43,7 +43,21 @@ u8 _db_prnt_row = 0;
 #define MY_C2DOBJLIMITSAFETY MY_C2DOBJLIMIT - 100
 #define PSX1BLEN 30
 
+#define DEFAULT_PALETTE_SPLIT 64 
+
+#define LAYER_COUNT 2
+#define TEXTURE_WIDTH 1024
+#define TEXTURE_HEIGHT 1024
+
+#define TOOL_PENCIL 0
+#define TOOL_ERASER 1
+#define TOOL_COUNT 2
+#define TOOL_CHARS "pe"
+
 #define LAYER_EDGEBUF 8
+
+typedef u16 page_num;
+typedef u8 layer_num;
 
 #pragma region GAMESTATE
 
@@ -423,13 +437,6 @@ void print_time(bool showcolon)
          status_x1b, timeinfo->tm_hour, showcolon ? ':' : ' ', timeinfo->tm_min);
 }
 
-void print_constatus(int con_type, int disp)
-{
-   printf("\x1b[28;%dH%s%s", 47 - strlen(VERSION), contype_styles[con_type], 
-         con_type ? constatus_animframes[disp] : constatus_animframes[CONSTATUS_ANIMFRAMES]);
-}
-
-
 
 // -- FILESYSTEM --
 
@@ -650,6 +657,8 @@ END:
 
 // -- MAIN, OFC --
 
+#define UTILS_CLAMP(x, mn, mx) (x <= mn ? mn : x >= mx ? mx : x)
+
 // Some macros used ONLY for main (think lambdas)
 #define MAIN_UPDOWN(x) {   \
    if(kHeld & KEY_R) {     \
@@ -692,8 +701,6 @@ int main(int argc, char** argv)
    //TODO: eventually, I want the game state to include most of what you'd need
    //to reboot the system and still have the exact same setup.
    struct GameState gstate;
-   //struct GameState estate;            //The state passed to events
-   //struct GameEvent * equeue = NULL;   //The head of the event queue
 
    struct DrawState drwst;
    struct ScreenState scrst;
@@ -904,24 +911,7 @@ int main(int argc, char** argv)
       C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, 
             GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
 
-
-      //TODO: Assume all events want to happen within the standard drawing
-      //section (not the blit-tool-to-layer and not the draw-bottom-screen)
-
-      //Run through the event queue and.. do it all
-      //for(struct GameEvent * ge = equeue; ge != NULL; ge = ge->next_event)
-      //   ((game_event_handler)ge->handler)(&gstate);
-      
-      //SHALLOW COPY the gstate to our event state so changes in events don't
-      //alter the real game state (is this desirable???)
-      //memcpy(estate, gstate, sizeof(struct GameEvent));
-
       if(!(current_frame % 30)) print_time(current_frame % 60);
-      if(!(current_frame % CONSTATUS_ANIMTIME)) 
-      {
-         print_constatus(con_type, (current_frame % (CONSTATUS_ANIMTIME * CONSTATUS_ANIMFRAMES)) 
-               / CONSTATUS_ANIMTIME);
-      }
 
       //TODO: Eventually, change this to put the data in different places?
       if(end_frame == current_frame && pending.line_count > 0)

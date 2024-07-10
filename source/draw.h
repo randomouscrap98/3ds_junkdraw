@@ -4,6 +4,8 @@
 #include <3ds.h>
 
 #define DRAWDATA_ALIGNMENT '.'
+#define LAYER_WIDTH 1000
+#define LAYER_HEIGHT 1000
 
 // ------- Draw data conversion -------------
 
@@ -68,7 +70,9 @@ char * convert_data_to_linepack(struct LinePackage * package, char * data, char 
 #define MAX_DRAW_DATA (u32)5000000
 #define MAX_STROKE_LINES 5000
 #define MAX_STROKE_DATA MAX_STROKE_LINES << 3
+
 #define MAX_DRAWDATA_SCAN 100000
+#define MAX_FRAMELINES 1000
 
 char * write_to_datamem(char * stroke_data, char * stroke_end, u16 page, char * mem, char * mem_end);
 char * datamem_scanstroke(char * start, char * end, const u32 max_scan, const u16 page, char ** stroke_start);

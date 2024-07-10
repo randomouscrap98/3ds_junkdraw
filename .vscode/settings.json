@@ -2,6 +2,7 @@
     "C_Cpp.default.includePath": [
         "${workspaceFolder}\\**",
         "C:\\devkitPro\\libnds\\include\\**",
+        "C:\\devkitPro\\portlibs\\3ds\\include\\**",
         "C:\\devkitPro\\libctru\\include\\**",
         "C:\\devkitPro\\devkitARM\\include\\**",
         "C:\\devkitPro\\devkitARM\\arm-none-eabi\\include\\**"
