@@ -1,4 +1,7 @@
 # 3ds_junkdraw
+
+<img align="right" src="icon.png" alt="icon">
+
 An extremely simple drawing app for the 3DS. Focus is simplicity and ease of reimplementation.
 
 ## About
