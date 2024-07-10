@@ -389,6 +389,31 @@ void draw_layers(const struct LayerData * layers, layer_num layer_count,
    }
 }
 
+struct SimpleLine * add_point_to_stroke(struct LinePackage * pending, 
+      const touchPosition * pos, const struct ScreenState * mod)
+{
+   //This is for a stroke, do different things if we have different tools!
+   struct SimpleLine * line = pending->lines + pending->line_count;
+
+   line->x2 = pos->px / mod->zoom + mod->offset_x / mod->zoom;
+   line->y2 = pos->py / mod->zoom + mod->offset_y / mod->zoom;
+
+   if(pending->line_count == 0)
+   {
+      line->x1 = line->x2;
+      line->y1 = line->y2;
+   }
+   else
+   {
+      line->x1 = pending->lines[pending->line_count - 1].x2;
+      line->y1 = pending->lines[pending->line_count - 1].y2;
+   }
+
+   //Added a line
+   pending->line_count++;
+
+   return line;
+}
 
 
 // -- CONTROL UTILS --

@@ -94,11 +94,14 @@ extern u8 _db_prnt_row; // What the hell is this
 
 #ifdef DEBUG_PRINT
 #ifdef DEBUG_PRINT_SPECIAL
+#undef LOGDBG
 #define LOGDBG(f_, ...) {DEBUG_PRINT_SPECIAL();LOGTIME();printf((f_), ## __VA_ARGS__);}
 #else
+#undef LOGDBG
 #define LOGDBG(f_, ...) {LOGTIME();printf((f_), ## __VA_ARGS__);}
 #endif
 #else
+#undef LOGDBG
 #define LOGDBG(f_, ...)
 #endif
 
