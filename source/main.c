@@ -21,13 +21,6 @@
 #include "system.h"
 #include "setup.h"
 
-// #include "constants.h"
-// #include "gamemain.h"
-// #include "game_input.h"
-// #include "game_drawctrl.h"
-// #include "game_drawsys.h"
-// #include "game_defaults.h"
-
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
 // - Fill color works perfectly fine using line/rect calls, but ClearTarget
@@ -186,7 +179,6 @@ void set_cpadprofile_canvas(struct CpadProfile * profile)
 }
 
 #pragma endregion
-
 
 #pragma region GAMESTATE
 
@@ -852,6 +844,8 @@ int main(int argc, char** argv)
    consoleInit(GFX_TOP, NULL);
    C3D_RenderTarget* screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
+   LOGDBG("INITIALIZED")
+
    //TODO: eventually, I want the game state to include most of what you'd need
    //to reboot the system and still have the exact same setup.
    struct GameState gstate;
@@ -860,8 +854,11 @@ int main(int argc, char** argv)
    struct ScreenState scrst;
    struct CpadProfile cpdpr;
 
+   init_default_drawstate(&drwst); // Just in case
    set_screenstate_defaults(&scrst);
    set_cpadprofile_canvas(&cpdpr);
+
+   LOGDBG("SET SCREENSTATE/CANVAS");
 
    //weird byte order? 16 bits of color are at top
    const u32 layer_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
@@ -876,6 +873,7 @@ int main(int argc, char** argv)
    for(int i = 0; i < LAYER_COUNT; i++)
       create_layer(layers + i, subtex);
 
+   LOGDBG("CREATED LAYERS");
 
    bool touching = false;
    bool palette_active = false;
@@ -899,10 +897,7 @@ int main(int argc, char** argv)
    char * draw_pointer;
    char * saved_last;
 
-   //udsNetworkStruct network_struct;
-   //udsBindContext bind_ctx;
-   //u8 con_type = 0;
-   //bool hosting_local = false;
+   LOGDBG("SYSTEM MALLOC");
 
    MAIN_NEWDRAW();
 
