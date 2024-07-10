@@ -1,16 +1,15 @@
 # 3ds_junkdraw
-My first foray into 3ds homebrew. Yet another drawing app
+An extremely simple drawing app for the 3DS. Focus is simplicity and ease of reimplementation.
 
-## What is it? 
-An attempt at a very very poor facsimile of drawpile for local users. And maybe eventually internet users!
+## About
+This started as an attempt at implementing a multiplayer drawing app. It was my first 3DS app and I
+kind of gave up on it for several years. I figured that was a waste, so I cleaned it up and 
+reduced the scope. It is currently just a simple drawing app, no multiplayer.
 
-It is NOT meant to be super good. I like minimal stuff. For instance, there probably won't be the option to undo strokes.
+Some design decisions are based around [bugs in citro2d](https://github.com/devkitPro/citro2d/issues/31),
+I'm sorry in advance.
 
 ## Controls
-
-It's in flux; I wouldn't rely on any documentation about controls just yet, even the in-game stuff. Just press some buttons, something will happen! Maybe.
-
-If these work, that's cool:
 
 * **START** : menu
 * **SELECT** : change layers
