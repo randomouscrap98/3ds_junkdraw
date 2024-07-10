@@ -303,7 +303,7 @@ void MY_SOLIDRECT(float x, float y, u16 width, u32 color)
 {
    x += LAYER_EDGEBUF;
    y += LAYER_EDGEBUF;
-   if(x < LAYER_EDGEERROR || y < LAYER_EDGEERROR)
+   if(x < LAYER_EDGEERROR || y < LAYER_EDGEERROR || x >= LAYER_WIDTH + LAYER_EDGEBUF || y >= LAYER_WIDTH + LAYER_EDGEBUF)
    {
       LOGDBG("IGNORING RECT AT (%f, %f)", x, y);
       return;
@@ -518,7 +518,7 @@ void print_controls()
 {
    printf("\x1b[0m");
    printf("     L - change color        R - general modifier\n");
-   printf(" LF/RT - line width     UP/DWN - zoom\n");
+   printf(" LF/RT - line width     UP/DWN - zoom (+R = page)\n");
    printf("SELECT - change layers   START - menu\n");
    printf("  ABXY - change tools    C-PAD - scroll canvas\n");
    printf("--------------------------------------------------");
@@ -568,8 +568,8 @@ void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color, u16 pag
    get_printmods(status_x1b, active_x1b, statusbg_x1b, activebg_x1b);
 
    printf("\x1b[30;1H%s W:%s%02d%s L:", status_x1b, active_x1b, width, status_x1b);
-   for(s8 i = LAYER_COUNT - 1; i >= 0; i--)
-      printf("%s ", i == layer ? activebg_x1b : statusbg_x1b);
+   for(s8 i = LAYER_COUNT - 1; i >= 0; i--) // NOTE: the second input is an optional character to display on current layer
+      printf("%s%c", i == layer ? activebg_x1b : statusbg_x1b, i == layer ? ' ' : ' ');
    printf("%s Z:", status_x1b);
    for(s8 i = MIN_ZOOMPOWER; i <= MAX_ZOOMPOWER; i++)
       printf("%s%c", 
@@ -950,8 +950,9 @@ int main(int argc, char** argv)
          shift_drawstate_color(&drwst, DEFAULT_PALETTE_SPLIT);
       }
       if(kDown & KEY_SELECT) {
-         if(kHeld & KEY_R) { export_page(drwst.page, draw_data, draw_data_end, save_filename); } 
-         else { drwst.layer = (drwst.layer + 1) % LAYER_COUNT; }
+         drwst.layer = (drwst.layer + 1) % LAYER_COUNT;
+         // if(kHeld & KEY_R) { export_page(drwst.page, draw_data, draw_data_end, save_filename); } 
+         // else { drwst.layer = (drwst.layer + 1) % LAYER_COUNT; }
       }
       if(kDown & KEY_START) 
       {
@@ -989,6 +990,10 @@ int main(int argc, char** argv)
                   PRINT_DATAUSAGE();
                }
             }
+         }
+         else if (selected == MAINMENU_EXPORT)
+         {
+            export_page(drwst.page, draw_data, draw_data_end, save_filename);
          }
       }
       if(kDown & KEY_TOUCH) {

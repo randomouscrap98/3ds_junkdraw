@@ -1,6 +1,6 @@
 # 3ds_junkdraw
 
-<img align="right" src="icon.png" alt="icon">
+<img align="right" src="screenshot1.png" alt="icon">
 
 An extremely simple drawing app for the 3DS. Focus is simplicity and ease of reimplementation.
 
@@ -21,7 +21,7 @@ I'm sorry in advance.
 * **B** : eraser tool
 * **UP/DOWN** : zoom in/out
 * **LEFT/RIGHT** : change brush width
-* **R+SELECT** : export whole page as png (slow)
+* **R+L** : change palette (the default is the one that starts with bright red followed by black)
 * **R+LEFT/RIGHT** : REALLY change brush width
 * **R+UP/DOWN** : change page (can have thousands)
 * **R+L+UP/DOWN** : REALLY change page (please don't do this)

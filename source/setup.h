@@ -3,7 +3,7 @@
 
 #include <3ds.h>
 
-#define VERSION "0.3.0"
+#define VERSION "0.3.1"
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE"saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE"screenshots/"
@@ -30,11 +30,12 @@
 
 #define MAINMENU_TOP 6
 #define MAINMENU_TITLE "Main menu:"
-#define MAINMENU_ITEMS "New\0Save\0Load\0Exit App\0"
+#define MAINMENU_ITEMS "New\0Save\0Load\0Export PNG\0Exit App\0"
 #define MAINMENU_NEW 0
 #define MAINMENU_SAVE 1
 #define MAINMENU_LOAD 2
-#define MAINMENU_EXIT 3
+#define MAINMENU_EXPORT 3
+#define MAINMENU_EXIT 4
 
 #define PRINTDATA_WIDTH 40
 #define STATUS_MAINCOLOR 36
