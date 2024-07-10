@@ -3,7 +3,7 @@
 
 // -- Some SUPER IMPORTANT constants
 
-#define VERSION "0.2.2"
+#define VERSION "0.2.3"
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE"saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE"screenshots/"
@@ -16,8 +16,10 @@
 #define SCREENWIDTH 320
 #define SCREENHEIGHT 240
 
-#define LAYER_WIDTH 1024
-#define LAYER_HEIGHT 1024
+#define LAYER_WIDTH 1000
+#define LAYER_HEIGHT 1000
+#define TEXTURE_WIDTH 1024
+#define TEXTURE_HEIGHT 1024
 #define LAYER_FORMAT GPU_RGBA5551
 #define LAYER_EDGEBUF 8
 #define LAYER_COUNT 2
@@ -102,14 +104,11 @@ typedef u16 page_num;
 typedef u8 layer_num;
 //typedef u16 stroke_num;
 
-const char* contype_styles[] = {"\x1b[0m", "\x1b[31m", "\x1b[32m", "\x1b[35m", "\x1b[34m"};
-const char* constatus_animframes[] = { "  ", " (", "((", " (", "  ", "((", " (", "  " } ;
-
 
 // The base palette definitions. Unless otherwise stated, all palettes are
 // taken from lospec.com
 
-u32 base_palette[] = { 
+/*u32 base_palette[] = { 
    //Endesga 64
    0xff0040, 0x131313, 0x1b1b1b, 0x272727, 0x3d3d3d, 0x5d5d5d, 0x858585, 0xb4b4b4,
    0xffffff, 0xc7cfdd, 0x92a1b9, 0x657392, 0x424c6e, 0x2a2f4e, 0x1a1932, 0x0e071b,
@@ -170,6 +169,6 @@ u32 base_palette[] = {
    0x1e1d39, 0x402751, 0x7a367b, 0xa23e8c, 0xc65197, 0xdf84a5, 0x090a14, 0x10141f,
    0x151d28, 0x202e37, 0x394a50, 0x577277, 0x819796, 0xa8b5b2, 0xc7cfcc, 0xebede9
 
-};
+};*/
 
 #endif

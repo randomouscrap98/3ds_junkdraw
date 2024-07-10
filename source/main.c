@@ -77,12 +77,12 @@ u32 _drw_cmd_cnt = 0;
 
 void MY_SOLIDRECT(float x, float y, u16 width, u32 color)
 {
-   if(x < 8 || y < 8)
-   {
-      LOGDBG("CAN'T DRAW ALONG EDGE, IGNORING (%f, %f)", x, y);
-      return;
-   }
-   C2D_DrawRectSolid(x, y, 0.5, width, width, color);
+   // if(x < 8 || y < 8)
+   // {
+   //    LOGDBG("CAN'T DRAW ALONG EDGE, IGNORING (%f, %f)", x, y);
+   //    return;
+   // }
+   C2D_DrawRectSolid(x + LAYER_EDGEBUF, y + LAYER_EDGEBUF, 0.5, width, width, color);
    _drw_cmd_cnt++; 
    MY_FLUSHCHECK();
 }
@@ -161,7 +161,7 @@ void draw_layers(const struct LayerData * layers, layer_num layer_count,
          mod->layer_width * mod->zoom, mod->layer_height * mod->zoom, bg_color); //The bg color
    for(layer_num i = 0; i < layer_count; i++)
    {
-      C2D_DrawImageAt(layers[i].image, -mod->offset_x, -mod->offset_y, 0.5f, 
+      C2D_DrawImageAt(layers[i].image, -mod->offset_x - LAYER_EDGEBUF, -mod->offset_y - LAYER_EDGEBUF, 0.5f, 
             NULL, mod->zoom, mod->zoom);
    }
 }
@@ -895,7 +895,7 @@ int main(int argc, char** argv)
    const u32 layer_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
 
    const Tex3DS_SubTexture subtex = {
-      LAYER_WIDTH, LAYER_HEIGHT,
+      TEXTURE_WIDTH, TEXTURE_HEIGHT,
       0.0f, 1.0f, 1.0f, 0.0f
    };
 
@@ -1041,7 +1041,7 @@ int main(int argc, char** argv)
       if(kRepeat & ~(KEY_TOUCH) || !current_frame)
       {
          print_status(drwst.current_tool->width, drwst.layer, drwst.zoom_power, 
-               drwst.tools - drwst.current_tool, *drwst.current_color, drwst.page);
+               drwst.current_tool - drwst.tools, *drwst.current_color, drwst.page);
       }
 
       touching = (kHeld & KEY_TOUCH) > 0;

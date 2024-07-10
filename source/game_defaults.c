@@ -3,6 +3,7 @@
 #include <citro2d.h>
 
 #include "game_defaults.h"
+#include "constants.h"
 
 
 struct ToolData default_tooldata[] = {
@@ -11,6 +12,9 @@ struct ToolData default_tooldata[] = {
    //Eraser
    { 4, LINESTYLE_STROKE, true, 0 }
 };
+
+const char* contype_styles[] = {"\x1b[0m", "\x1b[31m", "\x1b[32m", "\x1b[35m", "\x1b[34m"};
+const char* constatus_animframes[] = { "  ", " (", "((", " (", "  ", "((", " (", "  " } ;
 
 u32 default_palette[] = { 
    //Endesga 64
@@ -81,8 +85,8 @@ void set_screenstate_defaults(struct ScreenState * state)
    state->offset_x = 0;
    state->offset_y = 0;
    state->zoom = 1;
-   state->layer_width = DEFAULT_LAYER_WIDTH;
-   state->layer_height = DEFAULT_LAYER_HEIGHT;
+   state->layer_width = LAYER_WIDTH; //DEFAULT_LAYER_WIDTH;
+   state->layer_height = LAYER_HEIGHT; //DEFAULT_LAYER_HEIGHT;
    state->screen_width = 320;  //These two should literally never change 
    state->screen_height = 240; //GSP_SCREEN_WIDTH; //GSP_SCREEN_HEIGHT_BOTTOM;
    state->screen_color = DEFAULT_SCREEN_COLOR;

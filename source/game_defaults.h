@@ -12,8 +12,8 @@
 #define DEFAULT_SCREEN_COLOR C2D_Color32(90,90,90,255)
 #define DEFAULT_BG_COLOR C2D_Color32(255,255,255,255)
 
-#define DEFAULT_LAYER_WIDTH 1024
-#define DEFAULT_LAYER_HEIGHT 1024
+// #define DEFAULT_LAYER_WIDTH 1024
+// #define DEFAULT_LAYER_HEIGHT 1024
 
 #define DEFAULT_START_LAYER 1
 #define DEFAULT_PALETTE_STARTINDEX 1
@@ -29,6 +29,8 @@
 extern u32 default_palette[];
 
 extern struct ToolData default_tooldata[];
+extern const char* contype_styles[];
+extern const char* constatus_animframes[];
 
 
 void set_screenstate_defaults(struct ScreenState * state);
