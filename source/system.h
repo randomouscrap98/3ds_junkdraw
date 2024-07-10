@@ -81,4 +81,14 @@ void shift_drawstate_width(struct DrawState * state, s16 ofs);
 u16 get_drawstate_color(struct DrawState * state);
 void set_drawstate_tool(struct DrawState * state, u8 tool);
 
+
+// // --------- INIT -------
+// void set_screenstate_defaults(struct ScreenState * state);
+// 
+// void init_default_drawstate(struct DrawState * state);
+// void free_default_drawstate(struct DrawState * state);
+// 
+// //This gives a profile that's good for moving the canvas around
+// void set_cpadprofile_canvas(struct CpadProfile * profile);
+
 #endif

@@ -3,6 +3,17 @@
 #include <stdarg.h>
 #include <citro3d.h>
 
+u32 char_occurrences(const char * string, char c)
+{
+   u32 count = 0;
+   char *pch = strchr(string,c);
+   while (pch != NULL) {
+      count++;
+      pch = strchr(pch+1,c);
+   }
+   return count;
+}
+
 //WARN: THIS MALLOCS DATA, YOU MUST CLEAN UP THE DATA!
 void initialize_easy_menu_state(struct EasyMenuState * state)
 {

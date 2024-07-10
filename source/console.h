@@ -2,11 +2,19 @@
 #define __HEADER_CONSOLE
 
 #include <3ds.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #define MAX_MENU_ITEMS 10000
 #define MIN_MENU_DISPLAY 1
 #define ENTERTEXT_CHAR "_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 #define ENTERTEXT_CHARARRSIZE 50
+
+// C lets you redefine stuff... right?
+#define LOGDBG(f_, ...)
+
+// General utils (is this really console?)
+u32 char_occurrences(const char * string, char c);
 
 // All the information needed to draw a menu in a given state
 struct EasyMenuState

@@ -1,7 +1,16 @@
 #include "draw.h"
+#include "color.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+// JUST needed for M_PI??
+#include <citro3d.h>
 
 // C lets you redefine stuff... right?
 #define LOGDBG(f_, ...)
+
+// ------- GENERAL UTILS ---------
 
 // ------------------------
 // -- DATA CONVERT UTILS --
@@ -127,6 +136,42 @@ struct SimpleLine * add_point_to_stroke(struct LinePackage * pending,
 
    return line;
 }*/
+
+//Draw a line using a custom line drawing system (required like this because of
+//javascript's general inability to draw non anti-aliased lines, and I want the
+//strokes saved by this program to be 100% accurately reproducible on javascript)
+void pixaligned_linefunc(const struct SimpleLine * line, u16 width, u32 color, rectangle_func rect_f)
+{
+   float xdiff = line->x2 - line->x1;
+   float ydiff = line->y2 - line->y1;
+   float dist = sqrt(xdiff * xdiff + ydiff * ydiff);
+   float ang = atan(ydiff/(xdiff?xdiff:0.0001))+(xdiff<0?M_PI:0);
+   float xang = cos(ang);
+   float yang = sin(ang);
+
+   float x, y; 
+   float ox = -1;
+   float oy = -1;
+
+   //Where the "edge" of each rectangle to be drawn is
+   float ofs = (width / 2.0) - 0.5;
+
+   //Iterate over an acceptable amount of points on the line and draw
+   //rectangles to create a line.
+   for(float i = 0; i <= dist; i+=0.5)
+   {
+      x = floor(line->x1+xang*i - ofs);
+      y = floor(line->y1+yang*i - ofs);
+
+      //If we align to the same pixel as before, no need to draw again.
+      if(ox == x && oy == y) continue;
+
+      //Actually draw a centered rect... however you want to.
+      (*rect_f)(x,y,width,color);
+
+      ox = x; oy = y;
+   }
+}
 
 //Draw the collection of lines given, starting at the given line and ending
 //before the other given line (first inclusive, last exclusive)

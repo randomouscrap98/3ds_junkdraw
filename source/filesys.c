@@ -3,6 +3,10 @@
 #include <png.h>
 #include <errno.h>
 #include <dirent.h>
+#include <string.h>
+
+// C lets you redefine stuff... right?
+#define LOGDBG(f_, ...)
 
 //Taken verbatim from https://gist.github.com/JonathonReinhart/8c0d90191c38af2dcadb102c4e202950
 int mkdir_p(const char *path)

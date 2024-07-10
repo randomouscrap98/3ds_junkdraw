@@ -7,6 +7,14 @@
 #define LAYER_WIDTH 1000
 #define LAYER_HEIGHT 1000
 
+// ---------- GENERAL UTILS ----------------
+
+#define CENTER_RECT_ALIGNPIXEL(x,y,width) \
+   float __c_r_ap_ofs = (width / 2.0) - 0.5; \
+   x = floor(x - __c_r_ap_ofs); y = floor(y - __c_r_ap_ofs);
+
+typedef void (* rectangle_func)(float, float, u16, u32); //X,Y,width,32-bit color
+
 // ------- Draw data conversion -------------
 
 #define DCV_CLAMP(x, mn, mx) (x <= mn ? mn : x >= mx ? mx : x)
@@ -57,7 +65,7 @@ struct SimpleLine * add_point_to_stroke(struct LinePackage * pending,
 char * convert_lines_to_data(struct LinePackage * lines, char * container, u32 container_size);
 char * convert_data_to_lines(struct LinePackage * package, char * data, char * data_end);
 
-typedef void (* rectangle_func)(float, float, u16, u32); //X,Y,width,32-bit color
+void pixaligned_linefunc (const struct SimpleLine * line, u16 width, u32 color, rectangle_func rect_f);
 
 void pixaligned_linepackfunc(const struct LinePackage * linepack, u16 pack_start, u16 pack_end, rectangle_func rect_f);
 void pixaligned_linepackfunc_all(const struct LinePackage * linepack, rectangle_func rect_f);

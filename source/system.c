@@ -69,3 +69,4 @@ void set_drawstate_tool(struct DrawState * state, u8 tool)
 {
    state->current_tool = state->tools + tool;
 }
+
