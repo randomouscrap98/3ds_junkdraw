@@ -518,7 +518,7 @@ void print_controls()
 {
    printf("\x1b[0m");
    printf("     L - change color        R - general modifier\n");
-   printf(" LF/RT - line width     UP/DWN - zoom (+R = page)\n");
+   printf(" LF/RT - line width     UP/DWN - zoom (+R - page)\n");
    printf("SELECT - change layers   START - menu\n");
    printf("  ABXY - change tools    C-PAD - scroll canvas\n");
    printf("--------------------------------------------------");
@@ -1002,7 +1002,10 @@ int main(int argc, char** argv)
          pending.width = drwst.current_tool->width;
          pending.layer = drwst.layer;
       }
-      if(kUp & KEY_TOUCH) end_frame = current_frame;
+      if(kUp & KEY_TOUCH) {
+         end_frame = current_frame;
+         palette_active = false; // Something of a hack: might get rid of it later. This makes the palette disappear on selection
+      }
 
       //Update zoom separately, since the update is always the same
       if(drwst.zoom_power != last_zoom_power) set_screenstate_zoom(&scrst, pow(2, drwst.zoom_power));
