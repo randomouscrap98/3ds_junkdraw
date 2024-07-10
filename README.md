@@ -1,6 +1,4 @@
-# 3ds_junkdraw
-
-<img align="right" src="screenshot1.png" alt="icon">
+# 3ds_junkdraw <img alt="icon" align="left" src="icon.png">
 
 An extremely simple drawing app for the 3DS. Focus is simplicity and ease of reimplementation.
 
@@ -13,6 +11,7 @@ Some design decisions are based around [bugs in citro2d](https://github.com/devk
 I'm sorry in advance.
 
 ## Controls
+<img width="250" align="right" src="screenshot1.png" alt="screenshot">
 
 * **START** : menu
 * **SELECT** : change layers
