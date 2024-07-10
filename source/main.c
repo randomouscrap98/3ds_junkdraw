@@ -50,7 +50,11 @@ u8 _db_prnt_row = 0;
 #define TOOL_COUNT 2
 #define TOOL_CHARS "pe"
 
-#define LAYER_EDGEBUF 8
+// Glitch in citro2d (or so we assume) prevents us from writing into the first 8
+// pixels in the texture. As such, we simply shift the texture over by this amount
+// when drawing. HOWEVER: for extra safety, we just avoid double
+#define LAYER_EDGEERROR 8
+#define LAYER_EDGEBUF LAYER_EDGEERROR * 2
 
 typedef u16 page_num;
 typedef u8 layer_num;
@@ -297,7 +301,14 @@ u32 _drw_cmd_cnt = 0;
 
 void MY_SOLIDRECT(float x, float y, u16 width, u32 color)
 {
-   C2D_DrawRectSolid(x + LAYER_EDGEBUF, y + LAYER_EDGEBUF, 0.5, width, width, color);
+   x += LAYER_EDGEBUF;
+   y += LAYER_EDGEBUF;
+   if(x < LAYER_EDGEERROR || y < LAYER_EDGEERROR)
+   {
+      LOGDBG("IGNORING RECT AT (%f, %f)", x, y);
+      return;
+   }
+   C2D_DrawRectSolid(x, y, 0.5, width, width, color);
    _drw_cmd_cnt++; 
    MY_FLUSHCHECK();
 }
@@ -376,7 +387,7 @@ void draw_layers(const struct LayerData * layers, layer_num layer_count,
          mod->layer_width * mod->zoom, mod->layer_height * mod->zoom, bg_color); //The bg color
    for(layer_num i = 0; i < layer_count; i++)
    {
-      C2D_DrawImageAt(layers[i].image, -mod->offset_x - LAYER_EDGEBUF, -mod->offset_y - LAYER_EDGEBUF, 0.5f, 
+      C2D_DrawImageAt(layers[i].image, -mod->offset_x - LAYER_EDGEBUF * mod->zoom, -mod->offset_y - LAYER_EDGEBUF * mod->zoom, 0.5f, 
             NULL, mod->zoom, mod->zoom);
    }
 }

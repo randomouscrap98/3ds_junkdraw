@@ -52,16 +52,6 @@ struct LinePackage {
    u16 max_lines;
 };
 
-/* struct ScreenState
-{
-   float offset_x;
-   float offset_y;
-   float zoom;
-};
-
-struct SimpleLine * add_point_to_stroke(struct LinePackage * pending, 
-      const touchPosition * pos, const struct ScreenState * mod);*/
-
 char * convert_lines_to_data(struct LinePackage * lines, char * container, u32 container_size);
 char * convert_data_to_lines(struct LinePackage * package, char * data, char * data_end);
 
