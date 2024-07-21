@@ -7,22 +7,79 @@
 <script>
 // There is unfortunately a lot to unpack here, as I need to reimplement basically
 // the entire drawing system.
+window.onload = function() {
+    log("Window loaded");
+
+    fileform.onsubmit = function(e) {
+        e.preventDefault();
+        var file = fileinput.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(fe) {
+                setFile(fe.target.result);
+            };
+            reader.onerror = function(e) {
+                alert("Error reading file (see console)");
+                log("Error reading file: " + e, "error");
+            };
+            reader.readAsText(file);
+        } else {
+            log("No file selected", "error");
+        }
+    };
+};
+
+// Setup the system to use the file with the given contents
+function setFile(filecontents) {
+    log("Setting file (" + filecontents.length + " chars)");
+}
+
+function log(message, level) {
+    level = level || "info";
+    var dt = new Date();
+    var msgelement = document.createElement("div");
+    msgelement.className = level;
+    msgelement.textContent = "[" + dt.toLocaleTimeString() + "] " + message;
+    document.getElementById("log").appendChild(msgelement);
+    if(level == "error") {
+        console.error(message);
+    } else {
+        console.log(message);
+    }
+}
 </script>
 
 <style>
 body {
     background-color: #F7F7F7;
 }
+body > * {
+    margin: 1rem 0;
+}
+/*nav {
+    float: right;
+}*/
+nav > * {
+    margin-left: 0.25em;
+}
 #layers {
     background-color: white;
     position: relative;
     width: 1000px;
     height: 1000px;
-    margin: 1em 0;
 }
 #layers canvas {
     outline: 1px solid;
     position: absolute;
+}
+#log {
+    font-family: monospace;
+    color: #777;
+    height: 10em;
+    overflow-y: scroll;
+    background-color: #EEE;
+    padding: 0.5em;
+    border: 1px solid #CCC;
 }
 .pixelated {
    image-rendering: -moz-crisp-edges;
@@ -39,9 +96,14 @@ body {
 <body>
 
     <h3>Simple 3DS Junkdraw File Debugger</h3>
+    <nav>
+        <a href="#layers">Canvas</a>
+        <a href="#strokes">Strokes</a>
+        <a href="#log">Log</a>
+    </nav>
 
-    <form method="POST">
-        <input type="file" name="file">
+    <form id="fileform" action="javascript:void(0);">
+        <input type="file" id="fileinput" name="file">
         <input type="submit" value="Load">
     </form>
 
@@ -50,6 +112,13 @@ body {
         <canvas class="pixelated" id="layer1" width="1000" height="1000"></canvas>
         <canvas class="pixelated" id="layer0" width="1000" height="1000"></canvas>
     </div>
+
+    <h3>Strokes breakdown:</h3>
+    <div id="strokes">
+    </div>
+
+    <h3>Log:</h3>
+    <div id="log"></div>
 
 </body>
 
