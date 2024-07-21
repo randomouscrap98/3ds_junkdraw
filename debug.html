@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+
+<!-- ======================================== -->
+<head>
+
+<script>
+// There is unfortunately a lot to unpack here, as I need to reimplement basically
+// the entire drawing system.
+</script>
+
+<style>
+body {
+    background-color: #F7F7F7;
+}
+#layers {
+    background-color: white;
+    position: relative;
+    width: 1000px;
+    height: 1000px;
+    margin: 1em 0;
+}
+#layers canvas {
+    outline: 1px solid;
+    position: absolute;
+}
+.pixelated {
+   image-rendering: -moz-crisp-edges;
+   image-rendering: crisp-edges;
+   image-rendering: optimizespeed;
+   image-rendering: pixelated;
+}
+</style>
+
+</head>
+
+
+<!-- ======================================== -->
+<body>
+
+    <h3>Simple 3DS Junkdraw File Debugger</h3>
+
+    <form method="POST">
+        <input type="file" name="file">
+        <input type="submit" value="Load">
+    </form>
+
+    <div id="layers">
+        <!-- Reverse order because of css + overlapping -->
+        <canvas class="pixelated" id="layer1" width="1000" height="1000"></canvas>
+        <canvas class="pixelated" id="layer0" width="1000" height="1000"></canvas>
+    </div>
+
+</body>
+
+
+</html>

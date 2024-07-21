@@ -109,34 +109,6 @@ u32 varwidth_to_int(const char * container, u8 * read_count)
 // -- SIMPLE LINE UTILS --
 // ------------------------
 
-/* //Add another stroke to a line collection (that represents a stroke). Works for
-//the first stroke too.
-struct SimpleLine * add_point_to_stroke(struct LinePackage * pending, 
-      const touchPosition * pos, const struct ScreenState * mod)
-{
-   //This is for a stroke, do different things if we have different tools!
-   struct SimpleLine * line = pending->lines + pending->line_count;
-
-   line->x2 = pos->px / mod->zoom + mod->offset_x / mod->zoom;
-   line->y2 = pos->py / mod->zoom + mod->offset_y / mod->zoom;
-
-   if(pending->line_count == 0)
-   {
-      line->x1 = line->x2;
-      line->y1 = line->y2;
-   }
-   else
-   {
-      line->x1 = pending->lines[pending->line_count - 1].x2;
-      line->y1 = pending->lines[pending->line_count - 1].y2;
-   }
-
-   //Added a line
-   pending->line_count++;
-
-   return line;
-}*/
-
 //Draw a line using a custom line drawing system (required like this because of
 //javascript's general inability to draw non anti-aliased lines, and I want the
 //strokes saved by this program to be 100% accurately reproducible on javascript)
@@ -382,68 +354,6 @@ void scandata_free(struct ScanDrawData * data)
    data->packages_capacity = 0;
    data->lines_capacity = 0;
 }
-
-/*//Draw and track a certain number of lines from the given scandata.
-u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount, struct LayerData * layers, u8 layer_count)//, u8 last_layer)
-{
-   u32 current_drawcount = 0;
-
-   //Only draw if there's something to start the whole thing
-   if(scandata->current_package != NULL && 
-         scandata->current_package != scandata->last_package)
-   {
-      u8 last_layer = (scandata->last_package - 1)->layer;
-
-      struct LinePackage * stopped_on = NULL;
-       
-      //Loop over layers
-      for(u8 i = 0; i < layer_count; i++)
-      {
-         //This is the end of the line, we stopped somewhere
-         if(stopped_on != NULL) break;
-
-         //Calculate actual layer (last_layer produces shifted window)
-         u8 layer_i = (i + last_layer + 1) % layer_count;
-
-         //Don't want to call this too often, so do as much as possible PER
-         //layer instead of jumping around
-         C2D_SceneBegin(layers[layer_i].target);
-
-         //Scan over every package
-         for(struct LinePackage * p = scandata->current_package; 
-               p < scandata->last_package; p++)
-         {
-            //Just entirely skip data for layers we're not focusing on yet.
-            if(p->layer != layer_i) continue;
-
-            u16 packagedrawlines = p->line_count;
-            u32 leftover_drawcount = line_drawcount - current_drawcount;
-
-            //If this is going to be the last package we're drawing, track
-            //where we stopped and don't draw ALL the lines.
-            if(packagedrawlines > leftover_drawcount)
-            {
-               //This is where we stopped. 
-               stopped_on = p;
-               packagedrawlines = leftover_drawcount;
-            }
-
-            pixaligned_linepackfunc(p, 0, packagedrawlines, MY_SOLIDRECT);
-            line_drawcount += packagedrawlines;
-
-            //If we didn't draw ALL the lines, move the line pointer forward.
-            //We know that the line pointers in these packages points to a flat array
-            if(packagedrawlines != p->line_count)
-               p->lines += packagedrawlines;
-         }
-      }
-
-      //At the end, only set package to NULL if we got all the way through.
-      scandata->current_package = stopped_on;
-   }
-
-   return current_drawcount;
-}*/
 
 char * write_to_datamem(char * stroke_data, char * stroke_end, u16 page, char * mem, char * mem_end)
 {
