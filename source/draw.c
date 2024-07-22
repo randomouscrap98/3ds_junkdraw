@@ -372,6 +372,70 @@ void scandata_free(struct ScanDrawData * data)
    data->lines_capacity = 0;
 }
 
+//Scan the data up to a certain amount, parse the data, and draw it. Kind of
+//doing too much, but whatever, this is a small program. Return the location we
+//scanned up to.
+char * scandata_parse(struct ScanDrawData * scandata, char * drawdata, 
+      char * drawdata_end, u32 line_scancount, const u16 page)
+{
+   char * parse_pointer = drawdata;
+   char * stroke_pointer = NULL;
+   u32 scan_remaining = MAX_DRAWDATA_SCAN;
+
+   //There's VERY LITTLE safety in these functions! PLEASE BE CAREFUL
+   //Assumptions: 
+   //-the scandata that's given can hold the entirety of the desired scancount
+   //-the scandata pointers are all at the start
+   //-there's nothing in the scandata
+
+   if(scandata->current_package != NULL)
+      LOGDBG("WARN: Tried to scan_dataparse without an empty buffer!\n");
+
+   //Reset all the data based on assumptions
+   scandata->last_package = scandata->packages;
+   scandata->last_line = scandata->all_lines;
+
+   //Is there a possibility it will scan past the end? Can we do comparisons
+   //like this on pointers? I'm pretty sure you can, they point to the same array
+   while(parse_pointer < drawdata_end && 
+         (scandata->last_line - scandata->all_lines) < line_scancount && 
+         scan_remaining > 0)
+   {
+      //Remaining is always the maximum scan amount minus how far we've scanned
+      //into the data.
+      scan_remaining = MAX_DRAWDATA_SCAN - (parse_pointer - drawdata);
+
+      //we should ALWAYS be able to trust parse_pointer
+      parse_pointer = datamem_scanstroke(parse_pointer, drawdata_end, 
+            scan_remaining, page, &stroke_pointer);
+
+      //What do we do if it doesn't find a stroke pointer? We can't do anymore,
+      //there was no stroke to be found.... right? Or does that mean no stroke to
+      //be found, within the allotted maximum scanning range?
+      if(stroke_pointer == NULL)
+         continue; //We assume we just didn't find anything, try again
+
+      //Pre-assign the next open line spot to this package
+      scandata->last_package->lines = scandata->last_line;
+
+      //Do we really care where the end of this ends up? no; don't use the return.
+      //I don't know when this wouldn't be the case, but the parse_pointer
+      //SHOULD point to the start of the next stroke, or in other words, 1 past
+      //the last character in the stroke data, which is perfect for this.
+      convert_data_to_linepack(scandata->last_package, stroke_pointer, parse_pointer);
+
+      //Move the "last" pointers forward
+      scandata->last_line += scandata->last_package->line_count;
+      scandata->last_package++;
+   }
+
+   //Only set a current_package if there's something there
+   if(scandata->last_package > scandata->packages)
+      scandata->current_package = scandata->packages;
+
+   return parse_pointer;
+}
+
 u32 last_used_page(char * data, u32 length) {
    if(length < 2) {
       return 0; // Just safety
@@ -482,68 +546,4 @@ char * datamem_scanstroke(char * start, char * end, const u32 max_scan, const u1
    }
 
    return scanptr;
-}
-
-//Scan the data up to a certain amount, parse the data, and draw it. Kind of
-//doing too much, but whatever, this is a small program. Return the location we
-//scanned up to.
-char * scandata_parse(struct ScanDrawData * scandata, char * drawdata, 
-      char * drawdata_end, u32 line_scancount, const u16 page)
-{
-   char * parse_pointer = drawdata;
-   char * stroke_pointer = NULL;
-   u32 scan_remaining = MAX_DRAWDATA_SCAN;
-
-   //There's VERY LITTLE safety in these functions! PLEASE BE CAREFUL
-   //Assumptions: 
-   //-the scandata that's given can hold the entirety of the desired scancount
-   //-the scandata pointers are all at the start
-   //-there's nothing in the scandata
-
-   if(scandata->current_package != NULL)
-      LOGDBG("WARN: Tried to scan_dataparse without an empty buffer!\n");
-
-   //Reset all the data based on assumptions
-   scandata->last_package = scandata->packages;
-   scandata->last_line = scandata->all_lines;
-
-   //Is there a possibility it will scan past the end? Can we do comparisons
-   //like this on pointers? I'm pretty sure you can, they point to the same array
-   while(parse_pointer < drawdata_end && 
-         (scandata->last_line - scandata->all_lines) < line_scancount && 
-         scan_remaining > 0)
-   {
-      //Remaining is always the maximum scan amount minus how far we've scanned
-      //into the data.
-      scan_remaining = MAX_DRAWDATA_SCAN - (parse_pointer - drawdata);
-
-      //we should ALWAYS be able to trust parse_pointer
-      parse_pointer = datamem_scanstroke(parse_pointer, drawdata_end, 
-            scan_remaining, page, &stroke_pointer);
-
-      //What do we do if it doesn't find a stroke pointer? We can't do anymore,
-      //there was no stroke to be found.... right? Or does that mean no stroke to
-      //be found, within the allotted maximum scanning range?
-      if(stroke_pointer == NULL)
-         continue; //We assume we just didn't find anything, try again
-
-      //Pre-assign the next open line spot to this package
-      scandata->last_package->lines = scandata->last_line;
-
-      //Do we really care where the end of this ends up? no; don't use the return.
-      //I don't know when this wouldn't be the case, but the parse_pointer
-      //SHOULD point to the start of the next stroke, or in other words, 1 past
-      //the last character in the stroke data, which is perfect for this.
-      convert_data_to_linepack(scandata->last_package, stroke_pointer, parse_pointer);
-
-      //Move the "last" pointers forward
-      scandata->last_line += scandata->last_package->line_count;
-      scandata->last_package++;
-   }
-
-   //Only set a current_package if there's something there
-   if(scandata->last_package > scandata->packages)
-      scandata->current_package = scandata->packages;
-
-   return parse_pointer;
 }

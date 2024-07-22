@@ -330,15 +330,15 @@ void update_paletteindex(const touchPosition * pos, u8 * index)
 
 // -- BIG SCAN DRAW SYSTEM --
 
-//Draw and track a certain number of lines from the given scandata.
+// Draw and track a certain number of lines from the given scandata.
 u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount, struct LayerData * layers, u8 layer_count)
 {
    u32 current_drawcount = 0;
 
    //Only draw if there's something to start the whole thing
-   if(scandata->current_package != NULL && 
-         scandata->current_package != scandata->last_package)
+   if(scandata->current_package != NULL && scandata->current_package != scandata->last_package)
    {
+      // Minus one because last_package points PAST the last package (why???)
       u8 last_layer = (scandata->last_package - 1)->layer;
 
       struct LinePackage * stopped_on = NULL;
@@ -357,8 +357,7 @@ u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount, struct Lay
          C2D_SceneBegin(layers[layer_i].target);
 
          //Scan over every package
-         for(struct LinePackage * p = scandata->current_package; 
-               p < scandata->last_package; p++)
+         for(struct LinePackage * p = scandata->current_package; p < scandata->last_package; p++)
          {
             //Just entirely skip data for layers we're not focusing on yet.
             if(p->layer != layer_i) continue;
@@ -376,12 +375,14 @@ u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount, struct Lay
             }
 
             pixaligned_linepackfunc(p, 0, packagedrawlines, MY_SOLIDRECT);
-            line_drawcount += packagedrawlines;
+            current_drawcount += packagedrawlines;
 
             //If we didn't draw ALL the lines, move the line pointer forward.
             //We know that the line pointers in these packages points to a flat array
-            if(packagedrawlines != p->line_count)
+            if(packagedrawlines != p->line_count) {
                p->lines += packagedrawlines;
+               p->line_count -= packagedrawlines;
+            }
          }
       }
 
@@ -932,11 +933,27 @@ int main(int argc, char** argv)
       //Just always try to draw whatever is leftover in the buffer
       if(draw_pointer < draw_data_end)
       {
+         // NOTE 2024-07-22: OK this scandraw system confused the hell out of me, and apparently
+         // it confused the hell out of past me too. ScanDraw is supposed to hold onto TEMPORARY 
+         // state across multiple strokes as a weird inter-stroke buffer. This optimizes memory
+         // while allowing the draw system to draw arbitarary amounts of lines, stopping in the 
+         // middle of a stroke if need be. That is VERY important: the 3ds isn't super powerful,
+         // and we don't want a large stroke to interrupt someone's drawing (this was supposed
+         // to be a multiplayer drawing app). As such, ScanDraw is split into two parts: one is 
+         // the "pulling data" part, which buffers some amount of parsing, then the "drawing" 
+         // part, where it draws the parts that are in its parse buffer. The system is setup
+         // such that you CAN'T parse more data until the previous parse is fully complete, 
+         // which... includes the drawing portion. This means there's really no point in 
+         // having these two systems (unless I'm missing something), but we've already got 
+         // this setup for now, so... the point is, you don't parse more data until the
+         // previous data is entirely drawn.
          u32 maxdraw = MAX_FRAMELINES;
          maxdraw -= scandata_draw(&scandata, maxdraw, layers, LAYER_COUNT);
-         draw_pointer = scandata_parse(&scandata, draw_pointer, draw_data_end,
-               maxdraw, drwst.page);
-         scandata_draw(&scandata, maxdraw, layers, LAYER_COUNT); 
+         if(maxdraw > 0) {
+            // We know we can pull more if we still have leftover lines. Alternatively, we could 
+            // check scandata.current_package
+            draw_pointer = scandata_parse(&scandata, draw_pointer, draw_data_end, maxdraw, drwst.page);
+         }
       }
 
       C2D_Flush();
