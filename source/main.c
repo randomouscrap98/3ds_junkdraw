@@ -331,8 +331,6 @@ void update_paletteindex(const touchPosition * pos, u8 * index)
 
 // -- BIG SCAN DRAW SYSTEM --
 
-u32 tdugh = 0;
-
 // Draw as much as possible from the given ring buffer, with as little context switching as possible. 
 // WARN: MAKES A LOT OF ASSUMPTIONS IN ORDER TO PREVENT COSTLY MALLOCS PER FRAME
 void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layers)
@@ -351,8 +349,6 @@ void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layer
    if(lineCount == 0) {
       return;
    }
-   tdugh += lineCount;
-   LOGDBG("DRAWING %d LINES (%d)", lineCount, tdugh);
 
    for(u8 i = 0; i < LAYER_COUNT; i++)
    {
@@ -917,16 +913,8 @@ int main(int argc, char** argv)
          }
       }
 
-      //Just always try to draw whatever is leftover in the buffer
-      if(draw_pointer < draw_data_end)
-      {
-         // Fill the buffer as much as possible to start
-         char * init_pointer = draw_pointer;
-         draw_pointer = scan_lines(&scandata, draw_pointer, draw_data_end, drwst.page);
-         //LOGDBG("SCANNED: %d\n", draw_pointer - init_pointer);
-         // Then just pull as many lines as possible out, UP TO the maximum per frame
-         //draw_from_buffer(&scandata, MAX_FRAMELINES, layers, LAYER_COUNT);
-      }
+      // These functions are very lightweight and will exit immediately if they have nothing to do.
+      draw_pointer = scan_lines(&scandata, draw_pointer, draw_data_end, drwst.page);
       draw_from_buffer(&scandata, layers);
 
       C2D_Flush();
@@ -986,8 +974,6 @@ int main(int argc, char** argv)
 
    for(int i = 0; i < LAYER_COUNT; i++)
       delete_layer(layers[i]);
-
-   //scandata_free(&scandata);
 
    C2D_Fini();
    C3D_Fini();

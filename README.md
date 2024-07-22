@@ -39,10 +39,3 @@ level, drawing specific ranges of strokes, you can do so using [debug.html](debu
 You can use this to "curate" specific ranges of strokes for export, or simply export entire pages for 
 whatever reason. Please note that this is a debug page first and foremost, and won't be updated with
 many ease of use features.
-
-### NOTE 2024-07-22
-I've run into a strange issue on my 3ds where, upon reloading a drawing, it is somewhat mangled. It's
-rather subtle, but there are weird strokes in weird colors in a few places. If you run into this issue
-and want to export a "clean" page, you can load up your drawing in the debug page as shown above, render
-the page, and save it. The issue appears to ONLY be on the 3ds, and the drawing data itself is 
-unblemished, it's just how the 3ds renders it which is incorrect. I apologize for the strange issue.
