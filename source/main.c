@@ -41,10 +41,6 @@ u8 _db_prnt_row = 0;
 #define DEFAULT_START_LAYER 1
 #define DEFAULT_PALETTE_STARTINDEX 1
 
-#define LAYER_COUNT 2
-#define TEXTURE_WIDTH 1024
-#define TEXTURE_HEIGHT 1024
-
 #define TOOL_PENCIL 0
 #define TOOL_ERASER 1
 #define TOOL_COUNT 2
@@ -234,60 +230,6 @@ void draw_controls(gs gstate)
 }
 #pragma endregion
 
-#pragma region INPUT
-
-// ---------------- INPUT ---------------
-
-// User Actions 
-#define IUA_PAGEUP         0x00001
-#define IUA_PAGEDOWN       0x00002
-#define IUA_PALETTETOGGLE  0x00004
-#define IUA_WIDTHUP        0x00008
-#define IUA_WIDTHDOWN      0x00010
-#define IUA_TOOLA          0x00020
-#define IUA_TOOLB          0x00040
-#define IUA_PALETTESWAP    0x00080
-#define IUA_MENU           0x00100
-#define IUA_EXPORTPAGE     0x00200
-#define IUA_NEXTLAYER      0x00400
-#define IUA_WIDTHUPBIG     0x00800
-#define IUA_WIDTHDOWNBIG   0x01000
-#define IUA_ZOOMIN         0x02000
-#define IUA_ZOOMOUT        0x04000
-#define IUA_PAGEUPBIG      0x08000
-#define IUA_PAGEDOWNBIG    0x10000
-
-//Returns a bitfield representing all "game actions" taken based on the given input.
-u32 input_to_action(struct InputSet * input)
-{
-   u32 result = 0;
-   bool rmod = input->k_held & KEY_R;
-   bool lmod = input->k_held & KEY_L;
-
-   if(input->k_repeat & KEY_DRIGHT) 
-      result |= (rmod ? IUA_WIDTHUPBIG : IUA_WIDTHUP);
-   if(input->k_repeat & KEY_DLEFT) 
-      result |= (rmod ? IUA_WIDTHDOWNBIG : IUA_WIDTHDOWN);
-   if(input->k_repeat & KEY_DUP) 
-      result |= (rmod ? (lmod ? IUA_PAGEUPBIG : IUA_PAGEUP) : IUA_ZOOMIN);
-   if(input->k_repeat & KEY_DDOWN) 
-      result |= (rmod ? (lmod ? IUA_PAGEDOWNBIG : IUA_PAGEDOWN) : IUA_ZOOMOUT);
-
-   if(input->k_down & KEY_A) 
-      result |= IUA_TOOLA;
-   if(input->k_down & KEY_B) 
-      result |= IUA_TOOLB;
-   if(input->k_down & KEY_START) 
-      result |= IUA_MENU;
-   if(input->k_down & KEY_L)
-      result |= (rmod ? IUA_PALETTESWAP : IUA_PALETTETOGGLE);
-   if(input->k_down & KEY_SELECT)
-      result |= (rmod ? IUA_EXPORTPAGE : IUA_NEXTLAYER);
-
-   return result;
-}
-
-#pragma endregion
 
 // -- DRAWING UTILS --
 
@@ -802,16 +744,6 @@ END:
       free(layerdata[i]);
 }
 
-
-
-// -- TESTS --
-
-/*#ifdef DEBUG_RUNTESTS
-#include "tests.h" //Yes this is awful, don't care
-#endif*/
-
-
-
 // -- MAIN, OFC --
 
 #define UTILS_CLAMP(x, mn, mx) (x <= mn ? mn : x >= mx ? mx : x)
@@ -844,6 +776,7 @@ END:
 
 #define MAIN_UNSAVEDCHECK(x) \
    (saved_last == draw_data_end || easy_warn("WARN: UNSAVED DATA", x, MAINMENU_TOP))
+
 
 int main(int argc, char** argv)
 {
@@ -914,11 +847,6 @@ int main(int argc, char** argv)
 
    hidSetRepeatParameters(BREPEAT_DELAY, BREPEAT_INTERVAL);
 
-// #ifdef DEBUG_RUNTESTS
-//    printf("\x1b[6;1H");
-//    run_tests();
-// #endif
-
    mkdir_p(SAVE_BASE);
 
    LOGDBG("STARTING MAIN LOOP");
@@ -951,8 +879,6 @@ int main(int argc, char** argv)
       }
       if(kDown & KEY_SELECT) {
          drwst.layer = (drwst.layer + 1) % LAYER_COUNT;
-         // if(kHeld & KEY_R) { export_page(drwst.page, draw_data, draw_data_end, save_filename); } 
-         // else { drwst.layer = (drwst.layer + 1) % LAYER_COUNT; }
       }
       if(kDown & KEY_START) 
       {

@@ -3,7 +3,7 @@
 
 #include <3ds.h>
 
-#define VERSION "0.3.1"
+#define VERSION "0.3.2"
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE"saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE"screenshots/"
@@ -16,6 +16,10 @@
 #define SCREEN_COLOR C2D_Color32(90,90,90,255)
 #define CANVAS_BG_COLOR C2D_Color32(255,255,255,255)
 #define CANVAS_LAYER_COLOR C2D_Color32(0,0,0,0)
+
+#define LAYER_COUNT 2
+#define TEXTURE_WIDTH 1024
+#define TEXTURE_HEIGHT 1024
 
 #define PALETTE_COLORS 64
 #define PALETTE_SWATCHWIDTH 18
