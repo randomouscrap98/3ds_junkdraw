@@ -7,6 +7,11 @@
 #define LAYER_WIDTH 1000
 #define LAYER_HEIGHT 1000
 
+// Some guarantees made by the drawing system. I guess you don't HAVE to follow them, 
+// but if you're consuming this, you probably should...
+#define MAX_DRAW_DATA (u32)5000000
+#define MAX_STROKE_LINES 5000
+
 // ---------- GENERAL UTILS ----------------
 
 #define CENTER_RECT_ALIGNPIXEL(x,y,width) \
@@ -71,43 +76,12 @@ void pixaligned_linepackfunc_all(const struct LinePackage * linepack, rectangle_
 char * convert_linepack_to_data(struct LinePackage * lines, char * container, u32 container_size);
 char * convert_data_to_linepack(struct LinePackage * package, char * data, char * data_end);
 
-// -------------- Scan draw system ------------
-
-#define MAX_DRAW_DATA (u32)5000000
-#define MAX_STROKE_LINES 5000
-#define MAX_STROKE_DATA MAX_STROKE_LINES << 3
-
-// At 100_000, will take nearly 1 full second just to scan to end. But, we 
-// don't want to have the system hitching when you move to a new page, so it
-// has to be low enough to not do too much work per frame. Remember that scanning
-// requires parsing a variable width integer to get the page... it's not trivial.
-#define MAX_DRAWDATA_SCAN 100000
-
 char * write_to_datamem(char * stroke_data, char * stroke_end, u16 page, char * mem, char * mem_end);
 char * datamem_scanstroke(char * start, char * end, const u32 max_scan, const u16 page, char ** stroke_start);
 
 // Find last used page within data given. Should be pretty fast...
 u32 last_used_page(char * data, u32 length);
 
-// A circular buffer which is able to "pack" lines from disparate strokes together
-// into one buffer, useful for drawing later. Use out of band split for layers
-struct LineRingBuffer {
-   struct FullLine * lines;
-   u16 start;
-   u16 end;
-   u16 capacity;
-   struct LinePackage pending;
-};
-
-void init_lineringbuffer(struct LineRingBuffer * buffer, u16 capacity);
-void reset_lineringbuffer(struct LineRingBuffer * buffer);
-void free_lineringbuffer(struct LineRingBuffer * buffer);
-
-u16 lineringbuffer_size(struct LineRingBuffer * buffer);
-struct FullLine * lineringbuffer_grow(struct LineRingBuffer * buffer);
-struct FullLine * lineringbuffer_shrink(struct LineRingBuffer * buffer);
-
-// Scan the maximum safe amount of strokes into the given buffer. Size the buffer appropriately
-char * scan_lines(struct LineRingBuffer * buffer, char * drawdata, char * drawdata_end, const u16 page);
+// -------------- Scan draw system ------------
 
 #endif

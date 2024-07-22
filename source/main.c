@@ -16,9 +16,10 @@
 #include "console.h"
 #include "input.h"
 #include "color.h"
+#include "draw.h"
+#include "buffer.h"
 
 #include "setup.h"
-#include "draw.h"
 
 #include "system.h"
 
