@@ -330,11 +330,59 @@ void update_paletteindex(const touchPosition * pos, u8 * index)
 
 // -- BIG SCAN DRAW SYSTEM --
 
-// Draw and track a certain number of lines from the given scandata.
-u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount, struct LayerData * layers, u8 layer_count)
+// Draw as much as possible from the given ring buffer, with as little context switching as possible. 
+// WARN: MAKES A LOT OF ASSUMPTIONS IN ORDER TO PREVENT COSTLY MALLOCS PER FRAME
+void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layers) //, u32 line_drawcount, struct LayerData * layers, u8 layer_count)
 {
-   u32 current_drawcount = 0;
+   u16 lineCount = 0;
+   struct FullLine * lines[MAX_FRAMELINES];
+   //u16 layerCounts[LAYER_COUNT];
+   //struct FullLine * layerLines[LAYER_COUNT * MAX_FRAMELINES]; // Is this safe to stack allocate? It's like 8kb...
+   //u16 * layerCounts = NULL;
+   //struct FullLine ** layerLines = NULL;
+   // layerCounts = malloc(sizeof(u16) * layer_count);
+   // layerLines = malloc(sizeof(struct FullLine *) * line_drawcount * layer_count);
+   // if(layerCounts == NULL) {
+   //    LOGDBG("ERROR: COULD NOT ALLOCATE LAYERCOUNTS");
+   //    goto DFBEND;
+   // }
+   // if(layerLines == NULL) {
+   //    LOGDBG("ERROR: COULD NOT ALLOCATE LAYERLINES");
+   //    goto DFBEND;
+   // }
 
+   struct FullLine * next = NULL;
+
+   // Repeat while there's something in the buffer and we haven't reached the limit. Essentially, just pull as much
+   // as possible out of the ring buffer so we can later draw it per-layer
+   while((next = lineringbuffer_shrink(scandata)) && lineCount < MAX_FRAMELINES) { //line_drawcount) {
+      lines[lineCount] = next;
+      lineCount++;
+         //next->layer * MAX_FRAMELINES + layerCounts[next->layer]] = next;
+      //layerCounts[next->layer]++;
+   }
+
+   for(u8 i = 0; i < LAYER_COUNT; i++)
+   {
+      //Don't want to call this too often, so do as much as possible PER
+      //layer instead of jumping around
+      C2D_SceneBegin(layers[i].target);
+
+      // Now loop over our lines
+      for(u16 li = 0; li < lineCount; li++)
+      {
+         //Just entirely skip data for layers we're not focusing on yet.
+         if(lines[li]->layer != i) continue;
+
+         pixaligned_fulllinefunc(lines[li], MY_SOLIDRECT);
+      }
+   }
+
+   // DFBEND:
+   // if(layerCounts) free(layerCounts);
+   // if(layerLines) free(layerLines);
+
+/*
    //Only draw if there's something to start the whole thing
    if(scandata->current_package != NULL && scandata->current_package != scandata->last_package)
    {
@@ -391,6 +439,7 @@ u32 scandata_draw(struct ScanDrawData * scandata, u32 line_drawcount, struct Lay
    }
 
    return current_drawcount;
+   */
 }
 
 
@@ -933,13 +982,17 @@ int main(int argc, char** argv)
       //Just always try to draw whatever is leftover in the buffer
       if(draw_pointer < draw_data_end)
       {
-         u32 maxdraw = MAX_FRAMELINES;
-         maxdraw -= scandata_draw(&scandata, maxdraw, layers, LAYER_COUNT);
-         if(maxdraw > 0) {
-            // We know we can pull more if we still have leftover lines. Alternatively, we could 
-            // check scandata.current_package
-            draw_pointer = scandata_parse(&scandata, draw_pointer, draw_data_end, maxdraw, drwst.page);
-         }
+         // Fill the buffer as much as possible to start
+         draw_pointer = scan_lines(&scandata, draw_pointer, draw_data_end, drwst.page);
+         // Then just pull as many lines as possible out, UP TO the maximum per frame
+         //draw_from_buffer(&scandata, MAX_FRAMELINES, layers, LAYER_COUNT);
+         draw_from_buffer(&scandata, layers);
+         // maxdraw -= scandata_draw(&scandata, maxdraw, layers, LAYER_COUNT);
+         // if(maxdraw > 0) {
+         //    // We know we can pull more if we still have leftover lines. Alternatively, we could 
+         //    // check scandata.current_package
+         //    draw_pointer = scandata_parse(&scandata, draw_pointer, draw_data_end, maxdraw, drwst.page);
+         // }
       }
 
       C2D_Flush();
@@ -992,6 +1045,7 @@ int main(int argc, char** argv)
       current_frame++;
    }
 
+   free_lineringbuffer(&scandata);
    free_linepackage(&pending);
    free(draw_data);
    free(stroke_data);
@@ -999,7 +1053,7 @@ int main(int argc, char** argv)
    for(int i = 0; i < LAYER_COUNT; i++)
       delete_layer(layers[i]);
 
-   scandata_free(&scandata);
+   //scandata_free(&scandata);
 
    C2D_Fini();
    C3D_Fini();

@@ -90,7 +90,7 @@ char * datamem_scanstroke(char * start, char * end, const u32 max_scan, const u1
 u32 last_used_page(char * data, u32 length);
 
 // A circular buffer which is able to "pack" lines from disparate strokes together
-// into one buffer, useful for drawing later
+// into one buffer, useful for drawing later. Use out of band split for layers
 struct LineRingBuffer {
    struct FullLine * lines;
    u16 start;
