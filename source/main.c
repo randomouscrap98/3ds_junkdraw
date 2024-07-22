@@ -180,56 +180,6 @@ void set_cpadprofile_canvas(struct CpadProfile * profile)
 
 #pragma endregion
 
-#pragma region GAMESTATE
-
-// --------- GAME STATE 0-------------
-
-//Represents most of what you'd need to keep track of general state.
-//Consider splitting out the various portions in preparation for a more
-//"modular" approach... if that's what you need, anyway.
-struct GameState
-{
-   u32 frame;   
-
-   //Inputs
-   circlePosition circle_position;
-   touchPosition touch_position;
-   u32 k_down;
-   u32 k_repeat;
-   u32 k_up; 
-   u32 k_held; 
-
-   // drawing state
-   s8 zoom_power;
-   s8 last_zoom_power;
-   u16 draw_page;
-   u8 draw_tool;
-};
-
-typedef struct GameState * gs;
-typedef void (*game_event_handler)(gs);
-
-void initialize_gamestate(struct GameState * state)
-{
-   memset(state, 0, sizeof(struct GameState));
-}
-
-void set_gstate_inputs(gs gstate)
-{
-   gstate->k_down = hidKeysDown();
-   gstate->k_repeat = hidKeysDownRepeat();
-   gstate->k_up = hidKeysUp();
-   gstate->k_held = hidKeysHeld();
-   hidTouchRead(&gstate->touch_position);
-   hidCircleRead(&gstate->circle_position);
-}
-
-void draw_controls(gs gstate)
-{
-
-}
-#pragma endregion
-
 
 // -- DRAWING UTILS --
 
@@ -586,11 +536,11 @@ int save_drawing(char * filename, char * data)
 
 char * load_drawing(char * data_container, char * final_filename)
 {
-   char * all_files = malloc(sizeof(char) * MAX_ALLFILENAMES);
    char fullpath[MAX_FILEPATH];
    char temp_msg[MAX_FILEPATH]; //Find another constant for this I guess
    char * result = NULL;
 
+   char * all_files = malloc(sizeof(char) * MAX_ALLFILENAMES);
    if(!all_files) {
       PRINTERR("Couldn't allocate memory");
       goto TRUEEND;
@@ -690,16 +640,8 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
    char * current_data = data;
    char * stroke_start = NULL;
    struct LinePackage package;
-   package.lines = malloc(sizeof(struct SimpleLine) * MAX_STROKE_LINES);
-   package.max_lines = MAX_STROKE_LINES;
+   init_linepackage(&package); // WARN: initialization could fail, no checks performed!
 
-   if(!package.lines)
-   {
-      LOGDBG("ERR: Couldn't allocate stroke lines");
-      goto END;
-   }
-
-   //PRINTINFO("Exporting page %d: drawing", page);
    while(current_data < data_end)
    {
       current_data = datamem_scanstroke(current_data, data_end, data_length, 
@@ -739,7 +681,7 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
       PRINTERR("FAILED to export: %s", savepath);
    }
 
-END:
+   free_linepackage(&package);
    for(int i = 0; i < LAYER_COUNT + 1; i++)
       free(layerdata[i]);
 }
@@ -790,10 +732,6 @@ int main(int argc, char** argv)
 
    LOGDBG("INITIALIZED")
 
-   //TODO: eventually, I want the game state to include most of what you'd need
-   //to reboot the system and still have the exact same setup.
-   struct GameState gstate;
-
    struct DrawState drwst;
    struct ScreenState scrst;
    struct CpadProfile cpdpr;
@@ -828,6 +766,7 @@ int main(int argc, char** argv)
    s8 last_zoom_power = 0;
 
    struct LinePackage pending;
+   init_linepackage(&pending);
    struct SimpleLine * pending_lines = malloc(MAX_STROKE_LINES * sizeof(struct SimpleLine));
    pending.lines = pending_lines;
 
@@ -837,7 +776,7 @@ int main(int argc, char** argv)
    char * save_filename = malloc(MAX_FILENAME * sizeof(char));
    char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
    char * stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
-   char * draw_data_end;
+   char * draw_data_end; // NOTE: this is exclusive: it points one past the end. draw_data_end - draw_data = length
    char * draw_pointer;
    char * saved_last;
 
@@ -855,13 +794,14 @@ int main(int argc, char** argv)
    {
       hidScanInput();
 
-      set_gstate_inputs(&gstate);
-      u32 kDown = gstate.k_down;
-      u32 kUp = gstate.k_up;
-      u32 kRepeat = gstate.k_repeat;
-      u32 kHeld = gstate.k_held;
-      circlePosition pos = gstate.circle_position;
-      touchPosition current_touch = gstate.touch_position;
+      u32 kDown = hidKeysDown();
+      u32 kUp = hidKeysUp();
+      u32 kRepeat = hidKeysDownRepeat();
+      u32 kHeld = hidKeysHeld();
+      circlePosition pos;
+      touchPosition current_touch;
+      hidTouchRead(&current_touch);
+      hidCircleRead(&pos);
 
       u16 po = (drwst.current_color - drwst.palette) / DEFAULT_PALETTE_SPLIT;
       u8 pi = (drwst.current_color - drwst.palette) % DEFAULT_PALETTE_SPLIT;
@@ -905,7 +845,7 @@ int main(int argc, char** argv)
                MAIN_NEWDRAW();
                draw_data_end = load_drawing(draw_data, save_filename);
 
-               if(draw_data_end == NULL) //!draw_data_end)
+               if(draw_data_end == NULL)
                {
                   PRINTERR("LOAD FAILED!");
                   MAIN_NEWDRAW();
@@ -913,6 +853,8 @@ int main(int argc, char** argv)
                else
                {
                   saved_last = draw_data_end;
+                  // Find last page, set it.
+                  drwst.page = last_used_page(draw_data, draw_data_end - draw_data);
                   PRINT_DATAUSAGE();
                }
             }
@@ -999,7 +941,6 @@ int main(int argc, char** argv)
 
       C2D_Flush();
       _drw_cmd_cnt = 0;
-      //MY_FLUSH();
 
       // -- OTHER DRAW SECTION --
       C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, 
@@ -1048,7 +989,7 @@ int main(int argc, char** argv)
       current_frame++;
    }
 
-   free(pending_lines);
+   free_linepackage(&pending);
    free(draw_data);
    free(stroke_data);
 

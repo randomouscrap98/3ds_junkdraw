@@ -60,6 +60,10 @@
 #define MAX_WIDTH 64
 #define MAX_PAGE 0xFFFF
 
+// Scanning
+#define MAX_FRAMELINES 100
+//1000
+
 #define BREPEAT_DELAY 20
 #define BREPEAT_INTERVAL 7
 

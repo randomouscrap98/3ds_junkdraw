@@ -165,6 +165,23 @@ void pixaligned_linepackfunc_all(const struct LinePackage * linepack, rectangle_
    pixaligned_linepackfunc(linepack, 0, linepack->line_count, rect_f);
 }
 
+void init_linepackage(struct LinePackage * package) {
+   if(package->lines != NULL) {
+      LOGDBG("ERR: PACKAGE ALREADY INITIALIZED");
+      return;
+   }
+
+   package->lines = malloc(sizeof(struct SimpleLine) * MAX_STROKE_LINES);
+   package->max_lines = MAX_STROKE_LINES;
+
+   if(!package->lines) {
+      LOGDBG("ERR: Couldn't allocate stroke lines");
+   }
+}
+
+void free_linepackage(struct LinePackage * package) {
+   free(package->lines);
+}
 
 //A true macro, as in just dump code into the function later. Used ONLY for 
 //convert_lines, hence "CVL"
@@ -353,6 +370,20 @@ void scandata_free(struct ScanDrawData * data)
    data->all_lines = NULL;
    data->packages_capacity = 0;
    data->lines_capacity = 0;
+}
+
+u32 last_used_page(char * data, u32 length) {
+   if(length < 2) {
+      return 0; // Just safety
+   }
+   // Simple: start at one before the end and search backwards for the '.'
+   for(char * pos = data + length - 2; pos > data; pos--) {
+      if(*pos == '.') {
+         u8 length;
+         return varwidth_to_int(pos + 1, &length);
+      }
+   }
+   return 0;
 }
 
 char * write_to_datamem(char * stroke_data, char * stroke_end, u16 page, char * mem, char * mem_end)
