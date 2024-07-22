@@ -136,7 +136,7 @@ function rgbaToCssString(rgba) {
 // into the given context. The color needs to be set already
 function pixaligned_linefunc(line, width, clear, ctx) //line, width, color, rect_f)
 {
-    console.log(line, width, ctx);
+    //console.log(line, width, ctx);
     var xdiff = line.x2 - line.x1;
     var ydiff = line.y2 - line.y1;
     var dist = Math.sqrt(xdiff * xdiff + ydiff * ydiff);
@@ -212,18 +212,6 @@ function clearCanvas(canvas, color)
     context.globalAlpha = oldAlpha;
 }
 
-// function solidRectangle(ctx, cx, cy, width, height, clear)
-// {
-//     //cx = Math.round(cx - width / 2);
-//     //cy = Math.round(cy - height / 2);
-//     if(clear)
-//         ctx.clearRect(Math.round(cx), Math.round(cy), Math.round(width), Math.round(height));
-//     else
-//         ctx.fillRect(Math.round(cx), Math.round(cy), Math.round(width), Math.round(height));
-//     //The bounding rectangle for the area that was updated on the canvas.
-//     //return [cx, cy, width, height];
-// }
-
 var global_strokes = [];
 
 window.onload = function() {
@@ -265,7 +253,6 @@ window.onload = function() {
         ];
         // Make sure all the layers are on the same page.
         for(var i = 0; i < layers.length; i++) {
-            //layers[i].globalCompositeOperation = "copy";
             layers[i].imageSmoothingEnabled = false;
         }
         for(var i = start; i <= end; i++) {
@@ -278,6 +265,7 @@ window.onload = function() {
                 pixaligned_linefunc(
                     global_strokes[i].lines[j], 
                     global_strokes[i].width, 
+                    (global_strokes[i].color_raw & 0x8000) == 0,
                     layers[global_strokes[i].layer]
                 );
             }
@@ -350,6 +338,7 @@ function parseStroke(stroke) {
     var col32 = rgba16_to_rgba32c(stroke.color_raw);
     stroke.color = rgbaToCssString(col32);
     stroke.lines = [];
+    ofs += 5;
     if(stroke.style == 0) {
         // The rest are points along the line of the stroke. It starts with one full point,
         // then the rest are distances to the next stroke. Since the 3ds screen is so small,
@@ -381,7 +370,6 @@ function parseStroke(stroke) {
         // We actually don't have any other styles right now...
         logwarning("Invalid stroke " + stroke.style + " at " + stroke.ofs + ", ignoring");
     }
-    ofs += 5;
 }
 
 // Set visuals and system data with the given set of strokes. Will update the strokes
@@ -585,9 +573,10 @@ td.color {
         <button type="button" id="clearbutton">Clear</button>
     </form>
     <div id="layers">
-        <!-- Reverse order because of css + overlapping -->
-        <canvas class="pixelated" id="layer1" width="1000" height="1000"></canvas>
-        <canvas class="pixelated" id="layer0" width="1000" height="1000"></canvas>
+        <!-- In our system, layer 1 is "on top of" layer 0, which is how this works too (later canvases go on top) -->
+        <!-- NOTE: remove the "f" to make canvases pixel-perfect (maybe) -->
+        <canvas class="fpixelated" id="layer0" width="1000" height="1000"></canvas>
+        <canvas class="fpixelated" id="layer1" width="1000" height="1000"></canvas>
     </div>
 
     <h3 id="log_nav">Log:</h3>
