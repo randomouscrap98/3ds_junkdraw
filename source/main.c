@@ -771,8 +771,8 @@ int main(int argc, char** argv)
    struct SimpleLine * pending_lines = malloc(MAX_STROKE_LINES * sizeof(struct SimpleLine));
    pending.lines = pending_lines;
 
-   struct ScanDrawData scandata;
-   scandata_initialize(&scandata, MAX_FRAMELINES);
+   struct LineRingBuffer scandata;
+   init_lineringbuffer(&scandata, MAX_FRAMELINES);
 
    char * save_filename = malloc(MAX_FILENAME * sizeof(char));
    char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
@@ -933,20 +933,6 @@ int main(int argc, char** argv)
       //Just always try to draw whatever is leftover in the buffer
       if(draw_pointer < draw_data_end)
       {
-         // NOTE 2024-07-22: OK this scandraw system confused the hell out of me, and apparently
-         // it confused the hell out of past me too. ScanDraw is supposed to hold onto TEMPORARY 
-         // state across multiple strokes as a weird inter-stroke buffer. This optimizes memory
-         // while allowing the draw system to draw arbitarary amounts of lines, stopping in the 
-         // middle of a stroke if need be. That is VERY important: the 3ds isn't super powerful,
-         // and we don't want a large stroke to interrupt someone's drawing (this was supposed
-         // to be a multiplayer drawing app). As such, ScanDraw is split into two parts: one is 
-         // the "pulling data" part, which buffers some amount of parsing, then the "drawing" 
-         // part, where it draws the parts that are in its parse buffer. The system is setup
-         // such that you CAN'T parse more data until the previous parse is fully complete, 
-         // which... includes the drawing portion. This means there's really no point in 
-         // having these two systems (unless I'm missing something), but we've already got 
-         // this setup for now, so... the point is, you don't parse more data until the
-         // previous data is entirely drawn.
          u32 maxdraw = MAX_FRAMELINES;
          maxdraw -= scandata_draw(&scandata, maxdraw, layers, LAYER_COUNT);
          if(maxdraw > 0) {

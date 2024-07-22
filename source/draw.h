@@ -39,6 +39,13 @@ u32 varwidth_to_int(const char * container, u8 * read_count);
 #define LINESTYLE_STROKE 0
 
 struct SimpleLine { u16 x1, y1, x2, y2; };
+struct FullLine {
+   u16 x1, y1, x2, y2;
+   u16 color;
+   u8 style;
+   u8 layer;
+   u8 width;
+};
 
 // A basic representation of a collection of lines. Doesn't understand "tools"
 // or any of that, it JUST has the information required to draw the lines.
@@ -55,10 +62,8 @@ struct LinePackage {
 void init_linepackage(struct LinePackage * package);
 void free_linepackage(struct LinePackage * package);
 
-char * convert_lines_to_data(struct LinePackage * lines, char * container, u32 container_size);
-char * convert_data_to_lines(struct LinePackage * package, char * data, char * data_end);
-
 void pixaligned_linefunc (const struct SimpleLine * line, u16 width, u32 color, rectangle_func rect_f);
+void pixaligned_fulllinefunc (const struct FullLine * line, rectangle_func rect_f);
 
 void pixaligned_linepackfunc(const struct LinePackage * linepack, u16 pack_start, u16 pack_end, rectangle_func rect_f);
 void pixaligned_linepackfunc_all(const struct LinePackage * linepack, rectangle_func rect_f);
@@ -72,30 +77,37 @@ char * convert_data_to_linepack(struct LinePackage * package, char * data, char 
 #define MAX_STROKE_LINES 5000
 #define MAX_STROKE_DATA MAX_STROKE_LINES << 3
 
+// At 100_000, will take nearly 1 full second just to scan to end. But, we 
+// don't want to have the system hitching when you move to a new page, so it
+// has to be low enough to not do too much work per frame. Remember that scanning
+// requires parsing a variable width integer to get the page... it's not trivial.
 #define MAX_DRAWDATA_SCAN 100000
-
-// Find last used page within data given. Should be pretty fast...
-u32 last_used_page(char * data, u32 length);
 
 char * write_to_datamem(char * stroke_data, char * stroke_end, u16 page, char * mem, char * mem_end);
 char * datamem_scanstroke(char * start, char * end, const u32 max_scan, const u16 page, char ** stroke_start);
 
-struct ScanDrawData 
-{
-   struct LinePackage * packages;
-   struct SimpleLine * all_lines;
+// Find last used page within data given. Should be pretty fast...
+u32 last_used_page(char * data, u32 length);
 
-   //Status trackers
-   struct LinePackage * current_package;
-   struct LinePackage * last_package;
-   struct SimpleLine * last_line;
-
-   u32 packages_capacity;
-   u32 lines_capacity;
+// A circular buffer which is able to "pack" lines from disparate strokes together
+// into one buffer, useful for drawing later
+struct LineRingBuffer {
+   struct FullLine * lines;
+   u16 start;
+   u16 end;
+   u16 capacity;
+   struct LinePackage pending;
 };
 
-void scandata_initialize(struct ScanDrawData * data, u32 max_line_buffer);
-void scandata_free(struct ScanDrawData * data);
-char * scandata_parse(struct ScanDrawData * scandata, char * drawdata, char * drawdata_end, u32 line_scancount, const u16 page);
+void init_lineringbuffer(struct LineRingBuffer * buffer, u16 capacity);
+void reset_lineringbuffer(struct LineRingBuffer * buffer);
+void free_lineringbuffer(struct LineRingBuffer * buffer);
+
+u16 lineringbuffer_size(struct LineRingBuffer * buffer);
+struct FullLine * lineringbuffer_grow(struct LineRingBuffer * buffer);
+struct FullLine * lineringbuffer_shrink(struct LineRingBuffer * buffer);
+
+// Scan the maximum safe amount of strokes into the given buffer. Size the buffer appropriately
+char * scan_lines(struct LineRingBuffer * buffer, char * drawdata, char * drawdata_end, const u16 page);
 
 #endif

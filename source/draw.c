@@ -145,6 +145,11 @@ void pixaligned_linefunc(const struct SimpleLine * line, u16 width, u32 color, r
    }
 }
 
+void pixaligned_fulllinefunc (const struct FullLine * line, rectangle_func rect_f) {
+   struct SimpleLine sline = { line->x1, line->y1, line->x2, line->y2 };
+   pixaligned_linefunc(&sline, line->width, line->color, rect_f);
+}
+
 //Draw the collection of lines given, starting at the given line and ending
 //before the other given line (first inclusive, last exclusive)
 //Assumes you're already on the appropriate page you want and all that
@@ -340,100 +345,82 @@ char * convert_data_to_linepack(struct LinePackage * package, char * data, char 
 // -- SCANDRAW UTILS --
 // ------------------------
 
-void scandata_initialize(struct ScanDrawData * data, u32 max_line_buffer)
-{
-   //At MOST, we should have a maximum of the maximum allowed lines to read, as
-   //each stroke NEEDS one line
-   data->packages_capacity = max_line_buffer;
-   data->lines_capacity = max_line_buffer + MAX_STROKE_LINES;
-   data->packages = malloc(sizeof(struct LinePackage) * data->packages_capacity); 
-   //But for ALL lines put together, the last line we scan COULD be as big as
-   //the maximum stroke by accident, so always include additional space
-   data->all_lines = malloc(sizeof(struct SimpleLine) * data->lines_capacity);
-   data->current_package = NULL;
-   data->last_package = data->packages;
-   data->last_line = data->all_lines;
-
-   //Even though each package TECHNICALLY points to the mega line array, we
-   //still don't want any individual package to go over our max
-   for(int i = 0; i < data->packages_capacity; i++)
-      data->packages[i].max_lines = MAX_STROKE_LINES;
+void init_lineringbuffer(struct LineRingBuffer * buffer, u16 capacity) {
+   // To safely read a stroke with unknown amount of lines, add extra padding equal to the max stroke lines
+   buffer->capacity = capacity + MAX_STROKE_LINES; 
+   buffer->lines = malloc(sizeof(struct FullLine) * buffer->capacity); 
+   init_linepackage(&buffer->pending);
+   reset_lineringbuffer(buffer);
 }
 
-void scandata_free(struct ScanDrawData * data)
-{
-   free(data->packages);
-   free(data->all_lines);
-   data->last_package = NULL;
-   data->last_line = NULL;
-   data->packages = NULL;
-   data->all_lines = NULL;
-   data->packages_capacity = 0;
-   data->lines_capacity = 0;
+void reset_lineringbuffer(struct LineRingBuffer * buffer) {
+   buffer->start = 0;
+   buffer->end = 0;
 }
 
-//Scan the data up to a certain amount, parse the data, and draw it. Kind of
-//doing too much, but whatever, this is a small program. Return the location we
-//scanned up to.
-char * scandata_parse(struct ScanDrawData * scandata, char * drawdata, 
-      char * drawdata_end, u32 line_scancount, const u16 page)
-{
-   char * parse_pointer = drawdata;
-   char * stroke_pointer = NULL;
-   u32 scan_remaining = MAX_DRAWDATA_SCAN;
+void free_lineringbuffer(struct LineRingBuffer * buffer) {
+   free_linepackage(&buffer->pending);
+   free(buffer->lines);
+}
 
-   //There's VERY LITTLE safety in these functions! PLEASE BE CAREFUL
-   //Assumptions: 
-   //-the scandata that's given can hold the entirety of the desired scancount
-   //-the scandata pointers are all at the start
-   //-there's nothing in the scandata
+u16 lineringbuffer_size(struct LineRingBuffer * buffer) {
+   //if(buffer->start <= buffer->end)
+   return (buffer->end + buffer->capacity - buffer->start) % buffer->capacity;
+   //else
+   //   return buffer->end + (buffer->capacity - buffer->start);
+}
 
-   if(scandata->current_package != NULL)
-      LOGDBG("WARN: Tried to scan_dataparse without an empty buffer!\n");
+// Grow the ring buffer, returning the slot you want to write to as the "grown" item
+struct FullLine * lineringbuffer_grow(struct LineRingBuffer * buffer) {
+   struct FullLine * result = buffer->lines + buffer->end;
+   buffer->end = (buffer->end + 1) % buffer->capacity;
+   return result;
+}
 
-   //Reset all the data based on assumptions
-   scandata->last_package = scandata->packages;
-   scandata->last_line = scandata->all_lines;
-
-   //Is there a possibility it will scan past the end? Can we do comparisons
-   //like this on pointers? I'm pretty sure you can, they point to the same array
-   while(parse_pointer < drawdata_end && 
-         (scandata->last_line - scandata->all_lines) < line_scancount && 
-         scan_remaining > 0)
-   {
-      //Remaining is always the maximum scan amount minus how far we've scanned
-      //into the data.
-      scan_remaining = MAX_DRAWDATA_SCAN - (parse_pointer - drawdata);
-
-      //we should ALWAYS be able to trust parse_pointer
-      parse_pointer = datamem_scanstroke(parse_pointer, drawdata_end, 
-            scan_remaining, page, &stroke_pointer);
-
-      //What do we do if it doesn't find a stroke pointer? We can't do anymore,
-      //there was no stroke to be found.... right? Or does that mean no stroke to
-      //be found, within the allotted maximum scanning range?
-      if(stroke_pointer == NULL)
-         continue; //We assume we just didn't find anything, try again
-
-      //Pre-assign the next open line spot to this package
-      scandata->last_package->lines = scandata->last_line;
-
-      //Do we really care where the end of this ends up? no; don't use the return.
-      //I don't know when this wouldn't be the case, but the parse_pointer
-      //SHOULD point to the start of the next stroke, or in other words, 1 past
-      //the last character in the stroke data, which is perfect for this.
-      convert_data_to_linepack(scandata->last_package, stroke_pointer, parse_pointer);
-
-      //Move the "last" pointers forward
-      scandata->last_line += scandata->last_package->line_count;
-      scandata->last_package++;
+// Shrink the ring buffer, returning the slot you just popped. Returns null if the
+// buffer is empty.
+struct FullLine * lineringbuffer_shrink(struct LineRingBuffer * buffer) {
+   if(buffer->start == buffer->end) {
+      return NULL;
    }
+   struct FullLine * result = buffer->lines + buffer->start;
+   buffer->start= (buffer->start + buffer->capacity - 1) % buffer->capacity;
+   return result;
+}
 
-   //Only set a current_package if there's something there
-   if(scandata->last_package > scandata->packages)
-      scandata->current_package = scandata->packages;
-
-   return parse_pointer;
+// Fill up ring buffer as much as safely possible with pre-parsed full lines, ready for drawing at any time.
+char * scan_lines(struct LineRingBuffer * buffer, char * drawdata, char * drawdata_end, const u16 page) {
+   char * scandata = drawdata;
+   char * stroke_pointer = NULL;
+   u32 scan_remaining = MAX_DRAWDATA_SCAN; // Some arbitrarily high number. This may require tweaking!
+   while(scan_remaining > 0 && scandata < drawdata_end && 
+         buffer->capacity - 1 - lineringbuffer_size(buffer) > MAX_STROKE_LINES) {
+      // Find and parse the next stroke in our page.
+      scan_remaining = MAX_DRAWDATA_SCAN - (scandata - drawdata);
+      scandata = datamem_scanstroke(scandata, drawdata_end, scan_remaining, page, &stroke_pointer);
+      // If we don't find a stroke, we might be at the end. Do "continue" to retry the while loop check.
+      // It's VERY weird/maybe bad if we DON'T exit the loop...
+      if(stroke_pointer == NULL) {
+         continue;
+      }
+      // scandata is already pointing at the end of the current stroke, so we don't need to 
+      // reassign it to the output of this conversion.
+      convert_data_to_linepack(&buffer->pending, stroke_pointer, scandata);
+      // Now, for each line, we're going to create a special "full" line and add it
+      // to the circular buffer.
+      for(u16 i = 0; i < buffer->pending.line_count; i++) {
+         struct FullLine * line = lineringbuffer_grow(buffer);
+         line->color = buffer->pending.color;
+         line->layer = buffer->pending.layer;
+         line->style = buffer->pending.style;
+         line->width = buffer->pending.width;
+         line->x1 = buffer->pending.lines[i].x1;
+         line->x2 = buffer->pending.lines[i].x2;
+         line->y1 = buffer->pending.lines[i].y1;
+         line->y2 = buffer->pending.lines[i].y2;
+      }
+   }
+   return scandata;
 }
 
 u32 last_used_page(char * data, u32 length) {
@@ -486,9 +473,10 @@ char * write_to_datamem(char * stroke_data, char * stroke_end, u16 page, char * 
    return new_end;
 }
 
-//Scan through memory until either we reach the end, the max scan is reached,
-//or we actually find the first occurence of a page that we want. Return 
-//the place where we stopped scanning.
+// Scan through memory until either we reach the end, the max scan is reached,
+// or we actually find the first occurence of a stroke on a page that we want. Return 
+// the place where we stopped scanning (so you can call it repeatedly). Doesn't actually
+// parse the stroke, just looks for the next one.
 char * datamem_scanstroke(char * start, char * end, const u32 max_scan, const u16 page, char ** stroke_start)
 {
    char * tempptr;
