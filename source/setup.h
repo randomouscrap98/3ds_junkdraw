@@ -8,7 +8,7 @@
 #define SAVE_BASE FOLDER_BASE"saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE"screenshots/"
 
-// Colors / drawing / etc
+// UI stuff
 #define SCROLL_WIDTH 3
 #define SCROLL_BG C2D_Color32f(0.8,0.8,0.8,1)
 #define SCROLL_BAR C2D_Color32f(0.5,0.5,0.5,1)
@@ -16,10 +16,6 @@
 #define SCREEN_COLOR C2D_Color32(90,90,90,255)
 #define CANVAS_BG_COLOR C2D_Color32(255,255,255,255)
 #define CANVAS_LAYER_COLOR C2D_Color32(0,0,0,0)
-
-#define LAYER_COUNT 2
-#define TEXTURE_WIDTH 1024
-#define TEXTURE_HEIGHT 1024
 
 #define PALETTE_COLORS 64
 #define PALETTE_SWATCHWIDTH 18
@@ -53,12 +49,20 @@
 #define MAX_TEMPSTRING 2048
 #define MAX_ALLFILENAMES 65535
 
-// Tool stuff
+// Drawing system
 #define MIN_ZOOMPOWER -2
 #define MAX_ZOOMPOWER 4
 #define MIN_WIDTH 1
 #define MAX_WIDTH 64
 #define MAX_PAGE 0xFFFF
+
+#define DEFAULT_PALETTE_SPLIT 64 
+#define DEFAULT_START_LAYER 1
+#define DEFAULT_PALETTE_STARTINDEX 1
+
+#define LAYER_COUNT 2
+#define TEXTURE_WIDTH 1024
+#define TEXTURE_HEIGHT 1024
 
 // Scanning
 #define MAX_FRAMELINES 1000

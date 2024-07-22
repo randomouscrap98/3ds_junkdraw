@@ -20,7 +20,6 @@
 #include "buffer.h"
 
 #include "setup.h"
-
 #include "system.h"
 
 // TODO: Figure out these weirdness things:
@@ -38,10 +37,6 @@ u8 _db_prnt_row = 0;
 #define MY_C2DOBJLIMIT 8192
 #define MY_C2DOBJLIMITSAFETY MY_C2DOBJLIMIT - 100
 #define PSX1BLEN 30
-
-#define DEFAULT_PALETTE_SPLIT 64 
-#define DEFAULT_START_LAYER 1
-#define DEFAULT_PALETTE_STARTINDEX 1
 
 #define TOOL_PENCIL 0
 #define TOOL_ERASER 1
@@ -286,52 +281,6 @@ void draw_layers(const struct LayerData * layers, layer_num layer_count,
    }
 }
 
-struct SimpleLine * add_point_to_stroke(struct LinePackage * pending, 
-      const touchPosition * pos, const struct ScreenState * mod)
-{
-   //This is for a stroke, do different things if we have different tools!
-   struct SimpleLine * line = pending->lines + pending->line_count;
-
-   line->x2 = pos->px / mod->zoom + mod->offset_x / mod->zoom;
-   line->y2 = pos->py / mod->zoom + mod->offset_y / mod->zoom;
-
-   if(pending->line_count == 0)
-   {
-      line->x1 = line->x2;
-      line->y1 = line->y2;
-   }
-   else
-   {
-      line->x1 = pending->lines[pending->line_count - 1].x2;
-      line->y1 = pending->lines[pending->line_count - 1].y2;
-   }
-
-   //Added a line
-   pending->line_count++;
-
-   return line;
-}
-
-
-// -- CONTROL UTILS --
-
-
-//Given a touch position (presumably on the color palette), update the selected
-//palette index. 
-void update_paletteindex(const touchPosition * pos, u8 * index)
-{
-   u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
-   u16 xind = (pos->px - PALETTE_OFSX) / shift;
-   u16 yind = (pos->py - PALETTE_OFSY) / shift;
-   u16 new_index = (yind << 3) + xind;
-   if(new_index >= 0 && new_index < DEFAULT_PALETTE_SPLIT) //PALETTE_COLORS)
-      *index = new_index;
-}
-
-
-
-// -- BIG SCAN DRAW SYSTEM --
-
 // Draw as much as possible from the given ring buffer, with as little context switching as possible. 
 // WARN: MAKES A LOT OF ASSUMPTIONS IN ORDER TO PREVENT COSTLY MALLOCS PER FRAME
 void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layers)
@@ -342,7 +291,7 @@ void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layer
 
    // Repeat while there's something in the buffer and we haven't reached the limit. Essentially, just pull as much
    // as possible out of the ring buffer so we can later draw it per-layer
-   while((next = lineringbuffer_shrink(scandata)) && lineCount < MAX_FRAMELINES) { //line_drawcount) {
+   while((next = lineringbuffer_shrink(scandata)) && lineCount < MAX_FRAMELINES) {
       lines[lineCount] = next;
       lineCount++;
    }
@@ -369,6 +318,47 @@ void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layer
 }
 
 
+// -------- Data helpers ------------
+
+struct SimpleLine * add_point_to_stroke(struct LinePackage * pending, 
+      const touchPosition * pos, const struct ScreenState * mod)
+{
+   //This is for a stroke, do different things if we have different tools!
+   struct SimpleLine * line = pending->lines + pending->line_count;
+
+   line->x2 = pos->px / mod->zoom + mod->offset_x / mod->zoom;
+   line->y2 = pos->py / mod->zoom + mod->offset_y / mod->zoom;
+
+   if(pending->line_count == 0)
+   {
+      line->x1 = line->x2;
+      line->y1 = line->y2;
+   }
+   else
+   {
+      line->x1 = pending->lines[pending->line_count - 1].x2;
+      line->y1 = pending->lines[pending->line_count - 1].y2;
+   }
+
+   //Added a line
+   pending->line_count++;
+
+   return line;
+}
+
+//Given a touch position (presumably on the color palette), update the selected
+//palette index. 
+void update_paletteindex(const touchPosition * pos, u8 * index)
+{
+   u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
+   u16 xind = (pos->px - PALETTE_OFSX) / shift;
+   u16 yind = (pos->py - PALETTE_OFSY) / shift;
+   u16 new_index = (yind << 3) + xind;
+   if(new_index >= 0 && new_index < DEFAULT_PALETTE_SPLIT) //PALETTE_COLORS)
+      *index = new_index;
+}
+
+
 // -- MENU/PRINT STUFF --
 
 #define PRINTCLEAR() { printf_flush("\x1b[%d;2H%-150s", MAINMENU_TOP, ""); }
@@ -380,7 +370,6 @@ void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layer
 #define PRINTERR(x, ...) PRINTGENERAL(x, 31, ## __VA_ARGS__)
 #define PRINTWARN(x, ...) PRINTGENERAL(x, 33, ## __VA_ARGS__)
 #define PRINTINFO(x, ...) PRINTGENERAL(x, 37, ## __VA_ARGS__)
-
 
 void print_controls()
 {
@@ -662,7 +651,8 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
       free(layerdata[i]);
 }
 
-// -- MAIN, OFC --
+
+// --------------------- MAIN -------------------------------
 
 #define UTILS_CLAMP(x, mn, mx) (x <= mn ? mn : x >= mx ? mx : x)
 
