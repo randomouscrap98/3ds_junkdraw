@@ -132,40 +132,43 @@ function rgbaToCssString(rgba) {
     return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
-// Draw a line using the same function the 3ds does. Must provide how you want to dump
-// the rectangle... and it must accept transparent rects too. Everything is purely overwrite.
-function pixaligned_linefunc(line, width, color, rect_f)
+// Similar function to 3ds draw routine, but redone for javascript. Draw a line directly
+// into the given context. The color needs to be set already
+function pixaligned_linefunc(line, width, clear, ctx) //line, width, color, rect_f)
 {
-   var xdiff = line.x2 - line.x1;
-   var ydiff = line.y2 - line.y1;
-   var dist = Math.sqrt(xdiff * xdiff + ydiff * ydiff);
-   var ang = Math.atan(ydiff/(xdiff?xdiff:0.0001))+(xdiff<0?M_PI:0);
-   var xang = Math.cos(ang);
-   var yang = Math.sin(ang);
+    console.log(line, width, ctx);
+    var xdiff = line.x2 - line.x1;
+    var ydiff = line.y2 - line.y1;
+    var dist = Math.sqrt(xdiff * xdiff + ydiff * ydiff);
+    var ang = Math.atan(ydiff / (xdiff ? xdiff : 0.0001)) + (xdiff < 0 ? Math.PI : 0);
+    var xang = Math.cos(ang);
+    var yang = Math.sin(ang);
 
-   var x, y; 
-   var ox = -1;
-   var oy = -1;
+    var x, y;
+    var ox = -1;
+    var oy = -1;
 
-   //Where the "edge" of each rectangle to be drawn is
-   var ofs = (width / 2.0) - 0.5;
+    //Where the "edge" of each rectangle to be drawn is
+    var ofs = (width / 2.0) - 0.5;
 
-   //Iterate over an acceptable amount of points on the line and draw
-   //rectangles to create a line.
-   for(var i = 0; i <= dist; i+=0.5)
-   {
-      x = Math.floor(line.x1+xang*i - ofs);
-      y = Math.floor(line.y1+yang*i - ofs);
+    //Iterate over an acceptable amount of points on the line and draw
+    //rectangles to create a line.
+    for (var i = 0; i <= dist; i += 0.5) {
+        x = Math.floor(line.x1 + xang * i - ofs);
+        y = Math.floor(line.y1 + yang * i - ofs);
 
-      //If we align to the same pixel as before, no need to draw again.
-      if(ox == x && oy == y) continue;
+        //If we align to the same pixel as before, no need to draw again.
+        if (ox == x && oy == y) continue;
 
-      // Actually draw a rect... however you want to. Centering was already done,
-      // x and y should be at the top left corner to fill.
-      rect_f(x, y, width, color);
+        // Actually draw a rect... however you want to. Centering was already done,
+        // x and y should be at the top left corner to fill.
+        if (clear)
+            ctx.clearRect(Math.round(x), Math.round(y), Math.round(width), Math.round(width));
+        else
+            ctx.fillRect(Math.round(x), Math.round(y), Math.round(width), Math.round(width));
 
-      ox = x; oy = y;
-   }
+        ox = x; oy = y;
+    }
 }
 
 </script>
@@ -190,8 +193,39 @@ function log(message, level) {
 function logerror(message) { return log(message, "error"); }
 function logwarning(message) { return log(message, "warning"); }
 
-// There is unfortunately a lot to unpack here, as I need to reimplement basically
-// the entire drawing system.
+function clearCanvas(canvas, color)
+{
+    var context = canvas.getContext("2d");
+    var oldStyle = context.fillStyle;
+    var oldAlpha = context.globalAlpha;
+    if(color)
+    {
+        context.globalAlpha = 1;
+        context.fillStyle = color; 
+        context.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    else
+    {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    context.fillStyle = oldStyle;
+    context.globalAlpha = oldAlpha;
+}
+
+// function solidRectangle(ctx, cx, cy, width, height, clear)
+// {
+//     //cx = Math.round(cx - width / 2);
+//     //cy = Math.round(cy - height / 2);
+//     if(clear)
+//         ctx.clearRect(Math.round(cx), Math.round(cy), Math.round(width), Math.round(height));
+//     else
+//         ctx.fillRect(Math.round(cx), Math.round(cy), Math.round(width), Math.round(height));
+//     //The bounding rectangle for the area that was updated on the canvas.
+//     //return [cx, cy, width, height];
+// }
+
+var global_strokes = [];
+
 window.onload = function() {
     log("Window loaded");
 
@@ -211,6 +245,44 @@ window.onload = function() {
         } else {
             logerror("No file selected");
         }
+    };
+
+    clearbutton.onclick = function() {
+        clearCanvas(layer0);
+        clearCanvas(layer1);
+        log("Cleared canvas");
+    };
+
+    drawbutton.onclick = function() {
+        var start = Number(strokestart.value || "0");
+        var end = Number(strokeend.value || "999999999");
+        var page = Number(pagelimit.value || "-1");
+        if(start < 0) start = 0;
+        if(end >= global_strokes.length) end = global_strokes.length - 1;
+        var layers = [
+            layer0.getContext("2d"),
+            layer1.getContext("2d")
+        ];
+        // Make sure all the layers are on the same page.
+        for(var i = 0; i < layers.length; i++) {
+            //layers[i].globalCompositeOperation = "copy";
+            layers[i].imageSmoothingEnabled = false;
+        }
+        for(var i = start; i <= end; i++) {
+            if(page >= 0 && global_strokes[i].page != page) {
+                continue;
+            }
+            // The entire stroke is the same style.
+            layers[global_strokes[i].layer].fillStyle = global_strokes[i].color;
+            for(var j = 0; j < global_strokes[i].lines.length; j++) {
+                pixaligned_linefunc(
+                    global_strokes[i].lines[j], 
+                    global_strokes[i].width, 
+                    layers[global_strokes[i].layer]
+                );
+            }
+        }
+        log("Drew strokes " + start + " to " + end);
     };
 };
 
@@ -288,10 +360,10 @@ function parseStroke(stroke) {
         while(ofs < buf.length) {
             var line = { x1 : x, y1 : y };
             vares = varwidth_to_int(buf.substring(ofs)); // x offset
-            x += vares.number;
+            x += special_to_signed(vares.number);
             ofs += vares.read;
             vares = varwidth_to_int(buf.substring(ofs)); // y offset
-            y += vares.number;
+            y += special_to_signed(vares.number);
             ofs += vares.read;
             // Finish up the line 
             line.x2 = x;
@@ -313,8 +385,9 @@ function parseStroke(stroke) {
 }
 
 // Set visuals and system data with the given set of strokes. Will update the strokes
-// table, pages table, etc.
+// table, pages table, etc. To make life easier, we track strokes with a "global_strokes" var.
 function setStrokes(strokes) {
+    global_strokes = strokes;
     var strokeselem = document.getElementById("strokes_container");
     strokeselem.innerHTML = ""; 
     var addArbitrary = function(row, cls, set) {
@@ -505,6 +578,7 @@ td.color {
 
     <h3 id="draw_nav">Debug draw</h3>
     <form id="drawform" action="javascript:void(0);">
+        <input id="pagelimit" placeholder="Page">
         <input id="strokestart" placeholder="Start #">
         <input id="strokeend" placeholder="End #">
         <button type="submit" id="drawbutton">Draw</button>
