@@ -72,14 +72,7 @@ char * scan_lines(struct LineRingBuffer * buffer, char * drawdata, char * drawda
       // to the circular buffer.
       for(u16 i = 0; i < buffer->pending.line_count; i++) {
          struct FullLine * line = lineringbuffer_grow(buffer);
-         line->color = buffer->pending.color;
-         line->layer = buffer->pending.layer;
-         line->style = buffer->pending.style;
-         line->width = buffer->pending.width;
-         line->x1 = buffer->pending.lines[i].x1;
-         line->x2 = buffer->pending.lines[i].x2;
-         line->y1 = buffer->pending.lines[i].y1;
-         line->y2 = buffer->pending.lines[i].y2;
+         convert_to_fullline(&buffer->pending, i, line);
       }
    }
    return scandata;

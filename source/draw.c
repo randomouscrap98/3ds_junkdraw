@@ -114,7 +114,8 @@ u32 varwidth_to_int(const char * container, u8 * read_count)
 //Draw a line using a custom line drawing system (required like this because of
 //javascript's general inability to draw non anti-aliased lines, and I want the
 //strokes saved by this program to be 100% accurately reproducible on javascript)
-void pixaligned_linefunc(const struct SimpleLine * line, u16 width, u32 color, rectangle_func rect_f)
+void pixaligned_linefunc(const struct FullLine * line, rectangle_func rect_f)
+   //const struct SimpleLine * line, u16 width, u32 color, rectangle_func rect_f)
 {
    float xdiff = line->x2 - line->x1;
    float ydiff = line->y2 - line->y1;
@@ -128,7 +129,7 @@ void pixaligned_linefunc(const struct SimpleLine * line, u16 width, u32 color, r
    float oy = -1;
 
    //Where the "edge" of each rectangle to be drawn is
-   float ofs = (width / 2.0) - 0.5;
+   float ofs = (line->width / 2.0) - 0.5;
 
    //Iterate over an acceptable amount of points on the line and draw
    //rectangles to create a line.
@@ -141,16 +142,10 @@ void pixaligned_linefunc(const struct SimpleLine * line, u16 width, u32 color, r
       if(ox == x && oy == y) continue;
 
       //Actually draw a centered rect... however you want to.
-      (*rect_f)(x,y,width,color);
+      (*rect_f)(x,y,line->width,line->color);
 
       ox = x; oy = y;
    }
-}
-
-void pixaligned_fulllinefunc (const struct FullLine * line, rectangle_func rect_f) {
-   struct SimpleLine sline = { line->x1, line->y1, line->x2, line->y2 };
-   u32 color = rgba16_to_rgba32c(line->color);
-   pixaligned_linefunc(&sline, line->width, color, rect_f);
 }
 
 //Draw the collection of lines given, starting at the given line and ending
@@ -159,18 +154,15 @@ void pixaligned_fulllinefunc (const struct FullLine * line, rectangle_func rect_
 void pixaligned_linepackfunc(const struct LinePackage * linepack, u16 pack_start, u16 pack_end,
       rectangle_func rect_f)
 {
-   u32 color = rgba16_to_rgba32c(linepack->color);
+   struct FullLine line;
 
    if(pack_end > linepack->line_count)
       pack_end = linepack->line_count;
 
-   for(u16 i = pack_start; i < pack_end; i++)
-      pixaligned_linefunc(&linepack->lines[i], linepack->width, color, rect_f);
-}
-
-void pixaligned_linepackfunc_all(const struct LinePackage * linepack, rectangle_func rect_f)
-{
-   pixaligned_linepackfunc(linepack, 0, linepack->line_count, rect_f);
+   for(u16 i = pack_start; i < pack_end; i++) {
+      convert_to_fullline(linepack, i, &line);
+      pixaligned_linefunc(&line, rect_f);
+   }
 }
 
 void init_linepackage(struct LinePackage * package) {
@@ -189,6 +181,17 @@ void init_linepackage(struct LinePackage * package) {
 
 void free_linepackage(struct LinePackage * package) {
    free(package->lines);
+}
+
+void convert_to_fullline(const struct LinePackage * package, u16 line_index, struct FullLine * result) {
+   result->color = rgba16_to_rgba32c(package->color);
+   result->layer = package->layer;
+   result->style = package->style;
+   result->width = package->width;
+   result->x1 = package->lines[line_index].x1;
+   result->x2 = package->lines[line_index].x2;
+   result->y1 = package->lines[line_index].y1;
+   result->y2 = package->lines[line_index].y2;
 }
 
 //A true macro, as in just dump code into the function later. Used ONLY for 

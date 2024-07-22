@@ -363,7 +363,7 @@ void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layer
          //Just entirely skip data for layers we're not focusing on yet.
          if(lines[li]->layer != i) continue;
 
-         pixaligned_fulllinefunc(lines[li], MY_SOLIDRECT);
+         pixaligned_linefunc(lines[li], MY_SOLIDRECT);
       }
    }
 }
@@ -629,8 +629,8 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
       convert_data_to_linepack(&package, stroke_start, current_data);
       _exp_layer_dt = layerdata[package.layer];
 
-      //At this point, we draw the line.
-      pixaligned_linepackfunc_all(&package, &_exp_layer_dt_func);
+      //At this point, we draw the whole stroke
+      pixaligned_linepackfunc(&package, 0, package.line_count, &_exp_layer_dt_func);
    }
 
    //Now merge arrays together; our alpha blending is dead simple. 

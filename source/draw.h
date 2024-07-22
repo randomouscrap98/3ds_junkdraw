@@ -19,6 +19,7 @@
    x = floor(x - __c_r_ap_ofs); y = floor(y - __c_r_ap_ofs);
 
 typedef void (* rectangle_func)(float, float, u16, u32); //X,Y,width,32-bit color
+//typedef struct FullLine * (* get_)
 
 // ------- Draw data conversion -------------
 
@@ -45,8 +46,8 @@ u32 varwidth_to_int(const char * container, u8 * read_count);
 
 struct SimpleLine { u16 x1, y1, x2, y2; };
 struct FullLine {
+   u32 color; // Must be pre-converted.
    u16 x1, y1, x2, y2;
-   u16 color;
    u8 style;
    u8 layer;
    u8 width;
@@ -66,12 +67,10 @@ struct LinePackage {
 
 void init_linepackage(struct LinePackage * package);
 void free_linepackage(struct LinePackage * package);
+void convert_to_fullline(const struct LinePackage * package, u16 line_index, struct FullLine * result);
 
-void pixaligned_linefunc (const struct SimpleLine * line, u16 width, u32 color, rectangle_func rect_f);
-void pixaligned_fulllinefunc (const struct FullLine * line, rectangle_func rect_f);
-
+void pixaligned_linefunc (const struct FullLine * line, rectangle_func rect_f);
 void pixaligned_linepackfunc(const struct LinePackage * linepack, u16 pack_start, u16 pack_end, rectangle_func rect_f);
-void pixaligned_linepackfunc_all(const struct LinePackage * linepack, rectangle_func rect_f);
 
 char * convert_linepack_to_data(struct LinePackage * lines, char * container, u32 container_size);
 char * convert_data_to_linepack(struct LinePackage * package, char * data, char * data_end);
