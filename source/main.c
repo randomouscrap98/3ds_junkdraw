@@ -16,10 +16,11 @@
 #include "console.h"
 #include "input.h"
 #include "color.h"
+
+#include "setup.h"
 #include "draw.h"
 
 #include "system.h"
-#include "setup.h"
 
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
@@ -330,27 +331,14 @@ void update_paletteindex(const touchPosition * pos, u8 * index)
 
 // -- BIG SCAN DRAW SYSTEM --
 
+u32 tdugh = 0;
+
 // Draw as much as possible from the given ring buffer, with as little context switching as possible. 
 // WARN: MAKES A LOT OF ASSUMPTIONS IN ORDER TO PREVENT COSTLY MALLOCS PER FRAME
-void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layers) //, u32 line_drawcount, struct LayerData * layers, u8 layer_count)
+void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layers)
 {
    u16 lineCount = 0;
    struct FullLine * lines[MAX_FRAMELINES];
-   //u16 layerCounts[LAYER_COUNT];
-   //struct FullLine * layerLines[LAYER_COUNT * MAX_FRAMELINES]; // Is this safe to stack allocate? It's like 8kb...
-   //u16 * layerCounts = NULL;
-   //struct FullLine ** layerLines = NULL;
-   // layerCounts = malloc(sizeof(u16) * layer_count);
-   // layerLines = malloc(sizeof(struct FullLine *) * line_drawcount * layer_count);
-   // if(layerCounts == NULL) {
-   //    LOGDBG("ERROR: COULD NOT ALLOCATE LAYERCOUNTS");
-   //    goto DFBEND;
-   // }
-   // if(layerLines == NULL) {
-   //    LOGDBG("ERROR: COULD NOT ALLOCATE LAYERLINES");
-   //    goto DFBEND;
-   // }
-
    struct FullLine * next = NULL;
 
    // Repeat while there's something in the buffer and we haven't reached the limit. Essentially, just pull as much
@@ -358,9 +346,13 @@ void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layer
    while((next = lineringbuffer_shrink(scandata)) && lineCount < MAX_FRAMELINES) { //line_drawcount) {
       lines[lineCount] = next;
       lineCount++;
-         //next->layer * MAX_FRAMELINES + layerCounts[next->layer]] = next;
-      //layerCounts[next->layer]++;
    }
+
+   if(lineCount == 0) {
+      return;
+   }
+   tdugh += lineCount;
+   LOGDBG("DRAWING %d LINES (%d)", lineCount, tdugh);
 
    for(u8 i = 0; i < LAYER_COUNT; i++)
    {
@@ -377,69 +369,6 @@ void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layer
          pixaligned_fulllinefunc(lines[li], MY_SOLIDRECT);
       }
    }
-
-   // DFBEND:
-   // if(layerCounts) free(layerCounts);
-   // if(layerLines) free(layerLines);
-
-/*
-   //Only draw if there's something to start the whole thing
-   if(scandata->current_package != NULL && scandata->current_package != scandata->last_package)
-   {
-      // Minus one because last_package points PAST the last package (why???)
-      u8 last_layer = (scandata->last_package - 1)->layer;
-
-      struct LinePackage * stopped_on = NULL;
-       
-      //Loop over layers
-      for(u8 i = 0; i < layer_count; i++)
-      {
-         //This is the end of the line, we stopped somewhere
-         if(stopped_on != NULL) break;
-
-         //Calculate actual layer (last_layer produces shifted window)
-         u8 layer_i = (i + last_layer + 1) % layer_count;
-
-         //Don't want to call this too often, so do as much as possible PER
-         //layer instead of jumping around
-         C2D_SceneBegin(layers[layer_i].target);
-
-         //Scan over every package
-         for(struct LinePackage * p = scandata->current_package; p < scandata->last_package; p++)
-         {
-            //Just entirely skip data for layers we're not focusing on yet.
-            if(p->layer != layer_i) continue;
-
-            u16 packagedrawlines = p->line_count;
-            u32 leftover_drawcount = line_drawcount - current_drawcount;
-
-            //If this is going to be the last package we're drawing, track
-            //where we stopped and don't draw ALL the lines.
-            if(packagedrawlines > leftover_drawcount)
-            {
-               //This is where we stopped. 
-               stopped_on = p;
-               packagedrawlines = leftover_drawcount;
-            }
-
-            pixaligned_linepackfunc(p, 0, packagedrawlines, MY_SOLIDRECT);
-            current_drawcount += packagedrawlines;
-
-            //If we didn't draw ALL the lines, move the line pointer forward.
-            //We know that the line pointers in these packages points to a flat array
-            if(packagedrawlines != p->line_count) {
-               p->lines += packagedrawlines;
-               p->line_count -= packagedrawlines;
-            }
-         }
-      }
-
-      //At the end, only set package to NULL if we got all the way through.
-      scandata->current_package = stopped_on;
-   }
-
-   return current_drawcount;
-   */
 }
 
 
@@ -745,6 +674,7 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
    if(kHeld & KEY_R) {     \
       drwst.page = UTILS_CLAMP(drwst.page + x * ((kHeld&KEY_L)?10:1), 0, MAX_PAGE);    \
       draw_pointer = draw_data;     \
+      reset_lineringbuffer(&scandata); \
       flush_layers = true;          \
    } else {                \
       drwst.zoom_power = UTILS_CLAMP(drwst.zoom_power + x, MIN_ZOOMPOWER, MAX_ZOOMPOWER);    \
@@ -754,6 +684,7 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
 
 #define MAIN_NEWDRAW() { \
    draw_data_end = draw_pointer = saved_last = draw_data; \
+   reset_lineringbuffer(&scandata); \
    free_default_drawstate(&drwst); \
    init_default_drawstate(&drwst); \
    flush_layers = true;       \
@@ -822,6 +753,13 @@ int main(int argc, char** argv)
 
    struct LineRingBuffer scandata;
    init_lineringbuffer(&scandata, MAX_FRAMELINES);
+   LOGDBG("RINGBUFFER CAPACITY: %d", scandata.capacity);
+   if(!scandata.lines) {
+      LOGDBG("ERROR: COULD NOT INIT LINERINGBUFFER");
+   } 
+   if(!scandata.pending.lines) {
+      LOGDBG("ERROR: COULD NOT INIT LRB PENDING");
+   } 
 
    char * save_filename = malloc(MAX_FILENAME * sizeof(char));
    char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
@@ -983,17 +921,13 @@ int main(int argc, char** argv)
       if(draw_pointer < draw_data_end)
       {
          // Fill the buffer as much as possible to start
+         char * init_pointer = draw_pointer;
          draw_pointer = scan_lines(&scandata, draw_pointer, draw_data_end, drwst.page);
+         //LOGDBG("SCANNED: %d\n", draw_pointer - init_pointer);
          // Then just pull as many lines as possible out, UP TO the maximum per frame
          //draw_from_buffer(&scandata, MAX_FRAMELINES, layers, LAYER_COUNT);
-         draw_from_buffer(&scandata, layers);
-         // maxdraw -= scandata_draw(&scandata, maxdraw, layers, LAYER_COUNT);
-         // if(maxdraw > 0) {
-         //    // We know we can pull more if we still have leftover lines. Alternatively, we could 
-         //    // check scandata.current_package
-         //    draw_pointer = scandata_parse(&scandata, draw_pointer, draw_data_end, maxdraw, drwst.page);
-         // }
       }
+      draw_from_buffer(&scandata, layers);
 
       C2D_Flush();
       _drw_cmd_cnt = 0;

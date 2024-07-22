@@ -8,7 +8,9 @@
 #include <citro3d.h>
 
 // C lets you redefine stuff... right?
+#ifndef LOGDBG
 #define LOGDBG(f_, ...)
+#endif
 
 // ------- GENERAL UTILS ---------
 
@@ -147,7 +149,8 @@ void pixaligned_linefunc(const struct SimpleLine * line, u16 width, u32 color, r
 
 void pixaligned_fulllinefunc (const struct FullLine * line, rectangle_func rect_f) {
    struct SimpleLine sline = { line->x1, line->y1, line->x2, line->y2 };
-   pixaligned_linefunc(&sline, line->width, line->color, rect_f);
+   u32 color = rgba16_to_rgba32c(line->color);
+   pixaligned_linefunc(&sline, line->width, color, rect_f);
 }
 
 //Draw the collection of lines given, starting at the given line and ending
@@ -349,6 +352,9 @@ void init_lineringbuffer(struct LineRingBuffer * buffer, u16 capacity) {
    // To safely read a stroke with unknown amount of lines, add extra padding equal to the max stroke lines
    buffer->capacity = capacity + MAX_STROKE_LINES; 
    buffer->lines = malloc(sizeof(struct FullLine) * buffer->capacity); 
+   if(!buffer->lines) {
+      LOGDBG("ERROR: COULD NOT INIT LINERINGBUFFER");
+   } 
    init_linepackage(&buffer->pending);
    reset_lineringbuffer(buffer);
 }
@@ -364,10 +370,7 @@ void free_lineringbuffer(struct LineRingBuffer * buffer) {
 }
 
 u16 lineringbuffer_size(struct LineRingBuffer * buffer) {
-   //if(buffer->start <= buffer->end)
    return (buffer->end + buffer->capacity - buffer->start) % buffer->capacity;
-   //else
-   //   return buffer->end + (buffer->capacity - buffer->start);
 }
 
 // Grow the ring buffer, returning the slot you want to write to as the "grown" item
@@ -384,7 +387,7 @@ struct FullLine * lineringbuffer_shrink(struct LineRingBuffer * buffer) {
       return NULL;
    }
    struct FullLine * result = buffer->lines + buffer->start;
-   buffer->start= (buffer->start + buffer->capacity - 1) % buffer->capacity;
+   buffer->start= (buffer->start + 1) % buffer->capacity;
    return result;
 }
 
