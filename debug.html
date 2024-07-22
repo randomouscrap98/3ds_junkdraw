@@ -238,6 +238,7 @@ window.onload = function() {
     clearbutton.onclick = function() {
         clearCanvas(layer0);
         clearCanvas(layer1);
+        clearCanvas(layerboth);
         log("Cleared canvas");
     };
 
@@ -245,17 +246,18 @@ window.onload = function() {
         var start = Number(strokestart.value || "0");
         var end = Number(strokeend.value || "999999999");
         var page = Number(pagelimit.value || "-1");
-        if(start < 0) start = 0;
-        if(end >= global_strokes.length) end = global_strokes.length - 1;
+        if(start < 1) start = 1;
+        if(end > global_strokes.length) end = global_strokes.length;
         var layers = [
             layer0.getContext("2d"),
-            layer1.getContext("2d")
+            layer1.getContext("2d"),
+            layerboth.getContext("2d")
         ];
         // Make sure all the layers are on the same page.
         for(var i = 0; i < layers.length; i++) {
             layers[i].imageSmoothingEnabled = false;
         }
-        for(var i = start; i <= end; i++) {
+        for(var i = start - 1; i < end; i++) {
             if(page >= 0 && global_strokes[i].page != page) {
                 continue;
             }
@@ -270,6 +272,11 @@ window.onload = function() {
                 );
             }
         }
+        // Now just copy the two canvases into the final canvas to actually show it. This is to 
+        // allow the user to right click and save the canvas
+        clearCanvas(layerboth, "#FFFFFF");
+        layers[2].drawImage(layer0, 0, 0);
+        layers[2].drawImage(layer1, 0, 0);
         log("Drew strokes " + start + " to " + end);
     };
 };
@@ -574,9 +581,10 @@ td.color {
     </form>
     <div id="layers">
         <!-- In our system, layer 1 is "on top of" layer 0, which is how this works too (later canvases go on top) -->
+        <canvas style="display:none" id="layer0" width="1000" height="1000"></canvas>
+        <canvas style="display:none" id="layer1" width="1000" height="1000"></canvas>
         <!-- NOTE: remove the "f" to make canvases pixel-perfect (maybe) -->
-        <canvas class="fpixelated" id="layer0" width="1000" height="1000"></canvas>
-        <canvas class="fpixelated" id="layer1" width="1000" height="1000"></canvas>
+        <canvas id="layerboth" class="fpixelated" width="1000" height="1000"></canvas>
     </div>
 
     <h3 id="log_nav">Log:</h3>
