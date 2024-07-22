@@ -4,7 +4,134 @@
 <!-- ======================================== -->
 <head>
 
+<!-- Generic draw system -->
 <script>
+
+// Most of this stuff was taken directly from draw.c and draw.h.
+// WARN: some of this stuff would be really inefficient because of string 
+// immutability if it weren't for the fact that we expect to operate SOLELY
+// on pre-parsed strokes, so none of them will be that long.
+var DCV_START = 48;
+var DCV_BITSPER = 6
+var DCV_VARIBITSPER = 5
+var DCV_VARISTEP = (1 << DCV_VARIBITSPER);
+var DCV_VARIMAXSCAN = 7;
+
+function DCV_CLAMP(x, mn, mx) { return (x <= mn ? mn : x >= mx ? mx : x); }
+function DCV_MAXVAL(x) { return ((1 << (x * DCV_BITSPER)) - 1); }
+function DCV_VARIMAXVAL(x) { return ((1 << (x * DCV_VARIBITSPER)) - 1); }
+
+// Convert the given number to the given number of characters (all ASCII).
+// Clamps rather than throws an error if the number is too large. Assumes
+// a positive integer!!
+// function int_to_chars(num, chars)
+// {
+//     var container = [];
+// 
+//     //WARN: clamping rather than ignoring! Hope this is ok
+//     num = DCV_CLAMP(num, 0, DCV_MAXVAL(chars));
+// 
+//     //Place each converted character, Little Endian
+//     for (var i = 0; i < chars; i++)
+//         container[i] = String.fromCharCode(DCV_START + ((num >> (i * DCV_BITSPER)) & DCV_MAXVAL(1)));
+// 
+//     return container.join("");
+// }
+
+// Convert the given string to a number. The string needs to be precisely the length
+// you need for this conversion, as the length IS taken into account
+function chars_to_int(chars)
+{
+    var result = 0;
+    for (var i = 0; i < chars.length; i++)
+        result += ((chars.charCodeAt(i) - DCV_START) << (i * DCV_BITSPER));
+    return result;
+}
+
+// function signed_to_special(value)
+// {
+//     if (value >= 0)
+//         return value << 1;
+//     else
+//         return ((value << 1) * -1) - 1;
+// }
+
+//A dumb form of 2's compliment that doesn't carry the leading 1's
+function special_to_signed(special)
+{
+    if (special & 1)
+        return ((special >> 1) * -1) - 1;
+    else
+        return special >> 1;
+}
+
+// Convert given integer to the smallest variable width string that will house it
+// function int_to_varwidth(value)
+// {
+//     var container = [];
+//     var c = 0;
+//     var i = 0;
+// 
+//     do {
+//         c = value & DCV_VARIMAXVAL(1);
+//         value = value >> DCV_VARIBITSPER;
+//         if (value) c |= DCV_VARISTEP; //Continue on, set the uppermost bit
+//         container[i++] = String.fromCharCode(DCV_START + c);
+//     }
+//     while (value);
+// 
+//     if (i >= DCV_VARIMAXSCAN)
+//         console.warn("Variable width too long in creation: " + i);
+// 
+//     return container.join("");
+// }
+
+// Read a variable width integer from the string. Returns an object indicating
+// the amount read and the variable integer
+function varwidth_to_int(chars)
+{
+    var result = {
+        number: 0,
+        read: 0
+    };
+    var c = 0;
+
+    do {
+        c = chars.charCodeAt(result.read) - DCV_START;
+        result.number += (c & DCV_VARIMAXVAL(1)) << (DCV_VARIBITSPER * result.read);
+        result.read++;
+    } while (c & DCV_VARISTEP && (result.read < DCV_VARIMAXSCAN)); //Keep going while the high bit is set
+
+    if (result.read >= DCV_VARIMAXSCAN) {
+        console.warn("WARN: variable width read too long: ", result.read);
+        result.error = "variable width too long";
+    }
+
+    return result;
+}
+
+</script>
+
+<!-- Actual page scripting -->
+<script>
+
+function log(message, level) {
+    level = level || "info";
+    var dt = new Date();
+    var msgelement = document.createElement("div");
+    msgelement.className = level;
+    msgelement.textContent = "[" + dt.toLocaleTimeString() + "] " + message;
+    document.getElementById("log").appendChild(msgelement);
+    if(level == "error") {
+        console.error(message);
+    } else {
+        console.log(message);
+    }
+}
+
+function logerror(message) { return log(message, "error"); }
+function logwarning(message) { return log(message, "warning"); }
+
 // There is unfortunately a lot to unpack here, as I need to reimplement basically
 // the entire drawing system.
 window.onload = function() {
@@ -20,11 +147,11 @@ window.onload = function() {
             };
             reader.onerror = function(e) {
                 alert("Error reading file (see console)");
-                log("Error reading file: " + e, "error");
+                logerror("Error reading file: " + e);
             };
             reader.readAsText(file);
         } else {
-            log("No file selected", "error");
+            logerror("No file selected");
         }
     };
 };
@@ -32,21 +159,77 @@ window.onload = function() {
 // Setup the system to use the file with the given contents
 function setFile(filecontents) {
     log("Setting file (" + filecontents.length + " chars)");
+    var strokes = parseStrokes(filecontents);
+    setStrokes(strokes);
 }
 
-function log(message, level) {
-    level = level || "info";
-    var dt = new Date();
-    var msgelement = document.createElement("div");
-    msgelement.className = level;
-    msgelement.textContent = "[" + dt.toLocaleTimeString() + "] " + message;
-    document.getElementById("log").appendChild(msgelement);
-    if(level == "error") {
-        console.error(message);
-    } else {
-        console.log(message);
+// Parse ALL strokes out of data. Strokes are the fundamental data storage type
+// for 3DS junkdraw. This function contains most of everything you'd need to 
+// understand the data format, if you're interested
+function parseStrokes(data) {
+    log("Begin stroke parsing");
+    var strokes = [];
+    var pos = data.indexOf('.');
+
+    if(pos < 0) { // Data is in invalid format: we're supposed to start with '.'
+        logerror("No strokes found in data!");
+        return [];
+    } else if(pos != 0) { // There's unknown data at the start. Oh well...
+        logwarning("Unrecognized data at beginning! Skipping " + pos + " characters...");
+    }
+
+    // Because of the check above, this loop can be simplified to always assume the
+    // alignment character exists, removing some checks.
+    while(pos < data.length) {
+        var thisStroke = { pos : pos };     // Prepare a stroke, assuming it will be OK
+        pos = data.indexOf('.', pos + 1);   // Find NEXT stroke (starts with '.')
+        if(pos < 0) {                       // Oops, no more strokes, read to end
+            pos = data.length;
+        }
+        thisStroke.slice = data.substring(thisStroke.pos, pos);
+        parseStroke(thisStroke);
+        strokes.push(thisStroke);
+    }
+
+    log("Parsed " + strokes.length + " strokes");
+    return strokes;
+}
+
+// Given an object with "slice" preset to the FULL stroke, parse the bits of data out of it
+function parseStroke(stroke) {
+    // Skip first element, it's the '.'
+    var buf = stroke.slice.substring(1);
+    // Pull the page out
+    var vares = varwidth_to_int(buf);
+    stroke.page = vares.number;
+    buf = buf.substring(vares.read);
+    // Ironically, the rest is the REAL stroke. We parse it here, but note that the c code
+    // actually splits this up, since I treat the stroke like it's a "container" for other 
+    // data, with the only common data being the page. It's kind of bad actually, but oh well.
+}
+
+// Set visuals and system data with the given set of strokes. Will update the strokes
+// table, etc.
+function setStrokes(strokes) {
+    var strokeselem = document.getElementById("strokes");
+    strokeselem.innerHTML = ""; 
+    var addData = function(row, cls, set) { 
+        var elem = document.createElement("td");
+        elem.className = cls;
+        elem.textContent = strokes[i][cls];
+        if(set) set(elem);
+        row.appendChild(elem);
+    };
+    for(var i = 0; i < strokes.length; i++) {
+        var row = document.createElement("tr");
+        addData(row, "page");
+        addData(row, "stroke_type");
+        addData(row, "color");
+        addData(row, "slice");
+        strokeselem.appendChild(row);
     }
 }
+
 </script>
 
 <style>
@@ -55,6 +238,12 @@ body {
 }
 body > * {
     margin: 1rem 0;
+}
+.error {
+    color: darkred;
+}
+.warning {
+    color: goldenrod;
 }
 /*nav {
     float: right;
@@ -97,8 +286,8 @@ nav > * {
 
     <h3>Simple 3DS Junkdraw File Debugger</h3>
     <nav>
-        <a href="#layers">Canvas</a>
         <a href="#strokes">Strokes</a>
+        <a href="#layers">Canvas</a>
         <a href="#log">Log</a>
     </nav>
 
@@ -107,14 +296,24 @@ nav > * {
         <input type="submit" value="Load">
     </form>
 
+    <h3>Strokes breakdown:</h3>
+    <table id="strokes">
+        <thead>
+            <tr>
+                <th title="Page">Pg</th>
+                <th title="Stroke type">St</th>
+                <th>Color</th>
+                <th>Raw</th>
+            </tr>
+        </thead>
+        <tbody id="strokes_container">
+        </tbody>
+    </table>
+
     <div id="layers">
         <!-- Reverse order because of css + overlapping -->
         <canvas class="pixelated" id="layer1" width="1000" height="1000"></canvas>
         <canvas class="pixelated" id="layer0" width="1000" height="1000"></canvas>
-    </div>
-
-    <h3>Strokes breakdown:</h3>
-    <div id="strokes">
     </div>
 
     <h3>Log:</h3>
