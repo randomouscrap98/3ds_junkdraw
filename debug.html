@@ -313,7 +313,7 @@ function parseStroke(stroke) {
 }
 
 // Set visuals and system data with the given set of strokes. Will update the strokes
-// table, etc.
+// table, pages table, etc.
 function setStrokes(strokes) {
     var strokeselem = document.getElementById("strokes_container");
     strokeselem.innerHTML = ""; 
@@ -329,6 +329,7 @@ function setStrokes(strokes) {
             if(set) set(e);
         });
     };
+    var pages = [];
     for(var i = 0; i < strokes.length; i++) {
         var row = document.createElement("tr");
         row.className = "p" + (strokes[i].page & 0x7);
@@ -340,6 +341,30 @@ function setStrokes(strokes) {
         addArbitrary(row, "lines", (e) => e.textContent = strokes[i].lines.length);
         addData(row, i, "slice");
         strokeselem.appendChild(row);
+        // Also do some small analysis on the pages
+        if(!(strokes[i].page in pages)) {
+            pages[strokes[i].page] = {
+                start: i + 1, end: 0, size: 0, strokes: 0, lines: 0
+            };
+        }
+        pages[strokes[i].page].strokes += 1;
+        pages[strokes[i].page].size += strokes[i].slice.length;
+        pages[strokes[i].page].lines += strokes[i].lines.length;
+        if(i + 1 > pages[strokes[i].page].end) {
+            pages[strokes[i].page].end = i + 1;
+        }
+    }
+    var pageselem = document.getElementById("pages_container");
+    pageselem.innerHTML = ""; 
+    for(var i = 0; i < pages.length; i++) {
+        var row = document.createElement("tr");
+        row.className = "p" + (i & 0x7);
+        addArbitrary(row, "page", (e) => e.textContent = i);
+        addArbitrary(row, "range", (e) => e.textContent = pages[i].start + " - " + pages[i].end);
+        addArbitrary(row, "strokes", (e) => e.textContent = pages[i].strokes);
+        addArbitrary(row, "lines", (e) => e.textContent = pages[i].lines);
+        addArbitrary(row, "size", (e) => e.textContent = pages[i].size);
+        pageselem.appendChild(row);
     }
 }
 
@@ -449,8 +474,9 @@ td.color {
             <tr>
                 <th>Page</th>
                 <th>Range</th>
+                <th>Strokes</th>
+                <th>Lines</th>
                 <th>Size</th>
-                <th>Total Lines</th>
             </tr>
         </thead>
         <tbody id="pages_container">
