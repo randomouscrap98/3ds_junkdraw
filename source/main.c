@@ -323,6 +323,11 @@ void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layer
 struct SimpleLine * add_point_to_stroke(struct LinePackage * pending, 
       const touchPosition * pos, const struct ScreenState * mod)
 {
+   // Stroke is overfull, can't do anything
+   if(pending->line_count >= pending->max_lines) {
+      return NULL;
+   }
+
    //This is for a stroke, do different things if we have different tools!
    struct SimpleLine * line = pending->lines + pending->line_count;
 

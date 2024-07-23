@@ -166,6 +166,7 @@ void pixaligned_linepackfunc(const struct LinePackage * linepack, u16 pack_start
 }
 
 void init_linepackage(struct LinePackage * package) {
+   // Keep this size a constant so that other implementors can have max size guarantees
    package->lines = malloc(sizeof(struct SimpleLine) * MAX_STROKE_LINES);
    package->max_lines = MAX_STROKE_LINES;
 }
