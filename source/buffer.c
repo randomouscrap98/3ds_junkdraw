@@ -60,10 +60,9 @@ char * scan_lines(struct LineRingBuffer * buffer, char * drawdata, char * drawda
       // Find and parse the next stroke in our page.
       scan_remaining = MAX_DRAWDATA_SCAN - (scandata - drawdata);
       scandata = datamem_scanstroke(scandata, drawdata_end, scan_remaining, page, &stroke_pointer);
-      // If we don't find a stroke, we might be at the end. Do "continue" to retry the while loop check.
-      // It's VERY weird/maybe bad if we DON'T exit the loop...
+      // There's no more data, or so it seems...
       if(stroke_pointer == NULL) {
-         continue;
+         break;
       }
       // scandata is already pointing at the end of the current stroke, so we don't need to 
       // reassign it to the output of this conversion.

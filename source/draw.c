@@ -166,17 +166,8 @@ void pixaligned_linepackfunc(const struct LinePackage * linepack, u16 pack_start
 }
 
 void init_linepackage(struct LinePackage * package) {
-   if(package->lines != NULL) {
-      LOGDBG("ERR: PACKAGE ALREADY INITIALIZED");
-      return;
-   }
-
    package->lines = malloc(sizeof(struct SimpleLine) * MAX_STROKE_LINES);
    package->max_lines = MAX_STROKE_LINES;
-
-   if(!package->lines) {
-      LOGDBG("ERR: Couldn't allocate stroke lines");
-   }
 }
 
 void free_linepackage(struct LinePackage * package) {

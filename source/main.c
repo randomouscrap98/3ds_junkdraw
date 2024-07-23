@@ -735,17 +735,17 @@ int main(int argc, char** argv)
 
    struct LinePackage pending;
    init_linepackage(&pending);
-   struct SimpleLine * pending_lines = malloc(MAX_STROKE_LINES * sizeof(struct SimpleLine));
-   pending.lines = pending_lines;
+   if(!pending.lines) {
+      LOGDBG("ERR: Couldn't allocate stroke lines");
+   }
 
    struct LineRingBuffer scandata;
    init_lineringbuffer(&scandata, MAX_FRAMELINES);
-   LOGDBG("RINGBUFFER CAPACITY: %d", scandata.capacity);
    if(!scandata.lines) {
-      LOGDBG("ERROR: COULD NOT INIT LINERINGBUFFER");
+      LOGDBG("ERR: COULD NOT INIT LINERINGBUFFER");
    } 
    if(!scandata.pending.lines) {
-      LOGDBG("ERROR: COULD NOT INIT LRB PENDING");
+      LOGDBG("ERR: COULD NOT INIT LRB PENDING");
    } 
 
    char * save_filename = malloc(MAX_FILENAME * sizeof(char));
@@ -754,6 +754,10 @@ int main(int argc, char** argv)
    char * draw_data_end; // NOTE: this is exclusive: it points one past the end. draw_data_end - draw_data = length
    char * draw_pointer;
    char * saved_last;
+
+   if(!save_filename || !draw_data || !stroke_data) {
+      LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
+   }
 
    LOGDBG("SYSTEM MALLOC");
 
