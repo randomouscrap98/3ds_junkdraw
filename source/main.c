@@ -143,9 +143,6 @@ void set_screenstate_defaults(struct ScreenState * state)
    state->onion_blendstart = DEFAULT_ONIONBLENDSTART;
    state->onion_blendend = DEFAULT_ONIONBLENDEND;
    state->layer_visibility = (1 << LAYER_COUNT) - 1; // All visible
-
-   // Tracking for onion
-   // state->_onion_top = 0;
 }
 
 void init_default_drawstate(struct DrawState * state)
@@ -197,19 +194,50 @@ u32 _drw_cmd_cnt = 0;
    LOGDBG("FLUSHING %ld DRAW CMDS PREMATURELY\n", _drw_cmd_cnt); \
    MY_FLUSH(); }
 
+// These "_drawrect" globals apply to ALL rectangle functions
+struct ScreenState *_drawrect_scrst = NULL;
+int _msr_ofsx = 0, _msr_ofsy = 0;
+
 void MY_SOLIDRECT(float x, float y, u16 width, u32 color)
 {
    x += LAYER_EDGEBUF;
    y += LAYER_EDGEBUF;
-   if(x < LAYER_EDGEERROR || y < LAYER_EDGEERROR || x >= LAYER_WIDTH + LAYER_EDGEBUF || y >= LAYER_WIDTH + LAYER_EDGEBUF)
+   if(x < LAYER_EDGEERROR || y < LAYER_EDGEERROR || x >= _drawrect_scrst->layer_width + LAYER_EDGEBUF || 
+      y >= _drawrect_scrst->layer_height + LAYER_EDGEBUF)
    {
       LOGDBG("IGNORING RECT AT (%f, %f)", x, y);
       return;
    }
-   C2D_DrawRectSolid(x, y, 0.5, width, width, color);
+   C2D_DrawRectSolid(x + _msr_ofsx, y + _msr_ofsy, 0.5, width, width, color);
    _drw_cmd_cnt++; 
    MY_FLUSHCHECK();
 }
+
+//This is a funny little system. Custom line drawing, passing the function,
+//idk. There are better ways, but I'm lazy
+u32 * _exp_layer_dt = NULL;
+
+void _exp_layer_dt_func(float x, float y, u16 width, u32 color)
+{
+   //pre-calculating can save tons of time in the critical loop down there. We
+   //don't want ANY long operations (modulus, my goodness) and we want it to
+   //use cache as much as possible. 
+   // NOTE: we changed how this worked in 0.4/0.5, this WILL change how exports look
+   // but it's only for the weird case of drawing right on the edge... hopefully that's ok??
+   u32 minx = x;
+   u32 maxx = x + width;
+   if(minx < 0) minx = 0;
+   if(maxx >= _drawrect_scrst->layer_width) maxx = _drawrect_scrst->layer_width - 1;
+   u32 miny = y;
+   u32 maxy = y + width;
+   if(miny < 0) miny = 0;
+   if(maxy >= _drawrect_scrst->layer_height) maxy = _drawrect_scrst->layer_height - 1;
+
+   for(u32 yi = miny; yi < maxy; yi ++) //= _drawrect_scrst->layer_width)
+      for(u32 xi = minx; xi < maxx; xi++)
+         _exp_layer_dt[yi * _drawrect_scrst->layer_width + xi] = color;
+}
+
 
 //Draw the scrollbars on the sides of the screen for the given screen
 //modification (translation AND zoom affect the scrollbars)
@@ -365,6 +393,7 @@ void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layer
          //Just entirely skip data for layers we're not focusing on yet.
          if(lines[li]->layer != i) continue;
 
+         // NOTE: It's up to you to set _msr_ofsx + _msr_ofsy appropriately before calling "draw_from_buffer"
          pixaligned_linefunc(lines[li], MY_SOLIDRECT);
       }
    }
@@ -620,32 +649,6 @@ TRUEEND:
    return result;
 }
 
-//This is a funny little system. Custom line drawing, passing the function,
-//idk. There are better ways, but I'm lazy
-u32 * _exp_layer_dt = NULL;
-struct ScreenState * _exp_scrst = NULL;
-
-void _exp_layer_dt_func(float x, float y, u16 width, u32 color)
-{
-   //pre-calculating can save tons of time in the critical loop down there. We
-   //don't want ANY long operations (modulus, my goodness) and we want it to
-   //use cache as much as possible. 
-   // NOTE: we changed how this worked in 0.4/0.5, this WILL change how exports look
-   // but it's only for the weird case of drawing right on the edge... hopefully that's ok??
-   u32 minx = x;
-   u32 maxx = x + width;
-   if(minx < 0) minx = 0;
-   if(maxx >= _exp_scrst->layer_width) maxx = _exp_scrst->layer_width - 1;
-   u32 miny = y;
-   u32 maxy = y + width;
-   if(miny < 0) miny = 0;
-   if(maxy >= _exp_scrst->layer_height) maxy = _exp_scrst->layer_height - 1;
-
-   for(u32 yi = miny; yi < maxy; yi ++) //= _exp_scrst->layer_width)
-      for(u32 xi = minx; xi < maxx; xi++)
-         _exp_layer_dt[yi * _exp_scrst->layer_width + xi] = color;
-}
-
 //Export the given page from the given data into a default named file in some
 //default image format (bitmap? png? who knows)
 void export_page(struct ScreenState * scrst, page_num page, char * data, char * data_end, char * basename)
@@ -705,7 +708,6 @@ void export_page(struct ScreenState * scrst, page_num page, char * data, char * 
 
       convert_data_to_linepack(&package, stroke_start, current_data);
       _exp_layer_dt = layerdata[package.layer];
-      _exp_scrst = scrst;
 
       //At this point, we draw the whole stroke
       pixaligned_linepackfunc(&package, 0, package.line_count, &_exp_layer_dt_func);
@@ -746,6 +748,9 @@ void export_page(struct ScreenState * scrst, page_num page, char * data, char * 
 #define UTILS_CLAMP(x, mn, mx) (x <= mn ? mn : x >= mx ? mx : x)
 #define FLUSH_LAYERS() \
       draw_pointer = draw_data;     \
+      for(int __fli = 0; __fli < MAXONION; __fli++) { \
+         onion_data[__fli] = draw_data; \
+      } \
       reset_lineringbuffer(&scandata); \
       flush_layers = true;          
 
@@ -798,6 +803,9 @@ int main(int argc, char** argv)
    set_screenstate_defaults(&scrst);
    set_cpadprofile_canvas(&cpdpr);
 
+   // Very silly global so rect drawing functions know screen dimensions and such
+   _drawrect_scrst = &scrst;
+
    LOGDBG("SET SCREENSTATE/CANVAS");
 
    //weird byte order? 16 bits of color are at top
@@ -844,6 +852,8 @@ int main(int argc, char** argv)
    char * draw_data_end; // NOTE: this is exclusive: it points one past the end. draw_data_end - draw_data = length
    char * draw_pointer;
    char * saved_last;
+
+   char * onion_data[MAXONION];
 
    if(!save_filename || !draw_data || !stroke_data) {
       LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
@@ -947,7 +957,7 @@ int main(int argc, char** argv)
                   scrst.layer_height <<= 1;
                   scrst.layer_width <<= 1;
                }
-               //FLUSH_LAYERS(); // Just always do this on mode switch, it's safer
+               FLUSH_LAYERS(); // Just always do this on mode switch, it's safer
                break;
             case MAINMENU_EXPORT:
                export_page(&scrst, drwst.page, draw_data, draw_data_end, save_filename);
@@ -1021,7 +1031,21 @@ int main(int argc, char** argv)
 
       // These functions are very lightweight and will exit immediately if they have nothing to do.
       draw_pointer = scan_lines(&scandata, draw_pointer, draw_data_end, drwst.page);
+      _msr_ofsx = 0;
+      _msr_ofsy = 0;
       draw_from_buffer(&scandata, layers);
+      if(draw_pointer == draw_data_end) {
+         // Onion time
+         for(int o = 1; o <= DCV_MIN(scrst.onion_count, drwst.page); o++) {
+            if(onion_data[o] == draw_data_end)
+               continue;
+            onion_data[o]= scan_lines(&scandata, onion_data[o], draw_data_end, drwst.page - o);
+            onion_offset(&drwst, -o, &_msr_ofsx, &_msr_ofsy);
+            draw_from_buffer(&scandata, layers);
+            // Stop early if we're not done
+            break;
+         }
+      }
 
       C2D_Flush();
       _drw_cmd_cnt = 0;
