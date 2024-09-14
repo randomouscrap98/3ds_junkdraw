@@ -22,6 +22,11 @@ void delete_layer(struct LayerData page);
 
 // -------------- SCREEN --------------
 
+#define MAXONION 3
+#define DEFAULT_ONIONCOUNT 3
+#define DEFAULT_ONIONBLENDSTART 0.3
+#define DEFAULT_ONIONBLENDEND 0.05
+
 //Variables for modifying display of drawing
 struct ScreenState
 {
@@ -31,6 +36,7 @@ struct ScreenState
 
    u16 layer_width;
    u16 layer_height;
+   u8 layer_visibility;
 
    //These are pretty standard, but included just in case..
    u16 screen_width;
@@ -39,6 +45,22 @@ struct ScreenState
    //Some configurable display stuff related to drawing
    u32 screen_color;
    u32 bg_color;
+
+   u8 onion_count;
+
+   // This is the target blend for the last onion layer. The other layers are calculated
+   // based on this blend target.
+   float onion_blendend; 
+   // The target blend for the first onion layer. The middle layer(s) are calculated 
+   // based on this and blendend
+   float onion_blendstart;
+
+   // Treat the extra space as a circular buffer, with this index being the top.
+   // Since we're quartering it, it looks like:
+   // P 0
+   // 1 2
+   // With P being the player draw area.
+   // u8 _onion_top;
 };
 
 //Safely adjust the screen offset given new desired offsets (doesn't let you
@@ -67,11 +89,11 @@ struct DrawState
    s8 zoom_power;
    u16 page;
    u8 layer;
-   u8 mode;
-
    u16 * palette;
    u16 * current_color; //This tells us the exact color for drawing
    u16 palette_count;
+
+   u8 mode;
 
    //The tool states; each tool can have its own modifiable state
    struct ToolData * tools;

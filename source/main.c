@@ -138,6 +138,14 @@ void set_screenstate_defaults(struct ScreenState * state)
    state->screen_height = 240; //GSP_SCREEN_WIDTH; //GSP_SCREEN_HEIGHT_BOTTOM;
    state->screen_color = SCREEN_COLOR;
    state->bg_color = CANVAS_BG_COLOR;
+
+   state->onion_count = DEFAULT_ONIONCOUNT;
+   state->onion_blendstart = DEFAULT_ONIONBLENDSTART;
+   state->onion_blendend = DEFAULT_ONIONBLENDEND;
+   state->layer_visibility = (1 << LAYER_COUNT) - 1; // All visible
+
+   // Tracking for onion
+   // state->_onion_top = 0;
 }
 
 void init_default_drawstate(struct DrawState * state)
@@ -270,15 +278,59 @@ void draw_colorpicker(u16 * palette, u16 palette_size, u16 selected_index,
    }
 }
 
+// Calculate the x and y offset into some layer for an onion layer based on an offset
+// from current page. So, 0 would be current page, but you should never give that as a value.
+// The offset is given WITHOUT the edgebuf
+void onion_offset(const struct DrawState *dstate, int ofs, int * x, int * y) {
+   if(ofs >= 0) {
+      *x = 0;
+      *y = 0;
+      return;
+   }
+   int region = -ofs; // The images go back from closest to furthest
+   // IF we go back to the more optimized onion top thing, this is what we do:
+   // int otop = (dstate->page % MAXONION); // First actual onion page
+   // // Plus one to skip player region
+   // int region = 1 + (MAXONION + otop + ofs + 1) % MAXONION;
+   *x = (region & 1) * (LAYER_WIDTH >> 1);   // offset without edgebuf
+   *y = (region >> 1) * (LAYER_WIDTH >> 1); 
+}
+
 void draw_layers(const struct LayerData * layers, layer_num layer_count, 
-      const struct ScreenState * mod, u32 bg_color)
+      const struct ScreenState * mod, const struct DrawState *dstate, u32 bg_color)
 {
    C2D_DrawRectSolid(-mod->offset_x, -mod->offset_y, 0.5f,
          mod->layer_width * mod->zoom, mod->layer_height * mod->zoom, bg_color); //The bg color
+
+   C2D_ImageTint tint;
+   // We draw the onion skin stuff first
+   if(dstate->mode == DRAWMODE_ANIMATION) {
+      // The offset from current page for onion skin
+      for(int o = -DCV_MIN(mod->onion_count, dstate->page); o <= -1; o++) {
+         for(int i = 0; i < 4; i++) {
+            tint.corners[i].color = 0xFFFFFFFF; // Setable sometime?
+            tint.corners[i].blend = 1 - DCV_LERP(mod->onion_blendstart, mod->onion_blendend, fabs((o + 1.0) / (MAXONION - 1.0)));
+         }
+         int x, y;
+         onion_offset(dstate, o, &x, &y);
+         for(layer_num i = 0; i < layer_count; i++)
+         {
+            if(mod->layer_visibility & (1 << i)) {
+               C2D_DrawImageAt(layers[i].image, 
+                  -mod->offset_x - (LAYER_EDGEBUF + x) * mod->zoom, 
+                  -mod->offset_y - (LAYER_EDGEBUF + y) * mod->zoom, 
+                  0.5f, &tint, mod->zoom, mod->zoom);
+            }
+         }
+      }
+   }
+
    for(layer_num i = 0; i < layer_count; i++)
    {
-      C2D_DrawImageAt(layers[i].image, -mod->offset_x - LAYER_EDGEBUF * mod->zoom, -mod->offset_y - LAYER_EDGEBUF * mod->zoom, 0.5f, 
-            NULL, mod->zoom, mod->zoom);
+      if(mod->layer_visibility & (1 << i)) {
+         C2D_DrawImageAt(layers[i].image, -mod->offset_x - LAYER_EDGEBUF * mod->zoom, -mod->offset_y - LAYER_EDGEBUF * mod->zoom, 0.5f, 
+               NULL, mod->zoom, mod->zoom);
+      }
    }
 }
 
@@ -431,8 +483,9 @@ void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color, u16 pag
    get_printmods(status_x1b, active_x1b, statusbg_x1b, activebg_x1b);
 
    printf("\x1b[30;1H%s W:%s%02d%s L:", status_x1b, active_x1b, width, status_x1b);
+   char layernames[] = "tb"; // apparently layer 1 is the top, but we display it backwards (layer 1 is first, then 0)
    for(s8 i = LAYER_COUNT - 1; i >= 0; i--) // NOTE: the second input is an optional character to display on current layer
-      printf("%s%c", i == layer ? activebg_x1b : statusbg_x1b, i == layer ? ' ' : ' ');
+      printf("%s%c", i == layer ? activebg_x1b : statusbg_x1b, i == layer ? layernames[i] : ' ');
    printf("%s Z:", status_x1b);
    for(s8 i = MIN_ZOOMPOWER; i <= MAX_ZOOMPOWER; i++)
       printf("%s%c", 
@@ -587,13 +640,6 @@ void _exp_layer_dt_func(float x, float y, u16 width, u32 color)
    u32 maxy = y + width;
    if(miny < 0) miny = 0;
    if(maxy >= _exp_scrst->layer_height) maxy = _exp_scrst->layer_height - 1;
-
-   //u32 minx = x < 0 ? 0 : ((u32)x % _exp_scrst->layer_width);
-   //u32 maxx = minx + width;
-   //u32 minyi = y < 0 ? 0 : (y * _exp_scrst->layer_width);
-   //u32 maxyi = minyi + _exp_scrst->layer_width * width;
-   //if(maxx >= _exp_scrst->layer_width) maxx = _exp_scrst->layer_width - 1;
-   //if(maxyi >= _exp_scrst->layer_width * _exp_scrst->layer_height) maxyi = _exp_scrst->layer_width * _exp_scrst->layer_height - 1;
 
    for(u32 yi = miny; yi < maxy; yi ++) //= _exp_scrst->layer_width)
       for(u32 xi = minx; xi < maxx; xi++)
@@ -901,7 +947,7 @@ int main(int argc, char** argv)
                   scrst.layer_height <<= 1;
                   scrst.layer_width <<= 1;
                }
-               FLUSH_LAYERS(); // Just always do this on mode switch, it's safer
+               //FLUSH_LAYERS(); // Just always do this on mode switch, it's safer
                break;
             case MAINMENU_EXPORT:
                export_page(&scrst, drwst.page, draw_data, draw_data_end, save_filename);
@@ -1016,7 +1062,7 @@ int main(int argc, char** argv)
       C2D_TargetClear(screen, scrst.screen_color);
       C2D_SceneBegin(screen);
 
-      draw_layers(layers, LAYER_COUNT, &scrst, scrst.bg_color);
+      draw_layers(layers, LAYER_COUNT, &scrst, &drwst, scrst.bg_color);
       draw_scrollbars(&scrst);
       draw_colorpicker(drwst.palette + po * DEFAULT_PALETTE_SPLIT, DEFAULT_PALETTE_SPLIT, 
             drwst.current_tool->has_static_color ? DEFAULT_PALETTE_SPLIT + 1 : pi, !palette_active);

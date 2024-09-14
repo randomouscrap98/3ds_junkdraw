@@ -133,7 +133,6 @@ const char * get_menu_item(const char * menu_items, u32 length, u32 item)
 }
 
 
-
 //Menu items must be packed together, separated by \0. Last item needs two \0
 //after. CONTROL WILL BE GIVEN FULLY TO THIS MENU UNTIL IT FINISHES!
 s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u32 exit_buttons)

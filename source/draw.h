@@ -24,6 +24,9 @@ typedef void (* rectangle_func)(float, float, u16, u32); //X,Y,width,32-bit colo
 // ------- Draw data conversion -------------
 
 #define DCV_CLAMP(x, mn, mx) (x <= mn ? mn : x >= mx ? mx : x)
+#define DCV_LERP(a, b, t) ((a) + ((b) - (a)) * (t))
+#define DCV_MIN(a, b) ((a) <= (b) ? (a) : (b))
+#define DCV_MAX(a, b) ((a) >= (b) ? (a) : (b))
 
 #define DCV_START 48
 #define DCV_BITSPER 6
