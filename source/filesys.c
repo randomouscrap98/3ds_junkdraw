@@ -150,9 +150,6 @@ char * read_file(const char * filename, char * container, u32 maxread)
 #define MYPNG_FORMAT PNG_COLOR_TYPE_RGBA
 #define MYPNG_BYTESPER 4
 
-//Given a citro-formatted array of u32 colors, write a png to the given 
-//location. Rawdata needs to be linear and row first. The 
-
 //No, the data must be in a linear array, row first, of PNG formatted RGBA
 //bytes. Ironically, citro-formatted colors on the 3ds are already like this,
 //as the 3ds is little endian just like png

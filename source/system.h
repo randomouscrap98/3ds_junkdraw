@@ -57,11 +57,17 @@ struct ToolData {
    u16 static_color;
 };
 
+#define DRAWMODE_NORMAL 0
+#define DRAWMODE_ANIMATION 1
+
+#define DRAWMODE_COUNT 2
+
 struct DrawState
 {
    s8 zoom_power;
    u16 page;
    u8 layer;
+   u8 mode;
 
    u16 * palette;
    u16 * current_color; //This tells us the exact color for drawing

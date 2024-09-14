@@ -28,14 +28,16 @@
 #define PALETTE_OFSX 10
 #define PALETTE_OFSY 10
 
-#define MAINMENU_TOP 6
+#define MAINMENU_TOP 6  // Where to put the menu?
 #define MAINMENU_TITLE "Main menu:"
-#define MAINMENU_ITEMS "New\0Save\0Load\0Export PNG\0Exit App\0"
+//#define MAINMENU_ITEMS(animon) "New\0Save\0Load\0Export PNG\0"(animon)
+#define MAINMENU_ITEMS "New\0Save\0Load\0Export PNG\0Mode: \0Exit App\0"
 #define MAINMENU_NEW 0
 #define MAINMENU_SAVE 1
 #define MAINMENU_LOAD 2
 #define MAINMENU_EXPORT 3
-#define MAINMENU_EXIT 4
+#define MAINMENU_MODE 4
+#define MAINMENU_EXIT 5
 
 #define PRINTDATA_WIDTH 40
 #define STATUS_MAINCOLOR 36

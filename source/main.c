@@ -145,6 +145,7 @@ void init_default_drawstate(struct DrawState * state)
    state->zoom_power = 0;
    state->page = 0;
    state->layer = DEFAULT_START_LAYER; 
+   state->mode = DRAWMODE_NORMAL;
 
    state->palette_count = sizeof(default_palette) / sizeof(u32);
    state->palette = malloc(state->palette_count * sizeof(u16));
@@ -215,8 +216,8 @@ void draw_scrollbars(const struct ScreenState * mod)
    C2D_DrawRectSolid(mod->screen_width - SCROLL_WIDTH, 0, 0.5f, 
          SCROLL_WIDTH, mod->screen_height, SCROLL_BG);
 
-   u16 sofs_x = (float)mod->offset_x / LAYER_WIDTH / mod->zoom * mod->screen_width;
-   u16 sofs_y = (float)mod->offset_y / LAYER_HEIGHT / mod->zoom * mod->screen_height;
+   u16 sofs_x = (float)mod->offset_x / mod->layer_width / mod->zoom * mod->screen_width;
+   u16 sofs_y = (float)mod->offset_y / mod->layer_height / mod->zoom * mod->screen_height;
 
    //bottom and right scrollbar bar
    C2D_DrawRectSolid(sofs_x, mod->screen_height - SCROLL_WIDTH, 0.5f, 
@@ -456,6 +457,29 @@ void print_time(bool showcolon)
          status_x1b, timeinfo->tm_hour, showcolon ? ':' : ' ', timeinfo->tm_min);
 }
 
+// Reconstruct the menu based on draw settings
+void get_menu_items(struct DrawState * drwst, char * menu) {
+   char menuitems[] = MAINMENU_ITEMS;
+   char * current = menu;
+   char * menuptr = menuitems;
+   // A bit of a silly thing... we copy all the menu items into the destination,
+   // but we might change some of them as we're copying
+   for(int i = 0; i <= MAINMENU_EXIT; i++) {
+      strcpy(current, menuptr);
+      int len = strlen(current);
+      if(i == MAINMENU_MODE) {
+         if(drwst->mode == DRAWMODE_ANIMATION) {
+            strcpy(current + len, "Anim");
+            current += 4;
+         } else if(drwst->mode == DRAWMODE_NORMAL) {
+            strcpy(current + len, "Normal");
+            current += 6;
+         }
+      } 
+      menuptr += len + 1;
+      current += len + 1;
+   }
+}
 
 // -- FILESYSTEM --
 
@@ -806,46 +830,67 @@ int main(int argc, char** argv)
       }
       if(kDown & KEY_START) 
       {
-         s32 selected = easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, KEY_B | KEY_START);
-         if(selected == MAINMENU_EXIT) {
-            if(MAIN_UNSAVEDCHECK("Really quit?")) break;
-         }
-         else if(selected == MAINMENU_NEW) {
-            if(MAIN_UNSAVEDCHECK("Are you sure you want to start anew?")) MAIN_NEWDRAW();
-         }
-         else if(selected == MAINMENU_SAVE)
-         {
-            *draw_data_end = 0;
-            if(save_drawing(save_filename, draw_data) == 0)
-            {
-               saved_last = draw_data_end;
-               PRINT_DATAUSAGE(); //Should this be out in the main loop?
-            }
-         }
-         else if (selected == MAINMENU_LOAD)
-         {
-            if(MAIN_UNSAVEDCHECK("Are you sure you want to load and lose changes?"))
-            {
-               MAIN_NEWDRAW();
-               draw_data_end = load_drawing(draw_data, save_filename);
-
-               if(draw_data_end == NULL)
-               {
-                  PRINTERR("LOAD FAILED!");
-                  MAIN_NEWDRAW();
-               }
-               else
+         char menuitems[256];
+         get_menu_items(&drwst, menuitems);
+         switch(easy_menu(MAINMENU_TITLE, menuitems, MAINMENU_TOP, 0, KEY_B | KEY_START)) {
+            case MAINMENU_EXIT:
+               if(MAIN_UNSAVEDCHECK("Really quit?")) goto ENDMAINLOOP;
+               break;
+            case MAINMENU_NEW:
+               if(MAIN_UNSAVEDCHECK("Are you sure you want to start anew?")) MAIN_NEWDRAW();
+               break;
+            case MAINMENU_SAVE:
+               *draw_data_end = 0;
+               if(save_drawing(save_filename, draw_data) == 0)
                {
                   saved_last = draw_data_end;
-                  // Find last page, set it.
-                  drwst.page = last_used_page(draw_data, draw_data_end - draw_data);
-                  PRINT_DATAUSAGE();
+                  PRINT_DATAUSAGE(); //Should this be out in the main loop?
                }
-            }
-         }
-         else if (selected == MAINMENU_EXPORT)
-         {
-            export_page(drwst.page, draw_data, draw_data_end, save_filename);
+               break;
+            case MAINMENU_LOAD:
+               if(MAIN_UNSAVEDCHECK("Are you sure you want to load and lose changes?"))
+               {
+                  MAIN_NEWDRAW();
+                  draw_data_end = load_drawing(draw_data, save_filename);
+
+                  if(draw_data_end == NULL)
+                  {
+                     PRINTERR("LOAD FAILED!");
+                     MAIN_NEWDRAW();
+                  }
+                  else
+                  {
+                     saved_last = draw_data_end;
+                     // Find last page, set it.
+                     drwst.page = last_used_page(draw_data, draw_data_end - draw_data);
+                     PRINT_DATAUSAGE();
+                  }
+               }
+               break;
+            case MAINMENU_MODE:
+               int newmode = (drwst.mode + 1) % DRAWMODE_COUNT;
+               if(newmode == DRAWMODE_ANIMATION) {
+                  if (easy_warn("Switching to animation mode", 
+                     "This will shrink your canvas by half for the\n"
+                     " duration of animation mode. You will not lose\n"
+                     " strokes made outside this area, they will\n"
+                     " just not be unseen.\n\nSwitch to animation mode?", MAINMENU_TOP)) {
+                     drwst.mode = newmode;
+                     // Entering animation mode, make the screen smaller
+                     scrst.layer_height >>= 1;
+                     scrst.layer_width >>= 1;
+                  }
+               } else if(drwst.mode == DRAWMODE_ANIMATION) {
+                  drwst.mode = newmode;
+                  // Exiting animation mode, make the screen larger again
+                  scrst.layer_height <<= 1;
+                  scrst.layer_width <<= 1;
+               }
+               flush_layers = true; // Just always do this on mode switch, it's safer
+               break;
+            case MAINMENU_EXPORT:
+               export_page(drwst.page, draw_data, draw_data_end, save_filename);
+               break;
          }
       }
       if(kDown & KEY_TOUCH) {
@@ -966,6 +1011,7 @@ int main(int argc, char** argv)
       last_zoom_power = drwst.zoom_power;
       current_frame++;
    }
+   ENDMAINLOOP:;
 
    free_lineringbuffer(&scandata);
    free_linepackage(&pending);
