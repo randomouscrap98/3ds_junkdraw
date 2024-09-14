@@ -479,6 +479,7 @@ void get_menu_items(struct DrawState * drwst, char * menu) {
       menuptr += len + 1;
       current += len + 1;
    }
+   current[0] = 0; // Need ANOTHER 0 at end to indicate end of menu
 }
 
 // -- FILESYSTEM --
@@ -569,27 +570,39 @@ TRUEEND:
 //This is a funny little system. Custom line drawing, passing the function,
 //idk. There are better ways, but I'm lazy
 u32 * _exp_layer_dt = NULL;
+struct ScreenState * _exp_scrst = NULL;
 
 void _exp_layer_dt_func(float x, float y, u16 width, u32 color)
 {
    //pre-calculating can save tons of time in the critical loop down there. We
    //don't want ANY long operations (modulus, my goodness) and we want it to
    //use cache as much as possible. 
-   u32 minx = x < 0 ? 0 : ((u32)x % LAYER_WIDTH);
-   u32 maxx = minx + width;
-   u32 minyi = y < 0 ? 0 : (y * LAYER_WIDTH);
-   u32 maxyi = minyi + LAYER_WIDTH * width;
-   if(maxx >= LAYER_WIDTH) maxx = LAYER_WIDTH - 1;
-   if(maxyi >= LAYER_WIDTH * LAYER_HEIGHT) maxyi = LAYER_WIDTH * LAYER_HEIGHT - 1;
+   // NOTE: we changed how this worked in 0.4/0.5, this WILL change how exports look
+   // but it's only for the weird case of drawing right on the edge... hopefully that's ok??
+   u32 minx = x;
+   u32 maxx = x + width;
+   if(minx < 0) minx = 0;
+   if(maxx >= _exp_scrst->layer_width) maxx = _exp_scrst->layer_width - 1;
+   u32 miny = y;
+   u32 maxy = y + width;
+   if(miny < 0) miny = 0;
+   if(maxy >= _exp_scrst->layer_height) maxy = _exp_scrst->layer_height - 1;
 
-   for(u32 yi = minyi; yi < maxyi; yi += LAYER_WIDTH)
+   //u32 minx = x < 0 ? 0 : ((u32)x % _exp_scrst->layer_width);
+   //u32 maxx = minx + width;
+   //u32 minyi = y < 0 ? 0 : (y * _exp_scrst->layer_width);
+   //u32 maxyi = minyi + _exp_scrst->layer_width * width;
+   //if(maxx >= _exp_scrst->layer_width) maxx = _exp_scrst->layer_width - 1;
+   //if(maxyi >= _exp_scrst->layer_width * _exp_scrst->layer_height) maxyi = _exp_scrst->layer_width * _exp_scrst->layer_height - 1;
+
+   for(u32 yi = miny; yi < maxy; yi ++) //= _exp_scrst->layer_width)
       for(u32 xi = minx; xi < maxx; xi++)
-         _exp_layer_dt[yi + xi] = color;
+         _exp_layer_dt[yi * _exp_scrst->layer_width + xi] = color;
 }
 
 //Export the given page from the given data into a default named file in some
 //default image format (bitmap? png? who knows)
-void export_page(page_num page, char * data, char * data_end, char * basename)
+void export_page(struct ScreenState * scrst, page_num page, char * data, char * data_end, char * basename)
 {
    //NOTE: this entire function is going to use Citro2D u32 formatted colors, all
    //the way until the final bitmap is written (at which point it can be
@@ -604,7 +617,7 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
    }
 
    u32 * layerdata[LAYER_COUNT + 1];
-   u32 size_bytes = sizeof(u32) * LAYER_WIDTH * LAYER_HEIGHT;
+   u32 size_bytes = sizeof(u32) * scrst->layer_width * scrst->layer_height;
 
    for(int i = 0; i < LAYER_COUNT + 1; i++)
    {
@@ -646,6 +659,7 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
 
       convert_data_to_linepack(&package, stroke_start, current_data);
       _exp_layer_dt = layerdata[package.layer];
+      _exp_scrst = scrst;
 
       //At this point, we draw the whole stroke
       pixaligned_linepackfunc(&package, 0, package.line_count, &_exp_layer_dt_func);
@@ -653,7 +667,7 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
 
    //Now merge arrays together; our alpha blending is dead simple. 
    //Will this take a while?
-   for(int i = 0; i < LAYER_HEIGHT * LAYER_WIDTH; i++)
+   for(int i = 0; i < scrst->layer_width * scrst->layer_height; i++)
    {
       //Loop over arrays, the topmost (layer) value persists
       for(int j = LAYER_COUNT - 1; j >= 0; j--)
@@ -668,7 +682,7 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
 
    PRINTINFO("Exporting page %d: converting to png...", page);
 
-   if(write_citropng(layerdata[LAYER_COUNT], LAYER_WIDTH, LAYER_HEIGHT, savepath) == 0) {
+   if(write_citropng(layerdata[LAYER_COUNT], scrst->layer_width, scrst->layer_height, savepath) == 0) {
       PRINTINFO("Exported page to: %s", savepath);
    }
    else {
@@ -684,14 +698,16 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
 // --------------------- MAIN -------------------------------
 
 #define UTILS_CLAMP(x, mn, mx) (x <= mn ? mn : x >= mx ? mx : x)
+#define FLUSH_LAYERS() \
+      draw_pointer = draw_data;     \
+      reset_lineringbuffer(&scandata); \
+      flush_layers = true;          
 
 // Some macros used ONLY for main (think lambdas)
 #define MAIN_UPDOWN(x) {   \
    if(kHeld & KEY_R) {     \
       drwst.page = UTILS_CLAMP(drwst.page + x * ((kHeld&KEY_L)?10:1), 0, MAX_PAGE);    \
-      draw_pointer = draw_data;     \
-      reset_lineringbuffer(&scandata); \
-      flush_layers = true;          \
+      FLUSH_LAYERS(); \
    } else {                \
       drwst.zoom_power = UTILS_CLAMP(drwst.zoom_power + x, MIN_ZOOMPOWER, MAX_ZOOMPOWER);    \
    } }
@@ -700,10 +716,9 @@ void export_page(page_num page, char * data, char * data_end, char * basename)
 
 #define MAIN_NEWDRAW() { \
    draw_data_end = draw_pointer = saved_last = draw_data; \
-   reset_lineringbuffer(&scandata); \
    free_default_drawstate(&drwst); \
    init_default_drawstate(&drwst); \
-   flush_layers = true;       \
+   FLUSH_LAYERS(); \
    save_filename[0] = '\0';   \
    pending.line_count = 0;        \
    current_frame = end_frame = 0; \
@@ -874,7 +889,7 @@ int main(int argc, char** argv)
                      "This will shrink your canvas by half for the\n"
                      " duration of animation mode. You will not lose\n"
                      " strokes made outside this area, they will\n"
-                     " just not be unseen.\n\nSwitch to animation mode?", MAINMENU_TOP)) {
+                     " just not be unseen.\n\n Switch to animation mode?", MAINMENU_TOP)) {
                      drwst.mode = newmode;
                      // Entering animation mode, make the screen smaller
                      scrst.layer_height >>= 1;
@@ -886,10 +901,10 @@ int main(int argc, char** argv)
                   scrst.layer_height <<= 1;
                   scrst.layer_width <<= 1;
                }
-               flush_layers = true; // Just always do this on mode switch, it's safer
+               FLUSH_LAYERS(); // Just always do this on mode switch, it's safer
                break;
             case MAINMENU_EXPORT:
-               export_page(drwst.page, draw_data, draw_data_end, save_filename);
+               export_page(&scrst, drwst.page, draw_data, draw_data_end, save_filename);
                break;
          }
       }
