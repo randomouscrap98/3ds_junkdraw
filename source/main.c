@@ -41,6 +41,16 @@ u32 __stacksize__=512*1024;
 //Some globals for the um... idk.
 u8 _db_prnt_row = 0;
 
+#define PRINTCLEAR() { printf_flush("\x1b[%d;2H%-150s", MAINMENU_TOP, ""); }
+
+#define PRINTGENERAL(x, col, ...) { \
+   printf_flush("\x1b[%d;1H%-150s\x1b[%d;2H\x1b[%dm", MAINMENU_TOP, "", MAINMENU_TOP, col); \
+   printf_flush(x, ## __VA_ARGS__); } \
+
+#define PRINTERR(x, ...) PRINTGENERAL(x, 31, ## __VA_ARGS__)
+#define PRINTWARN(x, ...) PRINTGENERAL(x, 33, ## __VA_ARGS__)
+#define PRINTINFO(x, ...) PRINTGENERAL(x, 37, ## __VA_ARGS__)
+
 
 #define MY_C2DOBJLIMIT 8192
 #define MY_C2DOBJLIMITSAFETY MY_C2DOBJLIMIT - 100
@@ -458,18 +468,124 @@ void update_paletteindex(const touchPosition * pos, u8 * index)
       *index = new_index;
 }
 
+// Export a page as a raw buffer. YOU MUST FREE THE BUFFER! Returns null if error
+u32 * export_page_raw (struct ScreenState * scrst, page_num page, char * data, char * data_end) {
+   u32 * layerdata[LAYER_COUNT + 1];
+   u32 size_bytes = sizeof(u32) * scrst->layer_width * scrst->layer_height;
+
+   for(int i = 0; i < LAYER_COUNT + 1; i++)
+   {
+      layerdata[i] = malloc(size_bytes);
+
+      if(layerdata[i] == NULL)
+      {
+         LOGDBG("ERR: COULDN'T ALLOCATE MEMORY FOR EXPORT");
+
+         for(int j = 0; j < i; j++)
+            free(layerdata[j]);
+
+         return NULL;
+      }
+
+      //TODO: This assumes the bg is white
+      memset(layerdata[i], (i == LAYER_COUNT) ? 0xFF : 0, size_bytes);
+   }
+
+   //Now just parse and parse and parse until we reach the end!
+   u32 data_length = data_end - data;
+   char * current_data = data;
+   char * stroke_start = NULL;
+   struct LinePackage package;
+   init_linepackage(&package); // WARN: initialization could fail, no checks performed!
+
+   while(current_data < data_end)
+   {
+      current_data = datamem_scanstroke(current_data, data_end, data_length, 
+              page, &stroke_start);
+
+      //Is this the normal way to do this? idk
+      if(stroke_start == NULL) continue;
+
+      convert_data_to_linepack(&package, stroke_start, current_data);
+      _exp_layer_dt = layerdata[package.layer];
+
+      //At this point, we draw the whole stroke
+      pixaligned_linepackfunc(&package, 0, package.line_count, &_exp_layer_dt_func);
+   }
+
+   //Now merge arrays together; our alpha blending is dead simple. 
+   //Will this take a while?
+   for(int i = 0; i < scrst->layer_width * scrst->layer_height; i++)
+   {
+      //Loop over arrays, the topmost (layer) value persists
+      for(int j = LAYER_COUNT - 1; j >= 0; j--)
+      {
+         if(layerdata[j][i])
+         {
+            layerdata[LAYER_COUNT][i] = layerdata[j][i];
+            break;
+         }
+      }
+   }
+
+   free_linepackage(&package);
+
+   // Remember, don't free the last layer, as that's our merged
+   for(int i = 0; i < LAYER_COUNT; i++)
+      free(layerdata[i]);
+
+   return layerdata[LAYER_COUNT];
+}
+
+struct GifSettings {
+   u16 bitdepth;
+   u16 csecsperframe;
+};
+
+int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char * data, char * data_end, char * basename) 
+{
+   PRINTINFO("Beginning gif export...");
+   if(mkdir_p(SCREENSHOTS_BASE))
+   {
+      PRINTERR("Couldn't create screenshots folder: %s", SCREENSHOTS_BASE);
+      return 1;
+   }
+
+   char savepath[MAX_FILEPATH];
+   time_t now = time(NULL);
+   sprintf(savepath, "%s%s_%jd.gif", SCREENSHOTS_BASE, strlen(basename) ? basename : "new", now);
+
+   MsfGifState gifState = {};
+   FILE * fp = fopen(savepath, "wb");
+   if(fp == NULL) {
+      PRINTERR("ERR: Couldn't open gif for writing: %s\n", savepath);
+      return 1;
+   }
+   msf_gif_begin_to_file(&gifState, scrst->layer_width, scrst->layer_height, (MsfGifFileWriteFunc) fwrite, (void *) fp);
+   int lastpageused = last_used_page(data, data_end - data);
+   for(int i = 0; i <= lastpageused; i++) {
+      PRINTINFO("Exporting page %d / %d...", i + 1, lastpageused + 1);
+      u32 * page = export_page_raw(scrst, i, data, data_end);
+      PRINTINFO("Packing gif page %d / %d...", i + 1, lastpageused + 1);
+      if(!msf_gif_frame_to_file(&gifState, (uint8_t *)page, settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4)) {
+         PRINTERR("ERROR ON PAGE %d\n", i + 1);
+         free(page);
+         break;
+      }
+      free(page);
+   }
+   if(!msf_gif_end_to_file(&gifState)) {
+      PRINTERR("ERR: Couldn't finalize gif\n");
+      return 1;
+   }
+   fclose(fp);
+   PRINTINFO("Exported gif to: %s", savepath);
+   return 0;
+}
+
+
 
 // -- MENU/PRINT STUFF --
-
-#define PRINTCLEAR() { printf_flush("\x1b[%d;2H%-150s", MAINMENU_TOP, ""); }
-
-#define PRINTGENERAL(x, col, ...) { \
-   printf_flush("\x1b[%d;1H%-150s\x1b[%d;2H\x1b[%dm", MAINMENU_TOP, "", MAINMENU_TOP, col); \
-   printf_flush(x, ## __VA_ARGS__); } \
-
-#define PRINTERR(x, ...) PRINTGENERAL(x, 31, ## __VA_ARGS__)
-#define PRINTWARN(x, ...) PRINTGENERAL(x, 33, ## __VA_ARGS__)
-#define PRINTINFO(x, ...) PRINTGENERAL(x, 37, ## __VA_ARGS__)
 
 void print_controls()
 {
@@ -554,6 +670,33 @@ void print_time(bool showcolon)
          status_x1b, timeinfo->tm_hour, showcolon ? ':' : ' ', timeinfo->tm_min);
 }
 
+void inc_drawstate_mode(struct ScreenState *scrst, struct DrawState *drwst)
+{
+   int newmode = (drwst->mode + 1) % DRAWMODE_COUNT;
+   if (newmode == DRAWMODE_ANIMATION)
+   {
+      if (easy_warn("Switching to animation mode",
+                    "This will shrink your canvas by half for the\n"
+                    " duration of animation mode. You will not lose\n"
+                    " strokes made outside this area, they will\n"
+                    " just not be unseen.\n\n Switch to animation mode?",
+                    MAINMENU_TOP))
+      {
+         drwst->mode = newmode;
+         // Entering animation mode, make the screen smaller
+         scrst->layer_height >>= 1;
+         scrst->layer_width >>= 1;
+      }
+   }
+   else if (drwst->mode == DRAWMODE_ANIMATION)
+   {
+      drwst->mode = newmode;
+      // Exiting animation mode, make the screen larger again
+      scrst->layer_height <<= 1;
+      scrst->layer_width <<= 1;
+   }
+}
+
 void run_options_menu(struct ScreenState * scrst, struct DrawState * drwst) {
    char menu[256];
    char visibility[4][3] = { "", "b", "t", "bt" };
@@ -570,24 +713,7 @@ void run_options_menu(struct ScreenState * scrst, struct DrawState * drwst) {
       menuopt = easy_menu("Options", menu, MAINMENU_TOP, 0, menuopt, KEY_B | KEY_START);
       switch(menuopt) {
          case 0:
-            int newmode = (drwst->mode + 1) % DRAWMODE_COUNT;
-            if(newmode == DRAWMODE_ANIMATION) {
-               if (easy_warn("Switching to animation mode", 
-                  "This will shrink your canvas by half for the\n"
-                  " duration of animation mode. You will not lose\n"
-                  " strokes made outside this area, they will\n"
-                  " just not be unseen.\n\n Switch to animation mode?", MAINMENU_TOP)) {
-                  drwst->mode = newmode;
-                  // Entering animation mode, make the screen smaller
-                  scrst->layer_height >>= 1;
-                  scrst->layer_width >>= 1;
-               }
-            } else if(drwst->mode == DRAWMODE_ANIMATION) {
-               drwst->mode = newmode;
-               // Exiting animation mode, make the screen larger again
-               scrst->layer_height <<= 1;
-               scrst->layer_width <<= 1;
-            }
+            inc_drawstate_mode(scrst, drwst);
             break;
          case 1: // onion layers
             scrst->onion_count = (scrst->onion_count + 1) % (MAXONION + 1);
@@ -602,6 +728,44 @@ void run_options_menu(struct ScreenState * scrst, struct DrawState * drwst) {
          case 3: // layer visibility
             scrst->layer_visibility = (scrst->layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
             break;
+         default:
+            return;
+      }
+   }
+}
+
+void run_gif_menu(struct ScreenState * scrst, struct DrawState * drwst, char * draw_data, char * draw_data_end, char * filename) {
+   char menu[256];
+   s32 menuopt = 0;
+   struct GifSettings settings;
+   settings.bitdepth = 16;
+   settings.csecsperframe = 5;
+   while(1) {
+      // Recreate menu every time, since we have dynamic values. To make life easier, we just sprintf
+      // everything into the array with newlines, then replace newlines with 0
+      sprintf(menu, "Colors: %d\nFrame time: %dms\nCrop: %dx%d\nExport now!\nExit\n", 
+         1 << settings.bitdepth, settings.csecsperframe * 10, scrst->layer_width, scrst->layer_height);
+      for(int x = strlen(menu); x >= 0; x--) {
+         if(menu[x] == '\n') menu[x] = 0;
+      }
+      menuopt = easy_menu("Export gif options", menu, MAINMENU_TOP, 0, menuopt, KEY_B | KEY_START);
+      switch(menuopt) {
+         case 0: // Colors
+            settings.bitdepth <<= 1;
+            if(settings.bitdepth > 16)
+               settings.bitdepth = 2;
+            break;
+         case 1: // Frame time
+            settings.csecsperframe++;
+            if(settings.csecsperframe > 20)
+               settings.csecsperframe = 1;
+            break;
+         case 2: // shortcut to fix animation size
+            inc_drawstate_mode(scrst, drwst);
+            break;
+         case 3: // export
+            export_gif(scrst, &settings, draw_data, draw_data_end, filename);
+            return;
          default:
             return;
       }
@@ -693,74 +857,6 @@ TRUEEND:
    return result;
 }
 
-// Export a page as a raw buffer. YOU MUST FREE THE BUFFER! Returns null if error
-u32 * export_page_raw (struct ScreenState * scrst, page_num page, char * data, char * data_end) {
-   u32 * layerdata[LAYER_COUNT + 1];
-   u32 size_bytes = sizeof(u32) * scrst->layer_width * scrst->layer_height;
-
-   for(int i = 0; i < LAYER_COUNT + 1; i++)
-   {
-      layerdata[i] = malloc(size_bytes);
-
-      if(layerdata[i] == NULL)
-      {
-         LOGDBG("ERR: COULDN'T ALLOCATE MEMORY FOR EXPORT");
-
-         for(int j = 0; j < i; j++)
-            free(layerdata[j]);
-
-         return NULL;
-      }
-
-      //TODO: This assumes the bg is white
-      memset(layerdata[i], (i == LAYER_COUNT) ? 0xFF : 0, size_bytes);
-   }
-
-   //Now just parse and parse and parse until we reach the end!
-   u32 data_length = data_end - data;
-   char * current_data = data;
-   char * stroke_start = NULL;
-   struct LinePackage package;
-   init_linepackage(&package); // WARN: initialization could fail, no checks performed!
-
-   while(current_data < data_end)
-   {
-      current_data = datamem_scanstroke(current_data, data_end, data_length, 
-              page, &stroke_start);
-
-      //Is this the normal way to do this? idk
-      if(stroke_start == NULL) continue;
-
-      convert_data_to_linepack(&package, stroke_start, current_data);
-      _exp_layer_dt = layerdata[package.layer];
-
-      //At this point, we draw the whole stroke
-      pixaligned_linepackfunc(&package, 0, package.line_count, &_exp_layer_dt_func);
-   }
-
-   //Now merge arrays together; our alpha blending is dead simple. 
-   //Will this take a while?
-   for(int i = 0; i < scrst->layer_width * scrst->layer_height; i++)
-   {
-      //Loop over arrays, the topmost (layer) value persists
-      for(int j = LAYER_COUNT - 1; j >= 0; j--)
-      {
-         if(layerdata[j][i])
-         {
-            layerdata[LAYER_COUNT][i] = layerdata[j][i];
-            break;
-         }
-      }
-   }
-
-   free_linepackage(&package);
-
-   // Remember, don't free the last layer, as that's our merged
-   for(int i = 0; i < LAYER_COUNT; i++)
-      free(layerdata[i]);
-
-   return layerdata[LAYER_COUNT];
-}
 
 //Export the given page from the given data into a default named file in some
 //default image format (bitmap? png? who knows)
@@ -798,54 +894,6 @@ void export_page(struct ScreenState * scrst, page_num page, char * data, char * 
    }
 }
 
-struct GifSettings {
-   u16 bitdepth;
-   u16 csecsperframe;
-};
-
-//int export_gif(u32 * rawdata, u16 width, u16 height, u16 centisecondsperframe, u16 bitdepth, char * filepath) {
-int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char * data, char * data_end, char * basename) 
-{
-   PRINTINFO("Beginning gif export...");
-   if(mkdir_p(SCREENSHOTS_BASE))
-   {
-      PRINTERR("Couldn't create screenshots folder: %s", SCREENSHOTS_BASE);
-      return 1;
-   }
-
-   char savepath[MAX_FILEPATH];
-   time_t now = time(NULL);
-   sprintf(savepath, "%s%s_%jd.gif", SCREENSHOTS_BASE, strlen(basename) ? basename : "new", now);
-
-   MsfGifState gifState = {};
-   FILE * fp = fopen(savepath, "wb");
-   if(fp == NULL) {
-      PRINTERR("ERR: Couldn't open gif for writing: %s\n", savepath);
-      return 1;
-   }
-   msf_gif_begin_to_file(&gifState, scrst->layer_width, scrst->layer_height, (MsfGifFileWriteFunc) fwrite, (void *) fp);
-   int lastpageused = last_used_page(data, data_end - data);
-   for(int i = 0; i <= lastpageused; i++) {
-      PRINTINFO("Exporting page %d / %d...", i + 1, lastpageused + 1);
-      u32 * page = export_page_raw(scrst, i, data, data_end);
-      PRINTINFO("Packing gif page %d / %d...", i + 1, lastpageused + 1);
-      if(!msf_gif_frame_to_file(&gifState, (uint8_t *)page, settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4)) {
-         PRINTERR("ERROR ON PAGE %d\n", i + 1);
-         free(page);
-         break;
-      }
-      free(page);
-   }
-   // msf_gif_begin(&gifState, scrst->layer_width, scrst->layer_height);
-   // msf_gif_frame(&gifState, , settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4); //frame 1
-   if(!msf_gif_end_to_file(&gifState)) {
-      PRINTERR("ERR: Couldn't finalize gif\n");
-      return 1;
-   }
-   fclose(fp);
-   PRINTINFO("Exported gif to: %s", savepath);
-   return 0;
-}
 
 
 // --------------------- MAIN -------------------------------
@@ -1051,11 +1099,8 @@ int main(int argc, char** argv)
                export_page(&scrst, drwst.page, draw_data, draw_data_end, save_filename);
                break;
             case MAINMENU_EXPORTGIF:
-               struct GifSettings gifsettings;
-               gifsettings.bitdepth = 8;
-               gifsettings.csecsperframe = 10;
-               export_gif(&scrst, &gifsettings, draw_data, draw_data_end, save_filename);
-               //export_page(&scrst, drwst.page, draw_data, draw_data_end, save_filename);
+               run_gif_menu(&scrst, &drwst, draw_data, draw_data_end, save_filename);
+               FLUSH_LAYERS(); // Why not...
                break;
          }
       }

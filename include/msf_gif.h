@@ -271,6 +271,7 @@ static void msf_cook_frame(MsfCookedFrame * frame, uint8_t * raw, uint8_t * used
          3 << 12, 11 << 12,  1 << 12,  9 << 12,
         15 << 12,  7 << 12, 13 << 12,  5 << 12,
     };
+    // const static int ditherKernel[16] = {0};
 
     uint32_t * cooked = frame->pixels;
     int count = 0;
