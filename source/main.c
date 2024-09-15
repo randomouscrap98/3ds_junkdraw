@@ -823,55 +823,28 @@ int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char *
       PRINTERR("ERR: Couldn't open gif for writing: %s\n", savepath);
       return 1;
    }
-   //scrst->layer_width /= 10;
-   //scrst->layer_height /= 10;
    msf_gif_begin_to_file(&gifState, scrst->layer_width, scrst->layer_height, (MsfGifFileWriteFunc) fwrite, (void *) fp);
    int lastpageused = last_used_page(data, data_end - data);
    for(int i = 0; i <= lastpageused; i++) {
       PRINTINFO("Exporting page %d / %d...", i + 1, lastpageused + 1);
       u32 * page = export_page_raw(scrst, i, data, data_end);
       PRINTINFO("Packing gif page %d / %d...", i + 1, lastpageused + 1);
-      //msf_gif_frame(&gifState, (uint8_t *)page, settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4); //frame 1
-      msf_gif_frame_to_file(&gifState, (uint8_t *)page, settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4); //frame 1
+      if(!msf_gif_frame_to_file(&gifState, (uint8_t *)page, settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4)) {
+         PRINTERR("ERROR ON PAGE %d\n", i + 1);
+         free(page);
+         break;
+      }
       free(page);
    }
-   //scrst->layer_width *= 10;
-   //scrst->layer_height *= 10;
    // msf_gif_begin(&gifState, scrst->layer_width, scrst->layer_height);
    // msf_gif_frame(&gifState, , settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4); //frame 1
    if(!msf_gif_end_to_file(&gifState)) {
       PRINTERR("ERR: Couldn't finalize gif\n");
       return 1;
    }
+   fclose(fp);
    PRINTINFO("Exported gif to: %s", savepath);
    return 0;
-   // int ret = 0;
-   // if (result.data) {
-   //    FILE * fp = fopen(savepath, "wb");
-   //    if(fp == NULL) {
-   //       LOGDBG("ERR: Couldn't open gif for writing: %s\n", filepath);
-   //       ret = 1;
-   //    } else {
-   //       fwrite(result.data, result.dataSize, 1, fp);
-   //       fclose(fp);
-   //    }
-   // } else {
-   //    LOGDBG("ERR: Couldn't finalize gif\n");
-   //    ret = 1;
-   // }
-   // msf_gif_free(result);
-   // return ret;
-   //GifFileType *gif = EGifOpenFileName(filepath, false, NULL);
-
-   // if (gif == NULL) {
-   //   LOGDBG("ERR: Couldn't open gif for writing: %s\n", filepath);
-   //   return 1;
-   // }
-
-   // // Screen Descriptor (defining the size of the GIF canvas)
-   // EGifPutScreenDesc(gif, width, height, 256, 0, NULL);
-
-   // return 0;
 }
 
 
@@ -1079,7 +1052,7 @@ int main(int argc, char** argv)
                break;
             case MAINMENU_EXPORTGIF:
                struct GifSettings gifsettings;
-               gifsettings.bitdepth = 4;
+               gifsettings.bitdepth = 8;
                gifsettings.csecsperframe = 10;
                export_gif(&scrst, &gifsettings, draw_data, draw_data_end, save_filename);
                //export_page(&scrst, drwst.page, draw_data, draw_data_end, save_filename);
