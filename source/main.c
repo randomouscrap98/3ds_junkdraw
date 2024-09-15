@@ -205,17 +205,14 @@ int _msr_ofsx = 0, _msr_ofsy = 0;
 
 void MY_SOLIDRECT(float x, float y, u16 width, u32 color)
 {
-   x += LAYER_EDGEBUF;
-   y += LAYER_EDGEBUF;
-   if(x < LAYER_EDGEERROR || y < LAYER_EDGEERROR || x >= _drawrect_scrst->layer_width + LAYER_EDGEBUF || 
-      y >= _drawrect_scrst->layer_height + LAYER_EDGEBUF)
+   if(x < 0|| y < 0 || x >= _drawrect_scrst->layer_width || y >= _drawrect_scrst->layer_height)
    {
 #ifdef DEBUG_IGNORERECT
       LOGDBG("IGNORING RECT AT (%f, %f)", x, y);
 #endif
       return;
    }
-   C2D_DrawRectSolid(x + _msr_ofsx, y + _msr_ofsy, 0.5, width, width, color);
+   C2D_DrawRectSolid(x + _msr_ofsx + LAYER_EDGEBUF, y + _msr_ofsy + LAYER_EDGEBUF, 0.5, width, width, color);
    _drw_cmd_cnt++; 
    MY_FLUSHCHECK();
 }
@@ -715,11 +712,6 @@ u32 * export_page_raw (struct ScreenState * scrst, page_num page, char * data, c
       memset(layerdata[i], (i == LAYER_COUNT) ? 0xFF : 0, size_bytes);
    }
 
-   // char savepath[MAX_FILEPATH];
-   // time_t now = time(NULL);
-   // sprintf(savepath, "%s%s_%d_%jd.png", SCREENSHOTS_BASE, 
-   //       strlen(basename) ? basename : "new", page, now);
-
    //Now just parse and parse and parse until we reach the end!
    u32 data_length = data_end - data;
    char * current_data = data;
@@ -810,6 +802,13 @@ struct GifSettings {
 //int export_gif(u32 * rawdata, u16 width, u16 height, u16 centisecondsperframe, u16 bitdepth, char * filepath) {
 int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char * data, char * data_end, char * basename) 
 {
+   PRINTINFO("Beginning gif export...");
+   if(mkdir_p(SCREENSHOTS_BASE))
+   {
+      PRINTERR("Couldn't create screenshots folder: %s", SCREENSHOTS_BASE);
+      return 1;
+   }
+
    char savepath[MAX_FILEPATH];
    time_t now = time(NULL);
    sprintf(savepath, "%s%s_%jd.gif", SCREENSHOTS_BASE, strlen(basename) ? basename : "new", now);
@@ -825,6 +824,7 @@ int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char *
    for(int i = 0; i <= lastpageused; i++) {
       PRINTINFO("Exporting page %d / %d...", i + 1, lastpageused + 1);
       u32 * page = export_page_raw(scrst, i, data, data_end);
+      PRINTINFO("Packing gif page %d / %d...", i + 1, lastpageused + 1);
       msf_gif_frame_to_file(&gifState, (uint8_t *)page, settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4); //frame 1
       free(page);
    }
@@ -834,6 +834,7 @@ int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char *
       PRINTERR("ERR: Couldn't finalize gif\n");
       return 1;
    }
+   PRINTINFO("Exported gif to: %s", savepath);
    return 0;
    // int ret = 0;
    // if (result.data) {
@@ -1069,8 +1070,8 @@ int main(int argc, char** argv)
                break;
             case MAINMENU_EXPORTGIF:
                struct GifSettings gifsettings;
-               gifsettings.bitdepth = 4;
-               gifsettings.csecsperframe = 30;
+               gifsettings.bitdepth = 8;
+               gifsettings.csecsperframe = 3;
                export_gif(&scrst, &gifsettings, draw_data, draw_data_end, save_filename);
                //export_page(&scrst, drwst.page, draw_data, draw_data_end, save_filename);
                break;

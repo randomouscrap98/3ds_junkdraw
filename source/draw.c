@@ -14,6 +14,8 @@
 
 // ------- GENERAL UTILS ---------
 
+#define DCV_NOVARIMAXSCAN
+
 // ------------------------
 // -- DATA CONVERT UTILS --
 // ------------------------
@@ -97,10 +99,12 @@ u32 varwidth_to_int(const char * container, u8 * read_count)
       result += (c & DCV_VARIMAXVAL(1)) << (DCV_VARIBITSPER * i);
       i++;
    } 
+#ifndef DCV_NOVARIMAXSCAN
    while(c & DCV_VARISTEP && (i < DCV_VARIMAXSCAN)); //Keep going while the high bit is set
-
-   if(i >= DCV_VARIMAXSCAN)
-      LOGDBG("WARN: variable width read too long: %d\n",i);
+   if(i >= DCV_VARIMAXSCAN) LOGDBG("WARN: variable width read too long: %d\n",i);
+#else
+   while(c & DCV_VARISTEP); //Keep going while the high bit is set
+#endif
 
    *read_count = i;
 
@@ -424,8 +428,9 @@ char * datamem_scanstroke(char * start, char * end, const u32 max_scan, const u1
 
    u16 stroke_page;
    u8 varwidth;
+   char * stop = scanptr + DCV_MIN(end - scanptr, max_scan);
 
-   while(scanptr < end && (scanptr - start) < max_scan)
+   while(scanptr < stop) //end && (scanptr - start) < max_scan)
    {
       //Skip the alignment character (TODO: assuming it's 1 byte)
       scanptr++;
