@@ -81,8 +81,9 @@ struct ToolData {
 
 #define DRAWMODE_NORMAL 0
 #define DRAWMODE_ANIMATION 1
+#define DRAWMODE_ANIMATION2 2
 
-#define DRAWMODE_COUNT 2
+#define DRAWMODE_COUNT 3
 
 struct DrawState
 {

@@ -338,8 +338,9 @@ void onion_offset(const struct DrawState *dstate, int ofs, int * x, int * y) {
    // int otop = (dstate->page % MAXONION); // First actual onion page
    // // Plus one to skip player region
    // int region = 1 + (MAXONION + otop + ofs + 1) % MAXONION;
-   *x = (region & 1) * (LAYER_WIDTH >> 1);   // offset without edgebuf
-   *y = (region >> 1) * (LAYER_WIDTH >> 1); 
+   // CAREFUL: TODO: When we get more modes, this will misbehave!
+   *x = (region & 1) * (LAYER_WIDTH >> dstate->mode);   // offset without edgebuf
+   *y = (region >> 1) * (LAYER_WIDTH >> dstate->mode); 
 }
 
 void draw_layers(const struct LayerData * layers, layer_num layer_count, 
@@ -350,7 +351,7 @@ void draw_layers(const struct LayerData * layers, layer_num layer_count,
 
    C2D_ImageTint tint;
    // We draw the onion skin stuff first
-   if(dstate->mode == DRAWMODE_ANIMATION) {
+   if(dstate->mode == DRAWMODE_ANIMATION || dstate->mode == DRAWMODE_ANIMATION2) {
       // The offset from current page for onion skin
       for(int o = -DCV_MIN(mod->onion_count, dstate->page); o <= -1; o++) {
          for(int i = 0; i < 4; i++) {
@@ -378,6 +379,14 @@ void draw_layers(const struct LayerData * layers, layer_num layer_count,
                NULL, mod->zoom, mod->zoom);
       }
    }
+
+   float canvas_x = mod->layer_width * mod->zoom - mod->offset_x;
+   float canvas_y = mod->layer_height * mod->zoom - mod->offset_y;
+
+   // This is rather wasteful but eh...
+   C2D_DrawRectSolid(canvas_x, 0, 0.5f, mod->screen_width - canvas_x, mod->screen_height, mod->screen_color);
+   C2D_DrawRectSolid(0, canvas_y, 0.5f, canvas_x, mod->screen_height, mod->screen_color);
+         //mod->layer_width * mod->zoom, mod->layer_height * mod->zoom, bg_color); //The bg color
 }
 
 // Draw as much as possible from the given ring buffer, with as little context switching as possible. 
@@ -688,19 +697,25 @@ void inc_drawstate_mode(struct ScreenState *scrst, struct DrawState *drwst)
          scrst->layer_width >>= 1;
       }
    }
-   else if (drwst->mode == DRAWMODE_ANIMATION)
+   else if (newmode == DRAWMODE_ANIMATION2) {
+      drwst->mode = newmode;
+      // Entering animation mode, make the screen smaller
+      scrst->layer_height >>= 1;
+      scrst->layer_width >>= 1;
+   }
+   else // Going back to the beginning (careful with how this works!)
    {
       drwst->mode = newmode;
       // Exiting animation mode, make the screen larger again
-      scrst->layer_height <<= 1;
-      scrst->layer_width <<= 1;
+      scrst->layer_height <<= 2;
+      scrst->layer_width <<= 2;
    }
 }
 
 void run_options_menu(struct ScreenState * scrst, struct DrawState * drwst) {
    char menu[256];
    char visibility[4][3] = { "", "b", "t", "bt" };
-   char modes[2][16] = {"Normal", "Animation"};
+   char modes[3][16] = {"Normal", "Animation", "Small Animation"};
    s32 menuopt = 0;
    while(1) {
       // Recreate menu every time, since we have dynamic values. To make life easier, we just sprintf
@@ -1178,7 +1193,7 @@ int main(int argc, char** argv)
          onion_offset(&drwst, -dp_ofs, &_msr_ofsx, &_msr_ofsy); // This works for 0 (returns 0,0)
          if(dp_ofs == oend) // Don't bother with any logic below, this is the last slot.
             break; 
-         if(drwst.mode == DRAWMODE_ANIMATION) {
+         if(drwst.mode == DRAWMODE_ANIMATION || drwst.mode == DRAWMODE_ANIMATION2) {
             // In animation mode, we want to fully complete the current "slot" before continuing to the 
             // next. This is functionally equivalent to no animation for onion_count = 0. So, if we're
             // not done scanning this data, obviously continue this. But if it's complete AND the next
