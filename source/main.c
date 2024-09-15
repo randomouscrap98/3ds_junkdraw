@@ -1,4 +1,7 @@
 #include <3ds.h>
+
+u32 __stacksize__=512*1024;
+
 #include <citro3d.h>
 #include <citro2d.h>
 
@@ -9,6 +12,7 @@
 #include <time.h>
 #include <dirent.h>
 
+#define MSF_GIF_NO_SSE2
 #define MSF_GIF_IMPL
 #include <msf_gif.h>
 
@@ -819,15 +823,20 @@ int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char *
       PRINTERR("ERR: Couldn't open gif for writing: %s\n", savepath);
       return 1;
    }
+   //scrst->layer_width /= 10;
+   //scrst->layer_height /= 10;
    msf_gif_begin_to_file(&gifState, scrst->layer_width, scrst->layer_height, (MsfGifFileWriteFunc) fwrite, (void *) fp);
    int lastpageused = last_used_page(data, data_end - data);
    for(int i = 0; i <= lastpageused; i++) {
       PRINTINFO("Exporting page %d / %d...", i + 1, lastpageused + 1);
       u32 * page = export_page_raw(scrst, i, data, data_end);
       PRINTINFO("Packing gif page %d / %d...", i + 1, lastpageused + 1);
+      //msf_gif_frame(&gifState, (uint8_t *)page, settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4); //frame 1
       msf_gif_frame_to_file(&gifState, (uint8_t *)page, settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4); //frame 1
       free(page);
    }
+   //scrst->layer_width *= 10;
+   //scrst->layer_height *= 10;
    // msf_gif_begin(&gifState, scrst->layer_width, scrst->layer_height);
    // msf_gif_frame(&gifState, , settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4); //frame 1
    if(!msf_gif_end_to_file(&gifState)) {
@@ -1070,8 +1079,8 @@ int main(int argc, char** argv)
                break;
             case MAINMENU_EXPORTGIF:
                struct GifSettings gifsettings;
-               gifsettings.bitdepth = 8;
-               gifsettings.csecsperframe = 3;
+               gifsettings.bitdepth = 4;
+               gifsettings.csecsperframe = 10;
                export_gif(&scrst, &gifsettings, draw_data, draw_data_end, save_filename);
                //export_page(&scrst, drwst.page, draw_data, draw_data_end, save_filename);
                break;
