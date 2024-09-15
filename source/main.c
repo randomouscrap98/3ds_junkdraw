@@ -145,6 +145,13 @@ struct ToolData default_tooldata[] = {
    { 4, LINESTYLE_STROKE, true, 0 }
 };
 
+void init_systemstate_defaults(struct SystemState *state)
+{
+   state->power_saver = false;
+   state->onion_count = DEFAULT_ONIONCOUNT;
+   state->onion_blendstart = DEFAULT_ONIONBLENDSTART;
+   state->onion_blendend = DEFAULT_ONIONBLENDEND;
+}
 
 void set_screenstate_defaults(struct ScreenState * state)
 {
@@ -158,9 +165,6 @@ void set_screenstate_defaults(struct ScreenState * state)
    state->screen_color = SCREEN_COLOR;
    state->bg_color = CANVAS_BG_COLOR;
 
-   state->onion_count = DEFAULT_ONIONCOUNT;
-   state->onion_blendstart = DEFAULT_ONIONBLENDSTART;
-   state->onion_blendend = DEFAULT_ONIONBLENDEND;
    state->layer_visibility = (1 << LAYER_COUNT) - 1; // All visible
 }
 
@@ -344,29 +348,29 @@ void onion_offset(const struct DrawState *dstate, int ofs, int * x, int * y) {
 }
 
 void draw_layers(const struct LayerData * layers, layer_num layer_count, 
-      const struct ScreenState * mod, const struct DrawState *dstate, u32 bg_color)
+      const struct SystemState * sys)
 {
-   C2D_DrawRectSolid(-mod->offset_x, -mod->offset_y, 0.5f,
-         mod->layer_width * mod->zoom, mod->layer_height * mod->zoom, bg_color); //The bg color
+   C2D_DrawRectSolid(-sys->screen_state.offset_x, -sys->screen_state.offset_y, 0.5f,
+         sys->screen_state.layer_width * sys->screen_state.zoom, sys->screen_state.layer_height * sys->screen_state.zoom, sys->screen_state.bg_color); //The bg color
 
    C2D_ImageTint tint;
    // We draw the onion skin stuff first
-   if(dstate->mode == DRAWMODE_ANIMATION || dstate->mode == DRAWMODE_ANIMATION2) {
+   if(sys->draw_state.mode == DRAWMODE_ANIMATION || sys->draw_state.mode == DRAWMODE_ANIMATION2) {
       // The offset from current page for onion skin
-      for(int o = -DCV_MIN(mod->onion_count, dstate->page); o <= -1; o++) {
+      for(int o = -DCV_MIN(sys->onion_count, sys->draw_state.page); o <= -1; o++) {
          for(int i = 0; i < 4; i++) {
             tint.corners[i].color = 0xFFFFFFFF; // Setable sometime?
-            tint.corners[i].blend = 1 - DCV_LERP(mod->onion_blendstart, mod->onion_blendend, fabs((o + 1.0) / (MAXONION - 1.0)));
+            tint.corners[i].blend = 1 - DCV_LERP(sys->onion_blendstart, sys->onion_blendend, fabs((o + 1.0) / (MAXONION - 1.0)));
          }
          int x, y;
-         onion_offset(dstate, o, &x, &y);
+         onion_offset(&sys->draw_state, o, &x, &y);
          for(layer_num i = 0; i < layer_count; i++)
          {
-            if(mod->layer_visibility & (1 << i)) {
+            if(sys->screen_state.layer_visibility & (1 << i)) {
                C2D_DrawImageAt(layers[i].image, 
-                  -mod->offset_x - (LAYER_EDGEBUF + x) * mod->zoom, 
-                  -mod->offset_y - (LAYER_EDGEBUF + y) * mod->zoom, 
-                  0.5f, &tint, mod->zoom, mod->zoom);
+                  -sys->screen_state.offset_x - (LAYER_EDGEBUF + x) * sys->screen_state.zoom, 
+                  -sys->screen_state.offset_y - (LAYER_EDGEBUF + y) * sys->screen_state.zoom, 
+                  0.5f, &tint, sys->screen_state.zoom, sys->screen_state.zoom);
             }
          }
       }
@@ -374,19 +378,19 @@ void draw_layers(const struct LayerData * layers, layer_num layer_count,
 
    for(layer_num i = 0; i < layer_count; i++)
    {
-      if(mod->layer_visibility & (1 << i)) {
-         C2D_DrawImageAt(layers[i].image, -mod->offset_x - LAYER_EDGEBUF * mod->zoom, -mod->offset_y - LAYER_EDGEBUF * mod->zoom, 0.5f, 
-               NULL, mod->zoom, mod->zoom);
+      if(sys->screen_state.layer_visibility & (1 << i)) {
+         C2D_DrawImageAt(layers[i].image, -sys->screen_state.offset_x - LAYER_EDGEBUF * sys->screen_state.zoom, -sys->screen_state.offset_y - LAYER_EDGEBUF * sys->screen_state.zoom, 0.5f, 
+               NULL, sys->screen_state.zoom, sys->screen_state.zoom);
       }
    }
 
-   float canvas_x = mod->layer_width * mod->zoom - mod->offset_x;
-   float canvas_y = mod->layer_height * mod->zoom - mod->offset_y;
+   float canvas_x = sys->screen_state.layer_width * sys->screen_state.zoom - sys->screen_state.offset_x;
+   float canvas_y = sys->screen_state.layer_height * sys->screen_state.zoom - sys->screen_state.offset_y;
 
    // This is rather wasteful but eh...
-   C2D_DrawRectSolid(canvas_x, 0, 0.5f, mod->screen_width - canvas_x, mod->screen_height, mod->screen_color);
-   C2D_DrawRectSolid(0, canvas_y, 0.5f, canvas_x, mod->screen_height, mod->screen_color);
-         //mod->layer_width * mod->zoom, mod->layer_height * mod->zoom, bg_color); //The bg color
+   C2D_DrawRectSolid(canvas_x, 0, 0.5f, sys->screen_state.screen_width - canvas_x, sys->screen_state.screen_height, sys->screen_state.screen_color);
+   C2D_DrawRectSolid(0, canvas_y, 0.5f, canvas_x, sys->screen_state.screen_height, sys->screen_state.screen_color);
+         //sys->screen_state.layer_width * sys->screen_state.zoom, sys->screen_state.layer_height * sys->screen_state.zoom, bg_color); //The bg color
 }
 
 // Draw as much as possible from the given ring buffer, with as little context switching as possible. 
@@ -688,7 +692,7 @@ void inc_drawstate_mode(struct ScreenState *scrst, struct DrawState *drwst)
                     "This will shrink your canvas by half for the\n"
                     " duration of animation mode. You will not lose\n"
                     " strokes made outside this area, they will\n"
-                    " just not be unseen.\n\n Switch to animation mode?",
+                    " just not be seen.\n\n Switch to animation mode?",
                     MAINMENU_TOP))
       {
          drwst->mode = newmode;
@@ -712,7 +716,7 @@ void inc_drawstate_mode(struct ScreenState *scrst, struct DrawState *drwst)
    }
 }
 
-void run_options_menu(struct ScreenState * scrst, struct DrawState * drwst) {
+void run_options_menu(struct SystemState * sys) { //struct ScreenState * scrst, struct DrawState * drwst) {
    char menu[256];
    char visibility[4][3] = { "", "b", "t", "bt" };
    char modes[3][16] = {"Normal", "Animation", "Small Animation"};
@@ -720,28 +724,33 @@ void run_options_menu(struct ScreenState * scrst, struct DrawState * drwst) {
    while(1) {
       // Recreate menu every time, since we have dynamic values. To make life easier, we just sprintf
       // everything into the array with newlines, then replace newlines with 0
-      sprintf(menu, "Mode: %s\nOnion layers: %d\nOnion darkness: %.1f\nLayer visibility: %s\nExit\n", 
-         modes[drwst->mode], scrst->onion_count, scrst->onion_blendstart, visibility[scrst->layer_visibility]);
+      sprintf(menu, "Mode: %s\nOnion layers: %d\nOnion darkness: %.1f\nLayer visibility: %s\nPower saving: %s\nExit\n", 
+         modes[sys->draw_state.mode], sys->onion_count, sys->onion_blendstart, visibility[sys->screen_state.layer_visibility],
+         sys->power_saver ? "on" : "off");
       for(int x = strlen(menu); x >= 0; x--) {
          if(menu[x] == '\n') menu[x] = 0;
       }
       menuopt = easy_menu("Options", menu, MAINMENU_TOP, 0, menuopt, KEY_B | KEY_START);
       switch(menuopt) {
          case 0:
-            inc_drawstate_mode(scrst, drwst);
+            inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
             break;
          case 1: // onion layers
-            scrst->onion_count = (scrst->onion_count + 1) % (MAXONION + 1);
+            sys->onion_count = (sys->onion_count + 1) % (MAXONION + 1);
             break;
          case 2: // onion darkness
-            scrst->onion_blendstart += 0.1;
-            if(scrst->onion_blendstart > 0.91) {
-               scrst->onion_blendstart = 0.1;
+            sys->onion_blendstart += 0.1;
+            if(sys->onion_blendstart > 0.91) {
+               sys->onion_blendstart = 0.1;
             }
-            scrst->onion_blendend = DCV_MAX(0.01, scrst->onion_blendstart - 0.25);
+            sys->onion_blendend = DCV_MAX(0.01, sys->onion_blendstart - 0.25);
             break;
          case 3: // layer visibility
-            scrst->layer_visibility = (scrst->layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
+            sys->screen_state.layer_visibility = (sys->screen_state.layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
+            break;
+         case 4: // power saver
+            sys->power_saver = ! sys->power_saver;
+            osSetSpeedupEnable(!sys->power_saver);
             break;
          default:
             return;
@@ -749,7 +758,7 @@ void run_options_menu(struct ScreenState * scrst, struct DrawState * drwst) {
    }
 }
 
-void run_gif_menu(struct ScreenState * scrst, struct DrawState * drwst, char * draw_data, char * draw_data_end, char * filename) {
+void run_gif_menu(struct SystemState * sys, char * draw_data, char * draw_data_end, char * filename) {
    char menu[256];
    s32 menuopt = 0;
    struct GifSettings settings;
@@ -759,7 +768,7 @@ void run_gif_menu(struct ScreenState * scrst, struct DrawState * drwst, char * d
       // Recreate menu every time, since we have dynamic values. To make life easier, we just sprintf
       // everything into the array with newlines, then replace newlines with 0
       sprintf(menu, "Colors: %d\nFrame time: %dms\nCrop: %dx%d\nExport now!\nExit\n", 
-         1 << settings.bitdepth, settings.csecsperframe * 10, scrst->layer_width, scrst->layer_height);
+         1 << settings.bitdepth, settings.csecsperframe * 10, sys->screen_state.layer_width, sys->screen_state.layer_height);
       for(int x = strlen(menu); x >= 0; x--) {
          if(menu[x] == '\n') menu[x] = 0;
       }
@@ -776,10 +785,10 @@ void run_gif_menu(struct ScreenState * scrst, struct DrawState * drwst, char * d
                settings.csecsperframe = 1;
             break;
          case 2: // shortcut to fix animation size
-            inc_drawstate_mode(scrst, drwst);
+            inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
             break;
          case 3: // export
-            export_gif(scrst, &settings, draw_data, draw_data_end, filename);
+            export_gif(&sys->screen_state, &settings, draw_data, draw_data_end, filename);
             return;
          default:
             return;
@@ -924,19 +933,19 @@ void export_page(struct ScreenState * scrst, page_num page, char * data, char * 
 // Some macros used ONLY for main (think lambdas)
 #define MAIN_UPDOWN(x) {   \
    if(kHeld & KEY_R) {     \
-      drwst.page = UTILS_CLAMP(drwst.page + x * ((kHeld&KEY_L)?10:1), 0, MAX_PAGE);    \
+      sys.draw_state.page = UTILS_CLAMP(sys.draw_state.page + x * ((kHeld&KEY_L)?10:1), 0, MAX_PAGE);    \
       FLUSH_LAYERS(); \
    } else {                \
-      drwst.zoom_power = UTILS_CLAMP(drwst.zoom_power + x, MIN_ZOOMPOWER, MAX_ZOOMPOWER);    \
+      sys.draw_state.zoom_power = UTILS_CLAMP(sys.draw_state.zoom_power + x, MIN_ZOOMPOWER, MAX_ZOOMPOWER);    \
    } }
 
 #define PRINT_DATAUSAGE() print_data(draw_data, draw_data_end, saved_last);
 
 #define MAIN_NEWDRAW() { \
    draw_data_end = saved_last = draw_data; \
-   free_default_drawstate(&drwst); \
-   init_default_drawstate(&drwst); \
-   set_screenstate_defaults(&scrst); \
+   free_default_drawstate(&sys.draw_state); \
+   init_default_drawstate(&sys.draw_state); \
+   set_screenstate_defaults(&sys.screen_state); \
    FLUSH_LAYERS(); \
    save_filename[0] = '\0';   \
    pending.line_count = 0;        \
@@ -954,6 +963,11 @@ void export_page(struct ScreenState * scrst, page_num page, char * data, char * 
 int main(int argc, char** argv)
 {
    gfxInitDefault();
+   hidSetRepeatParameters(BREPEAT_DELAY, BREPEAT_INTERVAL);
+
+   // Enable the higher clock speed on New 3DS
+   osSetSpeedupEnable(true);
+
    C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
    C2D_Init(MY_C2DOBJLIMIT);
    C2D_Prepare();
@@ -963,16 +977,17 @@ int main(int argc, char** argv)
 
    LOGDBG("INITIALIZED")
 
-   struct DrawState drwst;
-   struct ScreenState scrst;
-   struct CpadProfile cpdpr;
+   //struct DrawState drwst;
+   //struct ScreenState scrst;
+   struct SystemState sys;
 
-   init_default_drawstate(&drwst); // Just in case
-   set_screenstate_defaults(&scrst);
-   set_cpadprofile_canvas(&cpdpr);
+   init_systemstate_defaults(&sys);
+   init_default_drawstate(&sys.draw_state); // Just in case
+   set_screenstate_defaults(&sys.screen_state);
+   set_cpadprofile_canvas(&sys.cpad);
 
    // Very silly global so rect drawing functions know screen dimensions and such
-   _drawrect_scrst = &scrst;
+   _drawrect_scrst = &sys.screen_state;
 
    LOGDBG("SET SCREENSTATE/CANVAS");
 
@@ -1031,9 +1046,6 @@ int main(int argc, char** argv)
    LOGDBG("SYSTEM MALLOC");
 
    MAIN_NEWDRAW();
-
-   hidSetRepeatParameters(BREPEAT_DELAY, BREPEAT_INTERVAL);
-
    mkdir_p(SAVE_BASE);
 
    LOGDBG("STARTING MAIN LOOP");
@@ -1051,22 +1063,22 @@ int main(int argc, char** argv)
       hidTouchRead(&current_touch);
       hidCircleRead(&pos);
 
-      u16 po = (drwst.current_color - drwst.palette) / DEFAULT_PALETTE_SPLIT;
-      u8 pi = (drwst.current_color - drwst.palette) % DEFAULT_PALETTE_SPLIT;
+      u16 po = (sys.draw_state.current_color - sys.draw_state.palette) / DEFAULT_PALETTE_SPLIT;
+      u8 pi = (sys.draw_state.current_color - sys.draw_state.palette) % DEFAULT_PALETTE_SPLIT;
 
       // Respond to user input
       if(kDown & KEY_L && !(kHeld & KEY_R)) palette_active = !palette_active;
       if(kRepeat & KEY_DUP) MAIN_UPDOWN(1)
       if(kRepeat & KEY_DDOWN) MAIN_UPDOWN(-1)
-      if(kRepeat & KEY_DRIGHT) shift_drawstate_width(&drwst, (kHeld & KEY_R ? 5 : 1));
-      if(kRepeat & KEY_DLEFT) shift_drawstate_width(&drwst, -(kHeld & KEY_R ? 5 : 1));
-      if(kDown & KEY_A) set_drawstate_tool(&drwst, TOOL_PENCIL); 
-      if(kDown & KEY_B) set_drawstate_tool(&drwst, TOOL_ERASER);
+      if(kRepeat & KEY_DRIGHT) shift_drawstate_width(&sys.draw_state, (kHeld & KEY_R ? 5 : 1));
+      if(kRepeat & KEY_DLEFT) shift_drawstate_width(&sys.draw_state, -(kHeld & KEY_R ? 5 : 1));
+      if(kDown & KEY_A) set_drawstate_tool(&sys.draw_state, TOOL_PENCIL); 
+      if(kDown & KEY_B) set_drawstate_tool(&sys.draw_state, TOOL_ERASER);
       if(kHeld & KEY_L && kDown & KEY_R && palette_active) {
-         shift_drawstate_color(&drwst, DEFAULT_PALETTE_SPLIT);
+         shift_drawstate_color(&sys.draw_state, DEFAULT_PALETTE_SPLIT);
       }
       if(kDown & KEY_SELECT) {
-         drwst.layer = (drwst.layer + 1) % LAYER_COUNT;
+         sys.draw_state.layer = (sys.draw_state.layer + 1) % LAYER_COUNT;
       }
       if(kDown & KEY_START) 
       {
@@ -1100,30 +1112,30 @@ int main(int argc, char** argv)
                   {
                      saved_last = draw_data_end;
                      // Find last page, set it.
-                     drwst.page = last_used_page(draw_data, draw_data_end - draw_data);
+                     sys.draw_state.page = last_used_page(draw_data, draw_data_end - draw_data);
                      PRINT_DATAUSAGE();
                   }
                }
                break;
             case MAINMENU_OPTIONS:
                // Run options system
-               run_options_menu(&scrst, &drwst);
+               run_options_menu(&sys);
                FLUSH_LAYERS(); // Why not...
                break;
             case MAINMENU_EXPORT:
-               export_page(&scrst, drwst.page, draw_data, draw_data_end, save_filename);
+               export_page(&sys.screen_state, sys.draw_state.page, draw_data, draw_data_end, save_filename);
                break;
             case MAINMENU_EXPORTGIF:
-               run_gif_menu(&scrst, &drwst, draw_data, draw_data_end, save_filename);
+               run_gif_menu(&sys, draw_data, draw_data_end, save_filename);
                FLUSH_LAYERS(); // Why not...
                break;
          }
       }
       if(kDown & KEY_TOUCH) {
-         pending.color = get_drawstate_color(&drwst);
-         pending.style = drwst.current_tool->style;
-         pending.width = drwst.current_tool->width;
-         pending.layer = drwst.layer;
+         pending.color = get_drawstate_color(&sys.draw_state);
+         pending.style = sys.draw_state.current_tool->style;
+         pending.width = sys.draw_state.current_tool->width;
+         pending.layer = sys.draw_state.layer;
       }
       if(kUp & KEY_TOUCH) {
          end_frame = current_frame;
@@ -1131,19 +1143,19 @@ int main(int argc, char** argv)
       }
 
       //Update zoom separately, since the update is always the same
-      if(drwst.zoom_power != last_zoom_power) set_screenstate_zoom(&scrst, pow(2, drwst.zoom_power));
+      if(sys.draw_state.zoom_power != last_zoom_power) set_screenstate_zoom(&sys.screen_state, pow(2, sys.draw_state.zoom_power));
 
       if(kRepeat & ~(KEY_TOUCH) || !current_frame)
       {
-         print_status(drwst.current_tool->width, drwst.layer, drwst.zoom_power, 
-               drwst.current_tool - drwst.tools, *drwst.current_color, drwst.page);
+         print_status(sys.draw_state.current_tool->width, sys.draw_state.layer, sys.draw_state.zoom_power, 
+               sys.draw_state.current_tool - sys.draw_state.tools, *sys.draw_state.current_color, sys.draw_state.page);
       }
 
       touching = (kHeld & KEY_TOUCH) > 0;
 
-      set_screenstate_offset(&scrst, 
-            cpad_translate(&cpdpr, pos.dx, scrst.offset_x), 
-            cpad_translate(&cpdpr, -pos.dy, scrst.offset_y));
+      set_screenstate_offset(&sys.screen_state, 
+            cpad_translate(&sys.cpad, pos.dx, sys.screen_state.offset_x), 
+            cpad_translate(&sys.cpad, -pos.dy, sys.screen_state.offset_y));
 
 
       // Render the scene
@@ -1166,34 +1178,34 @@ int main(int argc, char** argv)
          if(palette_active)
          {
             update_paletteindex(&current_touch, &pi);
-            drwst.current_color = drwst.palette + po * DEFAULT_PALETTE_SPLIT + pi;
+            sys.draw_state.current_color = sys.draw_state.palette + po * DEFAULT_PALETTE_SPLIT + pi;
          }
          else
          {
             //Keep this outside the if statement below so it can be used for
             //background drawing too (draw commands from other people)
-            C2D_SceneBegin(layers[drwst.layer].target);
+            C2D_SceneBegin(layers[sys.draw_state.layer].target);
 
             if(pending.line_count < MAX_STROKE_LINES)
             {
-               onion_offset(&drwst, 0, &_msr_ofsx, &_msr_ofsy); // This works for 0 (returns 0,0)
+               onion_offset(&sys.draw_state, 0, &_msr_ofsx, &_msr_ofsy); // This works for 0 (returns 0,0)
                //This is for a stroke, do different things if we have different tools!
-               add_point_to_stroke(&pending, &current_touch, &scrst);
+               add_point_to_stroke(&pending, &current_touch, &sys.screen_state);
                //Draw ONLY the current line
                pixaligned_linepackfunc(&pending, pending.line_count - 1, pending.line_count, MY_SOLIDRECT);
             }
          }
       }
 
-      int oend = DCV_MIN(scrst.onion_count, drwst.page);
+      int oend = DCV_MIN(sys.onion_count, sys.draw_state.page);
       int dp_ofs = 0;
 
       // Find the place to stop looking for the appropriate draw pointer to work on. This has complicated rules
       for(dp_ofs = 0; dp_ofs <= oend; dp_ofs++) {
-         onion_offset(&drwst, -dp_ofs, &_msr_ofsx, &_msr_ofsy); // This works for 0 (returns 0,0)
+         onion_offset(&sys.draw_state, -dp_ofs, &_msr_ofsx, &_msr_ofsy); // This works for 0 (returns 0,0)
          if(dp_ofs == oend) // Don't bother with any logic below, this is the last slot.
             break; 
-         if(drwst.mode == DRAWMODE_ANIMATION || drwst.mode == DRAWMODE_ANIMATION2) {
+         if(sys.draw_state.mode == DRAWMODE_ANIMATION || sys.draw_state.mode == DRAWMODE_ANIMATION2) {
             // In animation mode, we want to fully complete the current "slot" before continuing to the 
             // next. This is functionally equivalent to no animation for onion_count = 0. So, if we're
             // not done scanning this data, obviously continue this. But if it's complete AND the next
@@ -1207,8 +1219,8 @@ int main(int argc, char** argv)
          }
       }
 
-      draw_pointers[dp_ofs] = scan_lines(&scandata, draw_pointers[dp_ofs], draw_data_end, drwst.page - dp_ofs);
-      draw_from_buffer(&scandata, layers, &scrst);
+      draw_pointers[dp_ofs] = scan_lines(&scandata, draw_pointers[dp_ofs], draw_data_end, sys.draw_state.page - dp_ofs);
+      draw_from_buffer(&scandata, layers, &sys.screen_state);
 
       C2D_Flush();
       _drw_cmd_cnt = 0;
@@ -1231,7 +1243,7 @@ int main(int argc, char** argv)
          else
          {
             char * previous_end = draw_data_end;
-            draw_data_end = write_to_datamem(stroke_data, cvl_end, drwst.page, draw_data, draw_data_end);
+            draw_data_end = write_to_datamem(stroke_data, cvl_end, sys.draw_state.page, draw_data, draw_data_end);
             //An optimization: if draw_pointer was already at the end, don't
             //need to RE-draw what we've already drawn, move it forward with
             //the mem write. Note: there are instances where we WILL be drawing
@@ -1246,17 +1258,17 @@ int main(int argc, char** argv)
          pending.line_count = 0;
       }
 
-      C2D_TargetClear(screen, scrst.screen_color);
+      C2D_TargetClear(screen, sys.screen_state.screen_color);
       C2D_SceneBegin(screen);
 
-      draw_layers(layers, LAYER_COUNT, &scrst, &drwst, scrst.bg_color);
-      draw_scrollbars(&scrst);
-      draw_colorpicker(drwst.palette + po * DEFAULT_PALETTE_SPLIT, DEFAULT_PALETTE_SPLIT, 
-            drwst.current_tool->has_static_color ? DEFAULT_PALETTE_SPLIT + 1 : pi, !palette_active);
+      draw_layers(layers, LAYER_COUNT, &sys);
+      draw_scrollbars(&sys.screen_state);
+      draw_colorpicker(sys.draw_state.palette + po * DEFAULT_PALETTE_SPLIT, DEFAULT_PALETTE_SPLIT, 
+            sys.draw_state.current_tool->has_static_color ? DEFAULT_PALETTE_SPLIT + 1 : pi, !palette_active);
 
       C3D_FrameEnd(0);
 
-      last_zoom_power = drwst.zoom_power;
+      last_zoom_power = sys.draw_state.zoom_power;
       current_frame++;
    }
    ENDMAINLOOP:;

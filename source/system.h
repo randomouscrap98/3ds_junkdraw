@@ -4,6 +4,7 @@
 #include <3ds.h>
 #include <citro3d.h>
 #include <citro2d.h>
+#include "input.h"
 
 // ---------- LAYERS -----------
 #define LAYER_FORMAT GPU_RGBA5551
@@ -45,22 +46,6 @@ struct ScreenState
    //Some configurable display stuff related to drawing
    u32 screen_color;
    u32 bg_color;
-
-   u8 onion_count;
-
-   // This is the target blend for the last onion layer. The other layers are calculated
-   // based on this blend target.
-   float onion_blendend; 
-   // The target blend for the first onion layer. The middle layer(s) are calculated 
-   // based on this and blendend
-   float onion_blendstart;
-
-   // Treat the extra space as a circular buffer, with this index being the top.
-   // Since we're quartering it, it looks like:
-   // P 0
-   // 1 2
-   // With P being the player draw area.
-   // u8 _onion_top;
 };
 
 //Safely adjust the screen offset given new desired offsets (doesn't let you
@@ -100,14 +85,33 @@ struct DrawState
    struct ToolData * tools;
    struct ToolData * current_tool; //the current selected tool
 
-   //Some configurable limits and such
+   //Some configurable limits and such. This is the limit on width of lines
    u8 min_width;
-   u8 max_width;
+    u8 max_width;
 };
 
 void shift_drawstate_color(struct DrawState * state, s16 ofs);
 void shift_drawstate_width(struct DrawState * state, s16 ofs);
 u16 get_drawstate_color(struct DrawState * state);
 void set_drawstate_tool(struct DrawState * state, u8 tool);
+
+// Variables for system stuff, probably shouldn't change between loads etc
+struct SystemState
+{
+   u8 onion_count;
+
+   // This is the target blend for the last onion layer. The other layers are calculated
+   // based on this blend target.
+   float onion_blendend; 
+   // The target blend for the first onion layer. The middle layer(s) are calculated 
+   // based on this and blendend
+   float onion_blendstart;
+
+   bool power_saver;
+
+   struct ScreenState screen_state;
+   struct DrawState draw_state;
+   struct CpadProfile cpad;
+};
 
 #endif
