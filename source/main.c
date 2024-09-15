@@ -720,7 +720,7 @@ void run_options_menu(struct ScreenState * scrst, struct DrawState * drwst) {
    while(1) {
       // Recreate menu every time, since we have dynamic values. To make life easier, we just sprintf
       // everything into the array with newlines, then replace newlines with 0
-      sprintf(menu, "Mode: %s\nOnion layers: %d\nOnion darkness: %f\nLayer visibility: %s\nExit\n", 
+      sprintf(menu, "Mode: %s\nOnion layers: %d\nOnion darkness: %.1f\nLayer visibility: %s\nExit\n", 
          modes[drwst->mode], scrst->onion_count, scrst->onion_blendstart, visibility[scrst->layer_visibility]);
       for(int x = strlen(menu); x >= 0; x--) {
          if(menu[x] == '\n') menu[x] = 0;
