@@ -42,7 +42,7 @@ u8 _db_prnt_row = 0;
 #define TOOL_ERASER 1
 #define TOOL_COUNT 2
 #define TOOL_CHARS "pe"
-#define LAYER_CHARS "tb"
+#define LAYER_CHARS "bt"
 
 // Glitch in citro2d (or so we assume) prevents us from writing into the first 8
 // pixels in the texture. As such, we simply shift the texture over by this amount
@@ -365,7 +365,7 @@ void draw_layers(const struct LayerData * layers, layer_num layer_count,
 
 // Draw as much as possible from the given ring buffer, with as little context switching as possible. 
 // WARN: MAKES A LOT OF ASSUMPTIONS IN ORDER TO PREVENT COSTLY MALLOCS PER FRAME
-void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layers)
+void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layers, struct ScreenState * scrst)
 {
    u16 lineCount = 0;
    struct FullLine * lines[MAX_FRAMELINES];
@@ -384,6 +384,11 @@ void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layer
 
    for(u8 i = 0; i < LAYER_COUNT; i++)
    {
+      // Skip expensive drawing for layers that aren't visible
+      if((scrst->layer_visibility & (1 << i)) == 0) {
+         continue;
+      }
+
       //Don't want to call this too often, so do as much as possible PER
       //layer instead of jumping around
       C2D_SceneBegin(layers[i].target);
@@ -515,7 +520,9 @@ void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color, u16 pag
    printf("\x1b[30;1H%s W:%s%02d%s L:", status_x1b, active_x1b, width, status_x1b);
    char layernames[] = LAYER_CHARS; // apparently layer 1 is the top, but we display it backwards (layer 1 is first, then 0)
    for(s8 i = LAYER_COUNT - 1; i >= 0; i--) // NOTE: the second input is an optional character to display on current layer
+   {
       printf("%s%c", i == layer ? activebg_x1b : statusbg_x1b, i == layer ? layernames[i] : ' ');
+   }
    printf("%s Z:", status_x1b);
    for(s8 i = MIN_ZOOMPOWER; i <= MAX_ZOOMPOWER; i++)
       printf("%s%c", 
@@ -541,55 +548,76 @@ void print_time(bool showcolon)
 }
 
 // Reconstruct the menu based on draw settings
-void get_menu_items(struct DrawState * drwst, char * menu) {
-   char menuitems[] = MAINMENU_ITEMS;
-   char * current = menu;
-   char * menuptr = menuitems;
-   // A bit of a silly thing... we copy all the menu items into the destination,
-   // but we might change some of them as we're copying
-   for(int i = 0; i <= MAINMENU_EXIT; i++) {
-      strcpy(current, menuptr);
-      int len = strlen(current);
-      if(i == MAINMENU_MODE) {
-         if(drwst->mode == DRAWMODE_ANIMATION) {
-            strcpy(current + len, "Anim");
-            current += 4;
-         } else if(drwst->mode == DRAWMODE_NORMAL) {
-            strcpy(current + len, "Normal");
-            current += 6;
-         }
-      } 
-      menuptr += len + 1;
-      current += len + 1;
-   }
-   current[0] = 0; // Need ANOTHER 0 at end to indicate end of menu
-}
+// void get_menu_items(struct DrawState * drwst, char * menu) {
+//    char menuitems[] = MAINMENU_ITEMS;
+//    char * current = menu;
+//    char * menuptr = menuitems;
+//    // A bit of a silly thing... we copy all the menu items into the destination,
+//    // but we might change some of them as we're copying
+//    for(int i = 0; i <= MAINMENU_EXIT; i++) {
+//       strcpy(current, menuptr);
+//       int len = strlen(current);
+//       if(i == MAINMENU_MODE) {
+//          if(drwst->mode == DRAWMODE_ANIMATION) {
+//             strcpy(current + len, "Anim");
+//             current += 4;
+//          } else if(drwst->mode == DRAWMODE_NORMAL) {
+//             strcpy(current + len, "Normal");
+//             current += 6;
+//          }
+//       } 
+//       menuptr += len + 1;
+//       current += len + 1;
+//    }
+//    current[0] = 0; // Need ANOTHER 0 at end to indicate end of menu
+// }
 
-void run_options_menu(struct ScreenState * scrst) {
+void run_options_menu(struct ScreenState * scrst, struct DrawState * drwst) {
    char menu[256];
-   char visibility[4][3] = { "", "t", "b", "tb" };
+   char visibility[4][3] = { "", "b", "t", "bt" };
+   char modes[2][16] = {"Normal", "Animation"};
    s32 menuopt = 0;
    while(1) {
       // Recreate menu every time, since we have dynamic values. To make life easier, we just sprintf
       // everything into the array with newlines, then replace newlines with 0
-      sprintf(menu, "Onion layers: %d\nOnion darkness: %f\nLayer visibility: %s\nExit\n", 
-         scrst->onion_count, scrst->onion_blendstart, visibility[scrst->layer_visibility]);
+      sprintf(menu, "Mode: %s\nOnion layers: %d\nOnion darkness: %f\nLayer visibility: %s\nExit\n", 
+         modes[drwst->mode], scrst->onion_count, scrst->onion_blendstart, visibility[scrst->layer_visibility]);
       for(int x = strlen(menu); x >= 0; x--) {
          if(menu[x] == '\n') menu[x] = 0;
       }
       menuopt = easy_menu("Options", menu, MAINMENU_TOP, 0, menuopt, KEY_B | KEY_START);
       switch(menuopt) {
-         case 0: // onion layers
+         case 0:
+            int newmode = (drwst->mode + 1) % DRAWMODE_COUNT;
+            if(newmode == DRAWMODE_ANIMATION) {
+               if (easy_warn("Switching to animation mode", 
+                  "This will shrink your canvas by half for the\n"
+                  " duration of animation mode. You will not lose\n"
+                  " strokes made outside this area, they will\n"
+                  " just not be unseen.\n\n Switch to animation mode?", MAINMENU_TOP)) {
+                  drwst->mode = newmode;
+                  // Entering animation mode, make the screen smaller
+                  scrst->layer_height >>= 1;
+                  scrst->layer_width >>= 1;
+               }
+            } else if(drwst->mode == DRAWMODE_ANIMATION) {
+               drwst->mode = newmode;
+               // Exiting animation mode, make the screen larger again
+               scrst->layer_height <<= 1;
+               scrst->layer_width <<= 1;
+            }
+            break;
+         case 1: // onion layers
             scrst->onion_count = (scrst->onion_count + 1) % (MAXONION + 1);
             break;
-         case 1: // onion darkness
+         case 2: // onion darkness
             scrst->onion_blendstart += 0.1;
             if(scrst->onion_blendstart > 0.91) {
                scrst->onion_blendstart = 0.1;
             }
             scrst->onion_blendend = DCV_MAX(0.01, scrst->onion_blendstart - 0.25);
             break;
-         case 2: // layer visibility
+         case 3: // layer visibility
             scrst->layer_visibility = (scrst->layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
             break;
          default:
@@ -935,9 +963,9 @@ int main(int argc, char** argv)
       }
       if(kDown & KEY_START) 
       {
-         char menuitems[256];
-         get_menu_items(&drwst, menuitems);
-         switch(easy_menu(MAINMENU_TITLE, menuitems, MAINMENU_TOP, 0, 0, KEY_B | KEY_START)) {
+         //char menuitems[256];
+         //get_menu_items(&drwst, menuitems);
+         switch(easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, 0, KEY_B | KEY_START)) {
             case MAINMENU_EXIT:
                if(MAIN_UNSAVEDCHECK("Really quit?")) goto ENDMAINLOOP;
                break;
@@ -972,30 +1000,9 @@ int main(int argc, char** argv)
                   }
                }
                break;
-            case MAINMENU_MODE:
-               int newmode = (drwst.mode + 1) % DRAWMODE_COUNT;
-               if(newmode == DRAWMODE_ANIMATION) {
-                  if (easy_warn("Switching to animation mode", 
-                     "This will shrink your canvas by half for the\n"
-                     " duration of animation mode. You will not lose\n"
-                     " strokes made outside this area, they will\n"
-                     " just not be unseen.\n\n Switch to animation mode?", MAINMENU_TOP)) {
-                     drwst.mode = newmode;
-                     // Entering animation mode, make the screen smaller
-                     scrst.layer_height >>= 1;
-                     scrst.layer_width >>= 1;
-                  }
-               } else if(drwst.mode == DRAWMODE_ANIMATION) {
-                  drwst.mode = newmode;
-                  // Exiting animation mode, make the screen larger again
-                  scrst.layer_height <<= 1;
-                  scrst.layer_width <<= 1;
-               }
-               FLUSH_LAYERS(); // Just always do this on mode switch, it's safer
-               break;
             case MAINMENU_OPTIONS:
                // Run options system
-               run_options_menu(&scrst);
+               run_options_menu(&scrst, &drwst);
                FLUSH_LAYERS(); // Why not...
                break;
             case MAINMENU_EXPORT:
@@ -1072,7 +1079,7 @@ int main(int argc, char** argv)
       draw_pointer = scan_lines(&scandata, draw_pointer, draw_data_end, drwst.page);
       _msr_ofsx = 0;
       _msr_ofsy = 0;
-      draw_from_buffer(&scandata, layers);
+      draw_from_buffer(&scandata, layers, &scrst);
       if(drwst.mode == DRAWMODE_ANIMATION && draw_pointer == draw_data_end) {
          // Onion time
          for(int o = 1; o <= DCV_MIN(scrst.onion_count, drwst.page); o++) {
@@ -1080,7 +1087,7 @@ int main(int argc, char** argv)
                continue;
             onion_data[o - 1] = scan_lines(&scandata, onion_data[o - 1], draw_data_end, drwst.page - o);
             onion_offset(&drwst, -o, &_msr_ofsx, &_msr_ofsy);
-            draw_from_buffer(&scandata, layers);
+            draw_from_buffer(&scandata, layers, &scrst);
             // Stop early if we're not done
             break;
          }
