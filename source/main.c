@@ -869,9 +869,8 @@ int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char *
 
 #define UTILS_CLAMP(x, mn, mx) (x <= mn ? mn : x >= mx ? mx : x)
 #define FLUSH_LAYERS() \
-      draw_pointer = draw_data;     \
-      for(int __fli = 0; __fli < MAXONION; __fli++) { \
-         onion_data[__fli] = draw_data; \
+      for(int __fli = 0; __fli < MAXONION + 1; __fli++) { \
+         draw_pointers[__fli] = draw_data; \
       } \
       reset_lineringbuffer(&scandata); \
       flush_layers = true;          
@@ -888,7 +887,7 @@ int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char *
 #define PRINT_DATAUSAGE() print_data(draw_data, draw_data_end, saved_last);
 
 #define MAIN_NEWDRAW() { \
-   draw_data_end = draw_pointer = saved_last = draw_data; \
+   draw_data_end = saved_last = draw_data; \
    free_default_drawstate(&drwst); \
    init_default_drawstate(&drwst); \
    set_screenstate_defaults(&scrst); \
@@ -973,10 +972,11 @@ int main(int argc, char** argv)
    char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
    char * stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
    char * draw_data_end; // NOTE: this is exclusive: it points one past the end. draw_data_end - draw_data = length
-   char * draw_pointer;
+   //char * draw_pointer;
    char * saved_last;
 
-   char * onion_data[MAXONION];
+   // Draw pointers for us and all our onion friends
+   char * draw_pointers[1 + MAXONION];
 
    if(!save_filename || !draw_data || !stroke_data) {
       LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
@@ -1133,6 +1133,7 @@ int main(int argc, char** argv)
 
             if(pending.line_count < MAX_STROKE_LINES)
             {
+               onion_offset(&drwst, 0, &_msr_ofsx, &_msr_ofsy); // This works for 0 (returns 0,0)
                //This is for a stroke, do different things if we have different tools!
                add_point_to_stroke(&pending, &current_touch, &scrst);
                //Draw ONLY the current line
@@ -1141,23 +1142,30 @@ int main(int argc, char** argv)
          }
       }
 
-      // These functions are very lightweight and will exit immediately if they have nothing to do.
-      draw_pointer = scan_lines(&scandata, draw_pointer, draw_data_end, drwst.page);
-      _msr_ofsx = 0;
-      _msr_ofsy = 0;
-      draw_from_buffer(&scandata, layers, &scrst);
-      if(drwst.mode == DRAWMODE_ANIMATION && draw_pointer == draw_data_end) {
-         // Onion time
-         for(int o = 1; o <= DCV_MIN(scrst.onion_count, drwst.page); o++) {
-            if(onion_data[o - 1] == draw_data_end)
-               continue;
-            onion_data[o - 1] = scan_lines(&scandata, onion_data[o - 1], draw_data_end, drwst.page - o);
-            onion_offset(&drwst, -o, &_msr_ofsx, &_msr_ofsy);
-            draw_from_buffer(&scandata, layers, &scrst);
-            // Stop early if we're not done
+      int oend = DCV_MIN(scrst.onion_count, drwst.page);
+      int dp_ofs = 0;
+
+      // Find the place to stop looking for the appropriate draw pointer to work on. This has complicated rules
+      for(dp_ofs = 0; dp_ofs <= oend; dp_ofs++) {
+         onion_offset(&drwst, -dp_ofs, &_msr_ofsx, &_msr_ofsy); // This works for 0 (returns 0,0)
+         if(dp_ofs == oend) // Don't bother with any logic below, this is the last slot.
+            break; 
+         if(drwst.mode == DRAWMODE_ANIMATION) {
+            // In animation mode, we want to fully complete the current "slot" before continuing to the 
+            // next. This is functionally equivalent to no animation for onion_count = 0. So, if we're
+            // not done scanning this data, obviously continue this. But if it's complete AND the next
+            // HASN'T STARTED AND there's draw data left, this is where to break.
+            if((draw_pointers[dp_ofs] != draw_data_end) || 
+               ((draw_pointers[dp_ofs + 1] == draw_data) && lineringbuffer_size(&scandata)))
+               break;
+         } else {
+            // This one is simple: if we're not in animation mode, stop immediately
             break;
          }
       }
+
+      draw_pointers[dp_ofs] = scan_lines(&scandata, draw_pointers[dp_ofs], draw_data_end, drwst.page - dp_ofs);
+      draw_from_buffer(&scandata, layers, &scrst);
 
       C2D_Flush();
       _drw_cmd_cnt = 0;
@@ -1186,7 +1194,7 @@ int main(int argc, char** argv)
             //the mem write. Note: there are instances where we WILL be drawing
             //twice, but it's difficult to determine what has or has not been
             //drawn when the pointer isn't at the end.
-            if(previous_end == draw_pointer) draw_pointer = draw_data_end;
+            if(previous_end == draw_pointers[0]) draw_pointers[0] = draw_data_end;
 
             //TODO: need to do this in more places (like when you get lines)
             PRINT_DATAUSAGE();
