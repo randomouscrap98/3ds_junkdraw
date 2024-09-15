@@ -135,7 +135,7 @@ const char * get_menu_item(const char * menu_items, u32 length, u32 item)
 
 //Menu items must be packed together, separated by \0. Last item needs two \0
 //after. CONTROL WILL BE GIVEN FULLY TO THIS MENU UNTIL IT FINISHES!
-s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u32 exit_buttons)
+s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u32 index, u32 exit_buttons)
 {
    struct EasyMenuState state;
    state.title = title;
@@ -147,6 +147,7 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
 
    initialize_easy_menu_state(&state);
    clear_easy_menu(&state);
+   state.selected_index = index;
 
    while(aptMainLoop())
    {
@@ -168,11 +169,11 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
 
 //Set up the menu to be a simple confirmation
 bool easy_confirm(const char * title, u8 top) {
-   return 1 == easy_menu(title, "No\0Yes\0", top, 0, KEY_B);
+   return 1 == easy_menu(title, "No\0Yes\0", top, 0, 0, KEY_B);
 }
 
 void easy_ok(const char * title, u8 top) {
-   easy_menu(title, "OK\0", top, 0, KEY_B);
+   easy_menu(title, "OK\0", top, 0, 0, KEY_B);
 }
 
 //Set up the menu to be a warning (still yes/no confirmation though)
