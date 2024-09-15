@@ -9,8 +9,12 @@
 #include <time.h>
 #include <dirent.h>
 
+#define MSF_GIF_IMPL
+#include <msf_gif.h>
+
 //#define DEBUG_COORD
 //#define DEBUG_DATAPRINT
+//#define DEBUG_IGNORERECT
 
 #include "filesys.h"
 #include "console.h"
@@ -206,7 +210,9 @@ void MY_SOLIDRECT(float x, float y, u16 width, u32 color)
    if(x < LAYER_EDGEERROR || y < LAYER_EDGEERROR || x >= _drawrect_scrst->layer_width + LAYER_EDGEBUF || 
       y >= _drawrect_scrst->layer_height + LAYER_EDGEBUF)
    {
+#ifdef DEBUG_IGNORERECT
       LOGDBG("IGNORING RECT AT (%f, %f)", x, y);
+#endif
       return;
    }
    C2D_DrawRectSolid(x + _msr_ofsx, y + _msr_ofsy, 0.5, width, width, color);
@@ -547,31 +553,6 @@ void print_time(bool showcolon)
          status_x1b, timeinfo->tm_hour, showcolon ? ':' : ' ', timeinfo->tm_min);
 }
 
-// Reconstruct the menu based on draw settings
-// void get_menu_items(struct DrawState * drwst, char * menu) {
-//    char menuitems[] = MAINMENU_ITEMS;
-//    char * current = menu;
-//    char * menuptr = menuitems;
-//    // A bit of a silly thing... we copy all the menu items into the destination,
-//    // but we might change some of them as we're copying
-//    for(int i = 0; i <= MAINMENU_EXIT; i++) {
-//       strcpy(current, menuptr);
-//       int len = strlen(current);
-//       if(i == MAINMENU_MODE) {
-//          if(drwst->mode == DRAWMODE_ANIMATION) {
-//             strcpy(current + len, "Anim");
-//             current += 4;
-//          } else if(drwst->mode == DRAWMODE_NORMAL) {
-//             strcpy(current + len, "Normal");
-//             current += 6;
-//          }
-//       } 
-//       menuptr += len + 1;
-//       current += len + 1;
-//    }
-//    current[0] = 0; // Need ANOTHER 0 at end to indicate end of menu
-// }
-
 void run_options_menu(struct ScreenState * scrst, struct DrawState * drwst) {
    char menu[256];
    char visibility[4][3] = { "", "b", "t", "bt" };
@@ -711,22 +692,8 @@ TRUEEND:
    return result;
 }
 
-//Export the given page from the given data into a default named file in some
-//default image format (bitmap? png? who knows)
-void export_page(struct ScreenState * scrst, page_num page, char * data, char * data_end, char * basename)
-{
-   //NOTE: this entire function is going to use Citro2D u32 formatted colors, all
-   //the way until the final bitmap is written (at which point it can be
-   //converted as needed)
-
-   PRINTINFO("Exporting page %d: building...", page);
-
-   if(mkdir_p(SCREENSHOTS_BASE))
-   {
-      PRINTERR("Couldn't create screenshots folder: %s", SCREENSHOTS_BASE);
-      return;
-   }
-
+// Export a page as a raw buffer. YOU MUST FREE THE BUFFER! Returns null if error
+u32 * export_page_raw (struct ScreenState * scrst, page_num page, char * data, char * data_end) {
    u32 * layerdata[LAYER_COUNT + 1];
    u32 size_bytes = sizeof(u32) * scrst->layer_width * scrst->layer_height;
 
@@ -741,17 +708,17 @@ void export_page(struct ScreenState * scrst, page_num page, char * data, char * 
          for(int j = 0; j < i; j++)
             free(layerdata[j]);
 
-         return;
+         return NULL;
       }
 
       //TODO: This assumes the bg is white
       memset(layerdata[i], (i == LAYER_COUNT) ? 0xFF : 0, size_bytes);
    }
 
-   char savepath[MAX_FILEPATH];
-   time_t now = time(NULL);
-   sprintf(savepath, "%s%s_%d_%jd.png", SCREENSHOTS_BASE, 
-         strlen(basename) ? basename : "new", page, now);
+   // char savepath[MAX_FILEPATH];
+   // time_t now = time(NULL);
+   // sprintf(savepath, "%s%s_%d_%jd.png", SCREENSHOTS_BASE, 
+   //       strlen(basename) ? basename : "new", page, now);
 
    //Now just parse and parse and parse until we reach the end!
    u32 data_length = data_end - data;
@@ -790,18 +757,111 @@ void export_page(struct ScreenState * scrst, page_num page, char * data, char * 
       }
    }
 
+   free_linepackage(&package);
+
+   // Remember, don't free the last layer, as that's our merged
+   for(int i = 0; i < LAYER_COUNT; i++)
+      free(layerdata[i]);
+
+   return layerdata[LAYER_COUNT];
+}
+
+//Export the given page from the given data into a default named file in some
+//default image format (bitmap? png? who knows)
+void export_page(struct ScreenState * scrst, page_num page, char * data, char * data_end, char * basename)
+{
+   //NOTE: this entire function is going to use Citro2D u32 formatted colors, all
+   //the way until the final bitmap is written (at which point it can be
+   //converted as needed)
+
+   PRINTINFO("Exporting page %d: building...", page);
+
+   if(mkdir_p(SCREENSHOTS_BASE))
+   {
+      PRINTERR("Couldn't create screenshots folder: %s", SCREENSHOTS_BASE);
+      return;
+   }
+
+   char savepath[MAX_FILEPATH];
+   time_t now = time(NULL);
+   sprintf(savepath, "%s%s_%d_%jd.png", SCREENSHOTS_BASE, 
+         strlen(basename) ? basename : "new", page, now);
+
+   u32 * exported = export_page_raw(scrst, page, data, data_end);
+   if(exported == NULL) {
+      PRINTERR("Couldn't export page %d (unknown error)", page);
+   }
+
    PRINTINFO("Exporting page %d: converting to png...", page);
 
-   if(write_citropng(layerdata[LAYER_COUNT], scrst->layer_width, scrst->layer_height, savepath) == 0) {
+   if(write_citropng(exported, scrst->layer_width, scrst->layer_height, savepath) == 0) {
       PRINTINFO("Exported page to: %s", savepath);
    }
    else {
       PRINTERR("FAILED to export: %s", savepath);
    }
+}
 
-   free_linepackage(&package);
-   for(int i = 0; i < LAYER_COUNT + 1; i++)
-      free(layerdata[i]);
+struct GifSettings {
+   u16 bitdepth;
+   u16 csecsperframe;
+};
+
+//int export_gif(u32 * rawdata, u16 width, u16 height, u16 centisecondsperframe, u16 bitdepth, char * filepath) {
+int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char * data, char * data_end, char * basename) 
+{
+   char savepath[MAX_FILEPATH];
+   time_t now = time(NULL);
+   sprintf(savepath, "%s%s_%jd.gif", SCREENSHOTS_BASE, strlen(basename) ? basename : "new", now);
+
+   MsfGifState gifState = {};
+   FILE * fp = fopen(savepath, "wb");
+   if(fp == NULL) {
+      PRINTERR("ERR: Couldn't open gif for writing: %s\n", savepath);
+      return 1;
+   }
+   msf_gif_begin_to_file(&gifState, scrst->layer_width, scrst->layer_height, (MsfGifFileWriteFunc) fwrite, (void *) fp);
+   int lastpageused = last_used_page(data, data_end - data);
+   for(int i = 0; i <= lastpageused; i++) {
+      PRINTINFO("Exporting page %d / %d...", i + 1, lastpageused + 1);
+      u32 * page = export_page_raw(scrst, i, data, data_end);
+      msf_gif_frame_to_file(&gifState, (uint8_t *)page, settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4); //frame 1
+      free(page);
+   }
+   // msf_gif_begin(&gifState, scrst->layer_width, scrst->layer_height);
+   // msf_gif_frame(&gifState, , settings->csecsperframe, settings->bitdepth, scrst->layer_width * 4); //frame 1
+   if(!msf_gif_end_to_file(&gifState)) {
+      PRINTERR("ERR: Couldn't finalize gif\n");
+      return 1;
+   }
+   return 0;
+   // int ret = 0;
+   // if (result.data) {
+   //    FILE * fp = fopen(savepath, "wb");
+   //    if(fp == NULL) {
+   //       LOGDBG("ERR: Couldn't open gif for writing: %s\n", filepath);
+   //       ret = 1;
+   //    } else {
+   //       fwrite(result.data, result.dataSize, 1, fp);
+   //       fclose(fp);
+   //    }
+   // } else {
+   //    LOGDBG("ERR: Couldn't finalize gif\n");
+   //    ret = 1;
+   // }
+   // msf_gif_free(result);
+   // return ret;
+   //GifFileType *gif = EGifOpenFileName(filepath, false, NULL);
+
+   // if (gif == NULL) {
+   //   LOGDBG("ERR: Couldn't open gif for writing: %s\n", filepath);
+   //   return 1;
+   // }
+
+   // // Screen Descriptor (defining the size of the GIF canvas)
+   // EGifPutScreenDesc(gif, width, height, 256, 0, NULL);
+
+   // return 0;
 }
 
 
@@ -831,6 +891,7 @@ void export_page(struct ScreenState * scrst, page_num page, char * data, char * 
    draw_data_end = draw_pointer = saved_last = draw_data; \
    free_default_drawstate(&drwst); \
    init_default_drawstate(&drwst); \
+   set_screenstate_defaults(&scrst); \
    FLUSH_LAYERS(); \
    save_filename[0] = '\0';   \
    pending.line_count = 0;        \
@@ -963,8 +1024,6 @@ int main(int argc, char** argv)
       }
       if(kDown & KEY_START) 
       {
-         //char menuitems[256];
-         //get_menu_items(&drwst, menuitems);
          switch(easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, 0, KEY_B | KEY_START)) {
             case MAINMENU_EXIT:
                if(MAIN_UNSAVEDCHECK("Really quit?")) goto ENDMAINLOOP;
@@ -1007,6 +1066,13 @@ int main(int argc, char** argv)
                break;
             case MAINMENU_EXPORT:
                export_page(&scrst, drwst.page, draw_data, draw_data_end, save_filename);
+               break;
+            case MAINMENU_EXPORTGIF:
+               struct GifSettings gifsettings;
+               gifsettings.bitdepth = 4;
+               gifsettings.csecsperframe = 30;
+               export_gif(&scrst, &gifsettings, draw_data, draw_data_end, save_filename);
+               //export_page(&scrst, drwst.page, draw_data, draw_data_end, save_filename);
                break;
          }
       }

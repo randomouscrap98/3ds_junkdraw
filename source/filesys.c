@@ -216,5 +216,4 @@ finalise:
    if (png_ptr != NULL) png_destroy_write_struct(&png_ptr, (png_infopp)NULL);
 
    return code;
-
 }
