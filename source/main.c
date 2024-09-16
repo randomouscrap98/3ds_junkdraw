@@ -866,10 +866,15 @@ int save_drawing(char * filename, char * data)
       if(!file_exists(fullpath) || easy_warn(temp_msg,
                "Save already exists, definitely overwrite?", MAINMENU_TOP))
       {
+         aptSetHomeAllowed(false);
+         aptSetSleepAllowed(false);
          PRINTINFO("Saving file %s...", filename);
          int result = mkdir_p(savefolder);
          if(!result) result = write_file(fullpath, data);
          PRINTCLEAR();
+         aptSetHomeAllowed(true);
+         aptSetSleepAllowed(true);
+         aptCheckHomePressRejected();
          return result;
       }
    }
@@ -905,9 +910,14 @@ char * load_drawing(char * data_container, char * final_filename)
    //LOGDBG("LOADFILENAME: %s", final_filename);
 
    PRINTINFO("Loading file %s...", final_filename)
+   aptSetHomeAllowed(false);
+   aptSetSleepAllowed(false);
    get_rawfile_location(final_filename, fullpath);
    result = read_file(fullpath, data_container, MAX_DRAW_DATA);
    PRINTCLEAR();
+   aptSetHomeAllowed(true);
+   aptSetSleepAllowed(true);
+   aptCheckHomePressRejected();
 
 END:
    free(all_files);
