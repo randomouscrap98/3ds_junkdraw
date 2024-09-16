@@ -58,8 +58,9 @@ u8 _db_prnt_row = 0;
 
 #define TOOL_PENCIL 0
 #define TOOL_ERASER 1
-#define TOOL_COUNT 2
-#define TOOL_CHARS "pe"
+#define TOOL_SLOW 2
+#define TOOL_COUNT 3
+#define TOOL_CHARS "pes"
 #define LAYER_CHARS "bt"
 
 // Glitch in citro2d (or so we assume) prevents us from writing into the first 8
@@ -142,11 +143,14 @@ struct ToolData default_tooldata[] = {
    //Pencil
    { 2, LINESTYLE_STROKE, false },
    //Eraser
-   { 4, LINESTYLE_STROKE, true, 0 }
+   { 4, LINESTYLE_STROKE, true, 0 },
+   // Slow pen
+   { 2, LINESTYLE_STROKE, false }
 };
 
 void init_systemstate_defaults(struct SystemState *state)
 {
+   state->slow_avg = 0.15;
    state->power_saver = false;
    state->onion_count = DEFAULT_ONIONCOUNT;
    state->onion_blendstart = DEFAULT_ONIONBLENDSTART;
@@ -439,8 +443,10 @@ void draw_from_buffer(struct LineRingBuffer * scandata, struct LayerData * layer
 // -------- Data helpers ------------
 
 struct SimpleLine * add_point_to_stroke(struct LinePackage * pending, 
-      const touchPosition * pos, const struct ScreenState * mod)
+      const touchPosition * pos, struct SystemState * sys)
 {
+   struct ScreenState * mod = &sys->screen_state;
+
    // Stroke is overfull, can't do anything
    if(pending->line_count >= pending->max_lines) {
       return NULL;
@@ -456,11 +462,21 @@ struct SimpleLine * add_point_to_stroke(struct LinePackage * pending,
    {
       line->x1 = line->x2;
       line->y1 = line->y2;
+      sys->slowx = line->x1;
+      sys->slowy = line->y1;
    }
    else
    {
       line->x1 = pending->lines[pending->line_count - 1].x2;
       line->y1 = pending->lines[pending->line_count - 1].y2;
+   }
+
+   // No matter what, this SHOULD work... I think.
+   if(get_drawstate_tool(&sys->draw_state) == TOOL_SLOW) {
+      sys->slowx += ((float)line->x2 - line->x1) * sys->slow_avg;
+      sys->slowy += ((float)line->y2 - line->y1) * sys->slow_avg;
+      line->x2 = round(sys->slowx);
+      line->y2 = round(sys->slowy);
    }
 
    //Added a line
@@ -724,9 +740,9 @@ void run_options_menu(struct SystemState * sys) { //struct ScreenState * scrst, 
    while(1) {
       // Recreate menu every time, since we have dynamic values. To make life easier, we just sprintf
       // everything into the array with newlines, then replace newlines with 0
-      sprintf(menu, "Mode: %s\nOnion layers: %d\nOnion darkness: %.1f\nLayer visibility: %s\nPower saving: %s\nExit\n", 
+      sprintf(menu, "Mode: %s\nOnion layers: %d\nOnion darkness: %.1f\nLayer visibility: %s\nSlow pen friction: %.2f\nPower saving: %s\nExit\n", 
          modes[sys->draw_state.mode], sys->onion_count, sys->onion_blendstart, visibility[sys->screen_state.layer_visibility],
-         sys->power_saver ? "on" : "off");
+         1 - sys->slow_avg, sys->power_saver ? "on" : "off");
       for(int x = strlen(menu); x >= 0; x--) {
          if(menu[x] == '\n') menu[x] = 0;
       }
@@ -748,7 +764,13 @@ void run_options_menu(struct SystemState * sys) { //struct ScreenState * scrst, 
          case 3: // layer visibility
             sys->screen_state.layer_visibility = (sys->screen_state.layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
             break;
-         case 4: // power saver
+         case 4: // slow avg
+            sys->slow_avg += 0.05;
+            if(sys->slow_avg > 0.51) {
+               sys->slow_avg = 0.05;
+            }
+            break;
+         case 5: // power saver
             sys->power_saver = ! sys->power_saver;
             osSetSpeedupEnable(!sys->power_saver);
             break;
@@ -1033,7 +1055,6 @@ int main(int argc, char** argv)
    char * draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
    char * stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
    char * draw_data_end; // NOTE: this is exclusive: it points one past the end. draw_data_end - draw_data = length
-   //char * draw_pointer;
    char * saved_last;
 
    // Draw pointers for us and all our onion friends
@@ -1074,6 +1095,7 @@ int main(int argc, char** argv)
       if(kRepeat & KEY_DLEFT) shift_drawstate_width(&sys.draw_state, -(kHeld & KEY_R ? 5 : 1));
       if(kDown & KEY_A) set_drawstate_tool(&sys.draw_state, TOOL_PENCIL); 
       if(kDown & KEY_B) set_drawstate_tool(&sys.draw_state, TOOL_ERASER);
+      if(kDown & KEY_Y) set_drawstate_tool(&sys.draw_state, TOOL_SLOW);
       if(kHeld & KEY_L && kDown & KEY_R && palette_active) {
          shift_drawstate_color(&sys.draw_state, DEFAULT_PALETTE_SPLIT);
       }
@@ -1164,7 +1186,6 @@ int main(int argc, char** argv)
       // -- LAYER DRAW SECTION --
       C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
 
-
       //Apparently (not sure), all clearing should be done within our main loop?
       if(flush_layers)
       {
@@ -1190,12 +1211,13 @@ int main(int argc, char** argv)
             {
                onion_offset(&sys.draw_state, 0, &_msr_ofsx, &_msr_ofsy); // This works for 0 (returns 0,0)
                //This is for a stroke, do different things if we have different tools!
-               add_point_to_stroke(&pending, &current_touch, &sys.screen_state);
+               add_point_to_stroke(&pending, &current_touch, &sys);
                //Draw ONLY the current line
                pixaligned_linepackfunc(&pending, pending.line_count - 1, pending.line_count, MY_SOLIDRECT);
             }
          }
       }
+
 
       int oend = DCV_MIN(sys.onion_count, sys.draw_state.page);
       int dp_ofs = 0;

@@ -94,6 +94,7 @@ void shift_drawstate_color(struct DrawState * state, s16 ofs);
 void shift_drawstate_width(struct DrawState * state, s16 ofs);
 u16 get_drawstate_color(struct DrawState * state);
 void set_drawstate_tool(struct DrawState * state, u8 tool);
+u8 get_drawstate_tool(const struct DrawState * state);
 
 // Variables for system stuff, probably shouldn't change between loads etc
 struct SystemState
@@ -108,6 +109,10 @@ struct SystemState
    float onion_blendstart;
 
    bool power_saver;
+
+   float slow_avg;
+   float slowx;
+   float slowy;
 
    struct ScreenState screen_state;
    struct DrawState draw_state;

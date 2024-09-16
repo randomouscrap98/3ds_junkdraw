@@ -70,3 +70,7 @@ void set_drawstate_tool(struct DrawState * state, u8 tool)
    state->current_tool = state->tools + tool;
 }
 
+u8 get_drawstate_tool(const struct DrawState * state) 
+{
+   return state->current_tool - state->tools;
+}
