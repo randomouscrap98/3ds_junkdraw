@@ -37,6 +37,7 @@ struct EasyMenuState
    //Menu tracking
    u32 selected_index;
    u32 menu_ofs;
+   bool home_rejected;
 };
 
 //Generic menu operations; can be used without context
@@ -73,6 +74,7 @@ struct EnterTextState
    bool confirmed;
    u32 selected_index;
    char * text;
+   bool home_rejected;
 };
 
 //Generic text input operations.

@@ -26,6 +26,7 @@ u32 __stacksize__=512*1024;
 #include "color.h"
 #include "draw.h"
 #include "buffer.h"
+//#include "my3ds.h"
 
 #include "setup.h"
 #include "system.h"
@@ -573,11 +574,16 @@ struct GifSettings {
 
 int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char * data, char * data_end, char * basename) 
 {
+   aptSetHomeAllowed(false);
+   aptSetSleepAllowed(false);
+   int ret = 0;
+
    PRINTINFO("Beginning gif export...");
    if(mkdir_p(SCREENSHOTS_BASE))
    {
       PRINTERR("Couldn't create screenshots folder: %s", SCREENSHOTS_BASE);
-      return 1;
+      ret = 1;
+      goto EXPORTGIFEND;
    }
 
    char savepath[MAX_FILEPATH];
@@ -588,7 +594,8 @@ int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char *
    FILE * fp = fopen(savepath, "wb");
    if(fp == NULL) {
       PRINTERR("ERR: Couldn't open gif for writing: %s\n", savepath);
-      return 1;
+      ret = 1;
+      goto EXPORTGIFEND;
    }
    msf_gif_begin_to_file(&gifState, scrst->layer_width, scrst->layer_height, (MsfGifFileWriteFunc) fwrite, (void *) fp);
    int lastpageused = last_used_page(data, data_end - data);
@@ -605,11 +612,16 @@ int export_gif(struct ScreenState * scrst, struct GifSettings * settings, char *
    }
    if(!msf_gif_end_to_file(&gifState)) {
       PRINTERR("ERR: Couldn't finalize gif\n");
-      return 1;
+      ret = 1;
+      goto EXPORTGIFEND;
    }
    fclose(fp);
    PRINTINFO("Exported gif to: %s", savepath);
-   return 0;
+   EXPORTGIFEND:;
+   aptSetHomeAllowed(true);
+   aptSetSleepAllowed(true);
+   aptCheckHomePressRejected();
+   return ret;
 }
 
 
@@ -906,18 +918,22 @@ TRUEEND:
 
 //Export the given page from the given data into a default named file in some
 //default image format (bitmap? png? who knows)
-void export_page(struct ScreenState * scrst, page_num page, char * data, char * data_end, char * basename)
+int export_page(struct ScreenState * scrst, page_num page, char * data, char * data_end, char * basename)
 {
    //NOTE: this entire function is going to use Citro2D u32 formatted colors, all
    //the way until the final bitmap is written (at which point it can be
    //converted as needed)
+   aptSetHomeAllowed(false);
+   aptSetSleepAllowed(false);
+   int ret = 0;
 
    PRINTINFO("Exporting page %d: building...", page);
 
    if(mkdir_p(SCREENSHOTS_BASE))
    {
       PRINTERR("Couldn't create screenshots folder: %s", SCREENSHOTS_BASE);
-      return;
+      ret = 1;
+      goto EXPORTPAGEEND;
    }
 
    char savepath[MAX_FILEPATH];
@@ -928,6 +944,8 @@ void export_page(struct ScreenState * scrst, page_num page, char * data, char * 
    u32 * exported = export_page_raw(scrst, page, data, data_end);
    if(exported == NULL) {
       PRINTERR("Couldn't export page %d (unknown error)", page);
+      ret = 1;
+      goto EXPORTPAGEEND;
    }
 
    PRINTINFO("Exporting page %d: converting to png...", page);
@@ -937,7 +955,14 @@ void export_page(struct ScreenState * scrst, page_num page, char * data, char * 
    }
    else {
       PRINTERR("FAILED to export: %s", savepath);
+      ret = 1;
+      goto EXPORTPAGEEND;
    }
+   EXPORTPAGEEND:;
+   aptSetHomeAllowed(true);
+   aptSetSleepAllowed(true);
+   aptCheckHomePressRejected();
+   return ret;
 }
 
 
@@ -1297,11 +1322,14 @@ int main(int argc, char** argv)
 
    free_lineringbuffer(&scandata);
    free_linepackage(&pending);
+   free(save_filename);
    free(draw_data);
    free(stroke_data);
 
    for(int i = 0; i < LAYER_COUNT; i++)
       delete_layer(layers[i]);
+   
+   C3D_RenderTargetDelete(screen);
 
    C2D_Fini();
    C3D_Fini();

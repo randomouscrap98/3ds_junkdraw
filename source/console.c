@@ -1,4 +1,5 @@
 #include "console.h"
+//#include "my3ds.h"
 
 #include <stdarg.h>
 #include <citro3d.h>
@@ -72,8 +73,10 @@ void clear_easy_menu(struct EasyMenuState * state) {
 //Draws the easy menu. Does NOT assume the background has been cleared!
 void draw_easy_menu(struct EasyMenuState * state)
 {
-   if(state->_has_title)
-      printf("\x1b[0m\x1b[%d;1H %s\n", state->top, state->title); //Still keeping that space for some reason.
+   if(state->_has_title) {
+      printf("\x1b[0m%s\x1b[%d;1H %s\n", state->home_rejected ? "\x1b[31m" : "",
+         state->top, state->title); //Still keeping that space for some reason.
+   }
 
    //Show if there's more to the menu 
    printf("\x1b[0m\x1b[%d;3H%s", state->top + state->_title_height, 
@@ -99,10 +102,14 @@ bool modify_easy_menu_state(struct EasyMenuState * state, u32 kDown, u32 kRepeat
       return true;
    if(kDown & state->cancel_buttons) 
       { state->selected_index= -1; return true; }
-   if(kRepeat & KEY_UP) 
+   if(kRepeat & KEY_UP) {
       state->selected_index = (state->selected_index - 1 + state->_menu_num) % state->_menu_num;
-   if(kRepeat & KEY_DOWN) 
+      state->home_rejected = false;
+   }
+   if(kRepeat & KEY_DOWN) {
       state->selected_index = (state->selected_index + 1) % state->_menu_num;
+      state->home_rejected = false;
+   }
 
    //Move the offset if the selected index goes outside visibility
    if(state->selected_index < state->menu_ofs) 
@@ -144,14 +151,21 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
    state.max_height = display; //Just for now; but this will severely limit the menus!
    state.cancel_buttons = exit_buttons;
    state.accept_buttons = KEY_A;
+   state.home_rejected = false;
 
    initialize_easy_menu_state(&state);
    clear_easy_menu(&state);
    state.selected_index = index;
 
+   aptSetHomeAllowed(false);
+
    while(aptMainLoop())
    {
       hidScanInput();
+
+      if(aptCheckHomePressRejected()) {
+         state.home_rejected = true;
+      }
 
       if(modify_easy_menu_state(&state, hidKeysDown(), hidKeysDownRepeat())) 
          break;
@@ -160,6 +174,8 @@ s32 easy_menu(const char * title, const char * menu_items, u8 top, u8 display, u
       draw_easy_menu(&state);
       C3D_FrameEnd(0);
    }
+
+   aptSetHomeAllowed(true);
 
    clear_easy_menu(&state);
    free_easy_menu_state(&state);
@@ -199,6 +215,7 @@ void initialize_enter_text_state(struct EnterTextState * state)
    state->text[state->entry_max] = '\0';
    state->selected_index = 0;
    state->confirmed = false;
+   state->home_rejected = false;
 }
 
 void free_enter_text_state(struct EnterTextState * state) {
@@ -213,8 +230,10 @@ void clear_enter_text(struct EnterTextState * state) {
 
 void draw_enter_text(struct EnterTextState * state)
 {
-   if(state->_has_title)
-      printf("\x1b[%d;1H\x1b[0m %-49s", state->top, state->title);
+   if(state->_has_title) {
+      printf("\x1b[%d;1H\x1b[0m%s %-49s", state->top, 
+         state->home_rejected ? "\x1b[31m" : "", state->title);
+   }
 
    u8 y = state->top + state->_title_height + 1;
 
@@ -222,7 +241,7 @@ void draw_enter_text(struct EnterTextState * state)
    {
       u8 x = 3 + i;
       bool selected = (i == state->selected_index);
-      printf("\x1b[%d;%dH%c\x1b[%d;%dH%c\x1b[%d;%dH%c", 
+      printf("\x1b[0m\x1b[%d;%dH%c\x1b[%d;%dH%c\x1b[%d;%dH%c", 
             y, x, state->text[i], //The char data
             y - 1, x, selected ? '-' : ' ',  //The up/down
             y + 1, x, selected ? '-' : ' ');
@@ -272,10 +291,16 @@ bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_len
 
    clear_enter_text(&state);
 
+   aptSetHomeAllowed(false);
+
    //I want to see how inefficient printf is, so I'm doing this awful on purpose 
    while(aptMainLoop())
    {
       hidScanInput();
+
+      if(aptCheckHomePressRejected()) {
+         state.home_rejected = true;
+      }
 
       if(modify_enter_text_state(&state, hidKeysDown(), hidKeysDownRepeat())) 
          break;
@@ -284,6 +309,8 @@ bool enter_text_fixed(const char * title, u8 top, char * container, u8 fixed_len
       draw_enter_text(&state);
       C3D_FrameEnd(0);
    }
+
+   aptSetHomeAllowed(true);
 
    //Get the data out BEFORE we free it.
    strcpy(container, state.text);
