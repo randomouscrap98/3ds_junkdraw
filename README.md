@@ -18,6 +18,7 @@ I'm sorry in advance.
 * **L** : color picker
 * **A** : pencil tool
 * **B** : eraser tool
+* **Y** : slow pen tool
 * **UP/DOWN** : zoom in/out
 * **LEFT/RIGHT** : change brush width
 * **R+L** : change palette (the default is the one that starts with bright red followed by black)
