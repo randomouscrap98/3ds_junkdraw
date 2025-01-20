@@ -359,7 +359,8 @@ void draw_colorpicker(u16 *palette, u16 palette_size, u16 selected_index,
   }
 
   for (u16 i = 0; i < NUM_LASTCOLORS; i++) {
-    u16 x = i & 1;
+    // REALLY hope the optimizing compiler fixes this...
+    u16 x = i % (NUM_LASTCOLORS >> 3);
     u16 y = i / (NUM_LASTCOLORS >> 3);
 
     C2D_DrawRectSolid(PALETTE_OFSX + (x + 9) * shift + PALETTE_SWATCHMARGIN,
@@ -554,7 +555,7 @@ int update_paletteindex(const touchPosition *pos, u8 *index, u8 *lcindex) {
         *index = new_index;
         return 1;
       }
-    } else if (xind > 8 && xind < 11) {
+    } else if (xind >= 9 && xind < 9 + (NUM_LASTCOLORS >> 3)) {
       *lcindex = (yind * (NUM_LASTCOLORS >> 3)) + xind - 9;
       return 2;
     }
@@ -1212,6 +1213,7 @@ int main(int argc, char **argv) {
     if (kDown & KEY_L && !(kHeld & KEY_R)) {
       palette_active = !palette_active;
       if (palette_active) { // Only calculate the last cols on button press
+        // TODO: put this whole thing in a function(?)
         char *coldat = draw_data;
         char *colstroke = NULL;
         for (int lci = 0; lci < NUM_LASTCOLORS; lci++) {

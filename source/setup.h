@@ -3,7 +3,7 @@
 
 #include <3ds.h>
 
-#define VERSION "0.4"
+#define VERSION "0.4.1"
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE "saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE "screenshots/"
@@ -28,7 +28,7 @@
 #define PALETTE_OFSX 10
 #define PALETTE_OFSY 10
 
-#define NUM_LASTCOLORS 16
+#define NUM_LASTCOLORS 32
 
 #define MAINMENU_TOP 6 // Where to put the menu?
 #define MAINMENU_TITLE "Main menu:"
