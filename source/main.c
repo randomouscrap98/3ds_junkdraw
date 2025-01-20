@@ -1212,8 +1212,26 @@ int main(int argc, char **argv) {
     if (kDown & KEY_L && !(kHeld & KEY_R)) {
       palette_active = !palette_active;
       if (palette_active) { // Only calculate the last cols on button press
+        char *coldat = draw_data;
+        char *colstroke = NULL;
         for (int lci = 0; lci < NUM_LASTCOLORS; lci++) {
           last_colbuf[lci] = 0xFFFF;
+        }
+        int lchead = 0;
+        while (coldat && coldat < draw_data_end) {
+          coldat = datamem_scanstroke(coldat, draw_data_end, MAX_DRAW_DATA,
+                                      sys.draw_state.page, &colstroke);
+          if (!colstroke)
+            break;
+          // TODO: put this in draw sys as a function
+          u16 hcol = chars_to_int(colstroke + 2, 3);
+          for (int lci = 0; lci < NUM_LASTCOLORS; lci++) {
+            if (last_colbuf[lci] == hcol)
+              goto colscanloopend;
+          }
+          last_colbuf[lchead] = hcol;
+          lchead = (lchead + 1) & (NUM_LASTCOLORS - 1);
+        colscanloopend:;
         }
       }
     }
