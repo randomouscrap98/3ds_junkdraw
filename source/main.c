@@ -165,6 +165,9 @@ struct ToolData default_tooldata[] = {
     // Slow pen
     {2, LINESTYLE_STROKE, false}};
 
+// TODO: stop making this global...
+u16 last_colbuf[NUM_LASTCOLORS];
+
 void init_systemstate_defaults(struct SystemState *state) {
   state->slow_avg = 0.15;
   state->power_saver = false;
@@ -331,10 +334,13 @@ void draw_colorpicker(u16 *palette, u16 palette_size, u16 selected_index,
     return;
   }
 
+  // const int LASTCOLSHIFT = 8;
   u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
-  C2D_DrawRectSolid(
-      0, 0, 0.5f, 8 * shift + (PALETTE_OFSX << 1) + PALETTE_SWATCHMARGIN,
-      8 * shift + (PALETTE_OFSY << 1) + PALETTE_SWATCHMARGIN, PALETTE_BG);
+  C2D_DrawRectSolid(0, 0, 0.5f,
+                    (9 + (NUM_LASTCOLORS >> 3)) * shift + (PALETTE_OFSX << 1) +
+                        PALETTE_SWATCHMARGIN,
+                    8 * shift + (PALETTE_OFSY << 1) + PALETTE_SWATCHMARGIN,
+                    PALETTE_BG);
 
   for (u16 i = 0; i < palette_size; i++) {
     // TODO: an implicit 8 wide thing
@@ -350,6 +356,16 @@ void draw_colorpicker(u16 *palette, u16 palette_size, u16 selected_index,
                       PALETTE_OFSY + y * shift + PALETTE_SWATCHMARGIN, 0.5f,
                       PALETTE_SWATCHWIDTH, PALETTE_SWATCHWIDTH,
                       rgba16_to_rgba32c(palette[i]));
+  }
+
+  for (u16 i = 0; i < NUM_LASTCOLORS; i++) {
+    u16 x = i & 1;
+    u16 y = i >> 1;
+
+    C2D_DrawRectSolid(PALETTE_OFSX + (x + 9) * shift + PALETTE_SWATCHMARGIN,
+                      PALETTE_OFSY + y * shift + PALETTE_SWATCHMARGIN, 0.5f,
+                      PALETTE_SWATCHWIDTH, PALETTE_SWATCHWIDTH,
+                      rgba16_to_rgba32c(last_colbuf[i]));
   }
 }
 
@@ -525,13 +541,22 @@ struct SimpleLine *add_point_to_stroke(struct LinePackage *pending,
 
 // Given a touch position (presumably on the color palette), update the selected
 // palette index.
-void update_paletteindex(const touchPosition *pos, u8 *index) {
+int update_paletteindex(const touchPosition *pos, u8 *index, u8 *lcindex) {
   u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
   u16 xind = (pos->px - PALETTE_OFSX) / shift;
   u16 yind = (pos->py - PALETTE_OFSY) / shift;
-  u16 new_index = (yind << 3) + xind;
-  if (new_index >= 0 && new_index < DEFAULT_PALETTE_SPLIT) // PALETTE_COLORS)
-    *index = new_index;
+  if (xind < 8) {
+    u16 new_index = (yind << 3) + xind;
+    if (new_index >= 0 && new_index < DEFAULT_PALETTE_SPLIT) // PALETTE_COLORS)
+    {
+      *index = new_index;
+      return 1;
+    }
+  } else if (xind > 8) {
+    *lcindex = (yind << 3) + xind - 9;
+    return 2;
+  }
+  return 0;
 }
 
 // Export a page as a raw buffer. YOU MUST FREE THE BUFFER! Returns null if
@@ -1121,6 +1146,7 @@ int main(int argc, char **argv) {
   bool touching = false;
   bool palette_active = false;
   bool flush_layers = true;
+  bool close_palette = false;
 
   u32 current_frame = 0;
   u32 end_frame = 0;
@@ -1151,10 +1177,6 @@ int main(int argc, char **argv) {
   // Draw pointers for us and all our onion friends
   char *draw_pointers[1 + MAXONION];
 
-  // A stack buffer for last-used colors, only filled when palette is brought up
-  // Wait... how do you scan backwards?
-  u16 last_colbuf[NUM_LASTCOLORS];
-
   if (!save_filename || !draw_data || !stroke_data) {
     LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
   }
@@ -1184,8 +1206,14 @@ int main(int argc, char **argv) {
             DEFAULT_PALETTE_SPLIT;
 
     // Respond to user input
-    if (kDown & KEY_L && !(kHeld & KEY_R))
+    if (kDown & KEY_L && !(kHeld & KEY_R)) {
       palette_active = !palette_active;
+      if (palette_active) { // Only calculate the last cols on button press
+        for (int lci = 0; lci < NUM_LASTCOLORS; lci++) {
+          last_colbuf[lci] = 0xFFFF;
+        }
+      }
+    }
     if (kRepeat & KEY_DUP)
       MAIN_UPDOWN(1)
     if (kRepeat & KEY_DDOWN)
@@ -1265,8 +1293,12 @@ int main(int argc, char **argv) {
     }
     if (kUp & KEY_TOUCH) {
       end_frame = current_frame;
-      palette_active = false; // Something of a hack: might get rid of it later.
-                              // This makes the palette disappear on selection
+      if (close_palette) {
+        close_palette = false;
+        palette_active =
+            false; // Something of a hack: might get rid of it later.
+                   // This makes the palette disappear on selection
+      }
     }
 
     // Update zoom separately, since the update is always the same
@@ -1304,9 +1336,14 @@ int main(int argc, char **argv) {
     // Ignore first frame touches
     else if (touching) {
       if (palette_active) {
-        update_paletteindex(&current_touch, &pi);
-        sys.draw_state.current_color =
-            sys.draw_state.palette + po * DEFAULT_PALETTE_SPLIT + pi;
+        u8 lcind = 0;
+        int ures = update_paletteindex(&current_touch, &pi, &lcind);
+        if (ures == 1) {
+          sys.draw_state.current_color =
+              sys.draw_state.palette + po * DEFAULT_PALETTE_SPLIT + pi;
+          close_palette = true;
+        } else if (ures == 2) {
+        }
       } else {
         // Keep this outside the if statement below so it can be used for
         // background drawing too (draw commands from other people)
