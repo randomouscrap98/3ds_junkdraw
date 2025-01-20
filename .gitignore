@@ -1,4 +1,5 @@
 build/
+clangd/
 *.3dsx
 *.elf
 *.lst

@@ -1,0 +1,7 @@
+CompileFlags:
+  Add: [
+    -I/opt/devkitpro/devkitARM/include,
+    -I/opt/devkitpro/libctru/include,
+    -I/opt/devkitpro/portlibs/3ds/include,
+    -I/opt/devkitpro/devkitARM/arm-none-eabi/include,
+  ]
