@@ -360,7 +360,7 @@ void draw_colorpicker(u16 *palette, u16 palette_size, u16 selected_index,
 
   for (u16 i = 0; i < NUM_LASTCOLORS; i++) {
     u16 x = i & 1;
-    u16 y = i >> 1;
+    u16 y = i / (NUM_LASTCOLORS >> 3);
 
     C2D_DrawRectSolid(PALETTE_OFSX + (x + 9) * shift + PALETTE_SWATCHMARGIN,
                       PALETTE_OFSY + y * shift + PALETTE_SWATCHMARGIN, 0.5f,
@@ -545,16 +545,19 @@ int update_paletteindex(const touchPosition *pos, u8 *index, u8 *lcindex) {
   u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
   u16 xind = (pos->px - PALETTE_OFSX) / shift;
   u16 yind = (pos->py - PALETTE_OFSY) / shift;
-  if (xind < 8) {
-    u16 new_index = (yind << 3) + xind;
-    if (new_index >= 0 && new_index < DEFAULT_PALETTE_SPLIT) // PALETTE_COLORS)
-    {
-      *index = new_index;
-      return 1;
+  if (yind < 8) {
+    if (xind < 8) {
+      u16 new_index = (yind << 3) + xind;
+      if (new_index >= 0 &&
+          new_index < DEFAULT_PALETTE_SPLIT) // PALETTE_COLORS)
+      {
+        *index = new_index;
+        return 1;
+      }
+    } else if (xind > 8 && xind < 11) {
+      *lcindex = (yind * (NUM_LASTCOLORS >> 3)) + xind - 9;
+      return 2;
     }
-  } else if (xind > 8) {
-    *lcindex = (yind << 3) + xind - 9;
-    return 2;
   }
   return 0;
 }
@@ -1343,6 +1346,10 @@ int main(int argc, char **argv) {
               sys.draw_state.palette + po * DEFAULT_PALETTE_SPLIT + pi;
           close_palette = true;
         } else if (ures == 2) {
+          try_set_drawstate_color(&sys.draw_state, last_colbuf[lcind],
+                                  PALETTE_COLORS);
+          close_palette = true;
+          // LOGDBG("HISTORIC COLOR: 0x%08x", last_colbuf[lcind]);
         }
       } else {
         // Keep this outside the if statement below so it can be used for
