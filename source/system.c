@@ -43,11 +43,11 @@ void set_screenstate_zoom(struct ScreenState *state, float zoom) {
 
 // ---------- DRAWSTATE --------------
 
-void shift_drawstate_color(struct DrawState *state, s16 ofs) {
-  u16 i = state->current_color - state->palette;
-  state->current_color = state->palette + ((i + ofs + state->palette_count) %
-                                           (state->palette_count));
-}
+// void shift_drawstate_color(struct DrawState *state, s16 ofs) {
+//   u16 i = state->current_color - state->palette;
+//   state->current_color = state->palette + ((i + ofs + state->palette_count) %
+//                                            (state->palette_count));
+// }
 
 void shift_drawstate_width(struct DrawState *state, s16 ofs) {
   // instead of rolling, this one clamps
@@ -55,30 +55,30 @@ void shift_drawstate_width(struct DrawState *state, s16 ofs) {
                                          state->min_width, state->max_width);
 }
 
-u16 get_drawstate_color(struct DrawState *state) {
-  return state->current_tool->has_static_color
-             ? state->current_tool->static_color
-             : *state->current_color;
-}
+// u16 get_drawstate_color(struct DrawState *state) {
+//   return state->current_tool->has_static_color
+//              ? state->current_tool->static_color
+//              : *state->current_color;
+// }
 
 void set_drawstate_tool(struct DrawState *state, u8 tool) {
   state->current_tool = state->tools + tool;
 }
 
-int try_set_drawstate_color(struct DrawState *state, u16 color, u16 block) {
-  int start = state->current_color - state->palette;
-  if (block > 0) { // Start at beginning of given block size
-    start -= (start % block);
-  }
-  for (int i = 0; i < state->palette_count; i++) {
-    u16 pali = (i + start) % state->palette_count;
-    if (state->palette[pali] == color) {
-      state->current_color = state->palette + pali;
-      return 1;
-    }
-  }
-  return 0;
-}
+// int try_set_drawstate_color(struct DrawState *state, u16 color, u16 block) {
+//   int start = state->current_color - state->palette;
+//   if (block > 0) { // Start at beginning of given block size
+//     start -= (start % block);
+//   }
+//   for (int i = 0; i < state->palette_count; i++) {
+//     u16 pali = (i + start) % state->palette_count;
+//     if (state->palette[pali] == color) {
+//       state->current_color = state->palette + pali;
+//       return 1;
+//     }
+//   }
+//   return 0;
+// }
 
 u8 get_drawstate_tool(const struct DrawState *state) {
   return state->current_tool - state->tools;

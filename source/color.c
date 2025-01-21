@@ -1,4 +1,51 @@
 #include "color.h"
+#include <stdlib.h>
+
+u16 colorsystem_getcolor(struct ColorSystem *cs) {
+  if (cs->mode == COLORSYSMODE_PALETTE) {
+    return cs->colors[cs->index];
+  }
+  return 0;
+}
+
+void colorsystem_setcolors(struct ColorSystem *cs, u32 *colors, u16 numcolors) {
+  if (cs->colors)
+    free(cs->colors);
+  cs->colors = malloc(numcolors * sizeof(u16));
+  cs->num_colors = numcolors;
+  convert_palette(colors, cs->colors, numcolors);
+}
+
+void colorsystem_free(struct ColorSystem *cs) {
+  if (cs->colors)
+    free(cs->colors);
+  cs->colors = NULL;
+}
+
+u16 colorsystem_nextpalette(struct ColorSystem *cs, s8 ofs) {
+  cs->index =
+      (cs->index + ofs * cs->palette_size + cs->num_colors) % (cs->num_colors);
+  return cs->index;
+}
+
+int colorsystem_trysetcolor(struct ColorSystem *cs, u16 color) {
+  if (cs->mode == COLORSYSMODE_PALETTE) {
+    int start = cs->index;
+    if (cs->palette_size > 0) { // Start at beginning of given block size
+      start -= (start % cs->palette_size);
+    }
+    for (int i = 0; i < cs->num_colors; i++) {
+      u16 coli = (i + start) % cs->num_colors;
+      if (cs->colors[coli] == color) {
+        cs->index = coli;
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+/* clang-format off */
 
 //Take an rgb WITHOUT alpha and convert to 3ds full color (with alpha)
 u32 rgb24_to_rgba32c(u32 rgb)

@@ -1,6 +1,7 @@
 #ifndef __HEADER_SYSTEM
 #define __HEADER_SYSTEM
 
+#include "color.h"
 #include "input.h"
 #include <3ds.h>
 #include <citro2d.h>
@@ -74,9 +75,9 @@ struct DrawState {
   s8 zoom_power;
   u16 page;
   u8 layer;
-  u16 *palette;
-  u16 *current_color; // This tells us the exact color for drawing
-  u16 palette_count;
+  // u16 *palette;
+  // u16 *current_color; // This tells us the exact color for drawing
+  // u16 palette_count;
 
   u8 mode;
 
@@ -89,13 +90,13 @@ struct DrawState {
   u8 max_width;
 };
 
-void shift_drawstate_color(struct DrawState *state, s16 ofs);
+// void shift_drawstate_color(struct DrawState *state, s16 ofs);
 void shift_drawstate_width(struct DrawState *state, s16 ofs);
-u16 get_drawstate_color(struct DrawState *state);
+// u16 get_drawstate_color(struct DrawState *state);
 // Try to set the color to the specified color by scanning all the palette
 // colors. Does not set anything if not found. Begin scan at start of block
 // size.
-int try_set_drawstate_color(struct DrawState *state, u16 color, u16 block);
+// int try_set_drawstate_color(struct DrawState *state, u16 color, u16 block);
 void set_drawstate_tool(struct DrawState *state, u8 tool);
 u8 get_drawstate_tool(const struct DrawState *state);
 
@@ -119,6 +120,7 @@ struct SystemState {
   struct ScreenState screen_state;
   struct DrawState draw_state;
   struct CpadProfile cpad;
+  struct ColorSystem colors;
 };
 
 #endif

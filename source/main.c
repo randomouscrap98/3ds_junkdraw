@@ -165,15 +165,16 @@ struct ToolData default_tooldata[] = {
     // Slow pen
     {2, LINESTYLE_STROKE, false}};
 
-// TODO: stop making this global...
-u16 last_colbuf[NUM_LASTCOLORS];
-
 void init_systemstate_defaults(struct SystemState *state) {
   state->slow_avg = 0.15;
   state->power_saver = false;
   state->onion_count = DEFAULT_ONIONCOUNT;
   state->onion_blendstart = DEFAULT_ONIONBLENDSTART;
   state->onion_blendend = DEFAULT_ONIONBLENDEND;
+  memset(&state->colors, 0, sizeof(struct ColorSystem));
+  state->colors.palette_size = DEFAULT_PALETTE_SPLIT;
+  colorsystem_setcolors(&state->colors, default_palette,
+                        sizeof(default_palette) / sizeof(u32));
 }
 
 void set_screenstate_defaults(struct ScreenState *state) {
@@ -196,10 +197,10 @@ void init_default_drawstate(struct DrawState *state) {
   state->layer = DEFAULT_START_LAYER;
   state->mode = DRAWMODE_NORMAL;
 
-  state->palette_count = sizeof(default_palette) / sizeof(u32);
-  state->palette = malloc(state->palette_count * sizeof(u16));
-  convert_palette(default_palette, state->palette, state->palette_count);
-  state->current_color = state->palette + DEFAULT_PALETTE_STARTINDEX;
+  // state->palette_count = sizeof(default_palette) / sizeof(u32);
+  // state->palette = malloc(state->palette_count * sizeof(u16));
+  // convert_palette(default_palette, state->palette, state->palette_count);
+  // state->current_color = state->palette + DEFAULT_PALETTE_STARTINDEX;
 
   state->tools = malloc(sizeof(default_tooldata));
   memcpy(state->tools, default_tooldata, sizeof(default_tooldata));
@@ -212,7 +213,7 @@ void init_default_drawstate(struct DrawState *state) {
 // Only really applies to default initialized states
 void free_default_drawstate(struct DrawState *state) {
   free(state->tools);
-  free(state->palette);
+  // free(state->palette);
 }
 
 void set_cpadprofile_canvas(struct CpadProfile *profile) {
@@ -320,8 +321,7 @@ void draw_scrollbars(const struct ScreenState *mod) {
 
 // Draw (JUST draw) the entire color picker area, which may include other
 // stateful controls
-void draw_colorpicker(u16 *palette, u16 palette_size, u16 selected_index,
-                      bool collapsed) {
+void draw_colorpicker(struct ColorSystem *cs, bool collapsed) {
   // TODO: Maybe split this out?
   if (collapsed) {
     C2D_DrawRectSolid(0, 0, 0.5f, PALETTE_MINISIZE, PALETTE_MINISIZE,
@@ -329,7 +329,7 @@ void draw_colorpicker(u16 *palette, u16 palette_size, u16 selected_index,
     C2D_DrawRectSolid(PALETTE_MINIPADDING, PALETTE_MINIPADDING, 0.5f,
                       PALETTE_MINISIZE - PALETTE_MINIPADDING * 2,
                       PALETTE_MINISIZE - PALETTE_MINIPADDING * 2,
-                      rgba16_to_rgba32c(palette[selected_index]));
+                      rgba16_to_rgba32c(colorsystem_getcolor(cs)));
 
     return;
   }
@@ -337,12 +337,15 @@ void draw_colorpicker(u16 *palette, u16 palette_size, u16 selected_index,
   // const int LASTCOLSHIFT = 8;
   u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
   C2D_DrawRectSolid(0, 0, 0.5f,
-                    (9 + (NUM_LASTCOLORS >> 3)) * shift + (PALETTE_OFSX << 1) +
-                        PALETTE_SWATCHMARGIN,
+                    (9 + (COLORSYS_HISTORY >> 3)) * shift +
+                        (PALETTE_OFSX << 1) + PALETTE_SWATCHMARGIN,
                     8 * shift + (PALETTE_OFSY << 1) + PALETTE_SWATCHMARGIN,
                     PALETTE_BG);
 
-  for (u16 i = 0; i < palette_size; i++) {
+  u16 selected_index = colorsystem_getpaletteoffset(cs);
+  u16 *palette = colorsystem_getcurrentpalette(cs);
+
+  for (u16 i = 0; i < cs->palette_size; i++) {
     // TODO: an implicit 8 wide thing
     u16 x = i & 7;
     u16 y = i >> 3;
@@ -358,15 +361,15 @@ void draw_colorpicker(u16 *palette, u16 palette_size, u16 selected_index,
                       rgba16_to_rgba32c(palette[i]));
   }
 
-  for (u16 i = 0; i < NUM_LASTCOLORS; i++) {
+  for (u16 i = 0; i < COLORSYS_HISTORY; i++) {
     // REALLY hope the optimizing compiler fixes this...
-    u16 x = i % (NUM_LASTCOLORS >> 3);
-    u16 y = i / (NUM_LASTCOLORS >> 3);
+    u16 x = i % (COLORSYS_HISTORY >> 3);
+    u16 y = i / (COLORSYS_HISTORY >> 3);
 
     C2D_DrawRectSolid(PALETTE_OFSX + (x + 9) * shift + PALETTE_SWATCHMARGIN,
                       PALETTE_OFSY + y * shift + PALETTE_SWATCHMARGIN, 0.5f,
                       PALETTE_SWATCHWIDTH, PALETTE_SWATCHWIDTH,
-                      rgba16_to_rgba32c(last_colbuf[i]));
+                      rgba16_to_rgba32c(cs->history[i]));
   }
 }
 
@@ -541,26 +544,53 @@ struct SimpleLine *add_point_to_stroke(struct LinePackage *pending,
 }
 
 // Given a touch position (presumably on the color palette), update the selected
-// palette index.
-int update_paletteindex(const touchPosition *pos, u8 *index, u8 *lcindex) {
+// palette index within the color system. Includes history
+int update_paletteselect(const touchPosition *pos, struct ColorSystem *cs) {
   u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
   u16 xind = (pos->px - PALETTE_OFSX) / shift;
   u16 yind = (pos->py - PALETTE_OFSY) / shift;
   if (yind < 8) {
     if (xind < 8) {
       u16 new_index = (yind << 3) + xind;
-      if (new_index >= 0 &&
-          new_index < DEFAULT_PALETTE_SPLIT) // PALETTE_COLORS)
-      {
-        *index = new_index;
+      if (new_index >= 0 && new_index < cs->palette_size) {
+        colorsystem_setpaletteoffset(cs, new_index);
         return 1;
       }
-    } else if (xind >= 9 && xind < 9 + (NUM_LASTCOLORS >> 3)) {
-      *lcindex = (yind * (NUM_LASTCOLORS >> 3)) + xind - 9;
+    } else if (xind >= 9 && xind < 9 + (COLORSYS_HISTORY >> 3)) {
+      colorsystem_trysetcolor(
+          cs, cs->history[(yind * (COLORSYS_HISTORY >> 3)) + xind - 9]);
       return 2;
     }
   }
   return 0;
+}
+
+// Fill the historical colors in colorsystem with colors from the given page.
+void fill_colorhistory(struct ColorSystem *cs, char *draw_start, char *draw_end,
+                       u16 page) {
+  char *coldat = draw_start;
+  char *colstroke = NULL;
+  for (int lci = 0; lci < COLORSYS_HISTORY; lci++) {
+    cs->history[lci] = 0xFFFF;
+  }
+  int lchead = 0;
+  while (coldat && coldat < draw_end) {
+    coldat =
+        datamem_scanstroke(coldat, draw_end, MAX_DRAW_DATA, page, &colstroke);
+    if (!colstroke) // No more to read
+      break;
+    // TODO: put this in draw sys as a function
+    u16 hcol = chars_to_int(colstroke + 2, 3);
+    if (hcol == 0) // Skip eraser
+      continue;
+    for (int lci = 0; lci < COLORSYS_HISTORY; lci++) {
+      if (cs->history[lci] == hcol)
+        goto colscanloopend;
+    }
+    cs->history[lchead] = hcol;
+    lchead = (lchead + 1) & (COLORSYS_HISTORY - 1);
+  colscanloopend:;
+  }
 }
 
 // Export a page as a raw buffer. YOU MUST FREE THE BUFFER! Returns null if
@@ -1089,6 +1119,7 @@ EXPORTPAGEEND:;
     draw_data_end = saved_last = draw_data;                                    \
     free_default_drawstate(&sys.draw_state);                                   \
     init_default_drawstate(&sys.draw_state);                                   \
+    sys.colors.index = PALETTE_STARTINDEX;                                     \
     set_screenstate_defaults(&sys.screen_state);                               \
     FLUSH_LAYERS();                                                            \
     save_filename[0] = '\0';                                                   \
@@ -1204,39 +1235,17 @@ int main(int argc, char **argv) {
     hidTouchRead(&current_touch);
     hidCircleRead(&pos);
 
-    u16 po = (sys.draw_state.current_color - sys.draw_state.palette) /
-             DEFAULT_PALETTE_SPLIT;
-    u8 pi = (sys.draw_state.current_color - sys.draw_state.palette) %
-            DEFAULT_PALETTE_SPLIT;
+    // u16 po = (sys.draw_state.current_color - sys.draw_state.palette) /
+    //          DEFAULT_PALETTE_SPLIT;
+    // u8 pi = (sys.draw_state.current_color - sys.draw_state.palette) %
+    //         DEFAULT_PALETTE_SPLIT;
 
     // Respond to user input
     if (kDown & KEY_L && !(kHeld & KEY_R)) {
       palette_active = !palette_active;
       if (palette_active) { // Only calculate the last cols on button press
-        // TODO: put this whole thing in a function(?)
-        char *coldat = draw_data;
-        char *colstroke = NULL;
-        for (int lci = 0; lci < NUM_LASTCOLORS; lci++) {
-          last_colbuf[lci] = 0xFFFF;
-        }
-        int lchead = 0;
-        while (coldat && coldat < draw_data_end) {
-          coldat = datamem_scanstroke(coldat, draw_data_end, MAX_DRAW_DATA,
-                                      sys.draw_state.page, &colstroke);
-          if (!colstroke) // No more to read
-            break;
-          // TODO: put this in draw sys as a function
-          u16 hcol = chars_to_int(colstroke + 2, 3);
-          if (hcol == 0) // Skip eraser
-            continue;
-          for (int lci = 0; lci < NUM_LASTCOLORS; lci++) {
-            if (last_colbuf[lci] == hcol)
-              goto colscanloopend;
-          }
-          last_colbuf[lchead] = hcol;
-          lchead = (lchead + 1) & (NUM_LASTCOLORS - 1);
-        colscanloopend:;
-        }
+        fill_colorhistory(&sys.colors, draw_data, draw_data_end,
+                          sys.draw_state.page);
       }
     }
     if (kRepeat & KEY_DUP)
@@ -1254,7 +1263,8 @@ int main(int argc, char **argv) {
     if (kDown & KEY_Y)
       set_drawstate_tool(&sys.draw_state, TOOL_SLOW);
     if (kHeld & KEY_L && kDown & KEY_R && palette_active) {
-      shift_drawstate_color(&sys.draw_state, DEFAULT_PALETTE_SPLIT);
+      colorsystem_nextpalette(&sys.colors, 1);
+      // shift_drawstate_color(&sys.draw_state, DEFAULT_PALETTE_SPLIT);
     }
     if (kDown & KEY_SELECT) {
       sys.draw_state.layer = (sys.draw_state.layer + 1) % LAYER_COUNT;
@@ -1310,8 +1320,10 @@ int main(int argc, char **argv) {
         break;
       }
     }
+
+    u16 curcol = colorsystem_getcolor(&sys.colors);
     if (kDown & KEY_TOUCH) {
-      pending.color = get_drawstate_color(&sys.draw_state);
+      pending.color = curcol;
       pending.style = sys.draw_state.current_tool->style;
       pending.width = sys.draw_state.current_tool->width;
       pending.layer = sys.draw_state.layer;
@@ -1334,8 +1346,8 @@ int main(int argc, char **argv) {
     if (kRepeat & ~(KEY_TOUCH) || !current_frame) {
       print_status(sys.draw_state.current_tool->width, sys.draw_state.layer,
                    sys.draw_state.zoom_power,
-                   sys.draw_state.current_tool - sys.draw_state.tools,
-                   *sys.draw_state.current_color, sys.draw_state.page);
+                   sys.draw_state.current_tool - sys.draw_state.tools, curcol,
+                   sys.draw_state.page);
     }
 
     touching = (kHeld & KEY_TOUCH) > 0;
@@ -1361,18 +1373,8 @@ int main(int argc, char **argv) {
     // Ignore first frame touches
     else if (touching) {
       if (palette_active) {
-        u8 lcind = 0;
-        int ures = update_paletteindex(&current_touch, &pi, &lcind);
-        if (ures == 1) {
-          sys.draw_state.current_color =
-              sys.draw_state.palette + po * DEFAULT_PALETTE_SPLIT + pi;
+        if (update_paletteselect(&current_touch, &sys.colors))
           close_palette = true;
-        } else if (ures == 2) {
-          try_set_drawstate_color(&sys.draw_state, last_colbuf[lcind],
-                                  PALETTE_COLORS);
-          close_palette = true;
-          // LOGDBG("HISTORIC COLOR: 0x%08x", last_colbuf[lcind]);
-        }
       } else {
         // Keep this outside the if statement below so it can be used for
         // background drawing too (draw commands from other people)
@@ -1467,12 +1469,13 @@ int main(int argc, char **argv) {
 
     draw_layers(layers, LAYER_COUNT, &sys);
     draw_scrollbars(&sys.screen_state);
-    draw_colorpicker(sys.draw_state.palette + po * DEFAULT_PALETTE_SPLIT,
-                     DEFAULT_PALETTE_SPLIT,
-                     sys.draw_state.current_tool->has_static_color
-                         ? DEFAULT_PALETTE_SPLIT + 1
-                         : pi,
-                     !palette_active);
+    draw_colorpicker(&sys.colors, !palette_active);
+    // draw_colorpicker(sys.draw_state.palette + po * DEFAULT_PALETTE_SPLIT,
+    //                  DEFAULT_PALETTE_SPLIT,
+    //                  sys.draw_state.current_tool->has_static_color
+    //                      ? DEFAULT_PALETTE_SPLIT + 1
+    //                      : pi,
+    //                  !palette_active);
 
     C3D_FrameEnd(0);
 
@@ -1481,6 +1484,8 @@ int main(int argc, char **argv) {
   }
 ENDMAINLOOP:;
 
+  free_default_drawstate(&sys.draw_state);
+  colorsystem_free(&sys.colors);
   free_lineringbuffer(&scandata);
   free_linepackage(&pending);
   free(save_filename);
