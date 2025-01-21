@@ -165,7 +165,8 @@ struct ToolData default_tooldata[] = {
     // Slow pen
     {2, LINESTYLE_STROKE, false}};
 
-void init_systemstate_defaults(struct SystemState *state) {
+// Set some default values and malloc anything needed in the SystemState
+void create_defaultsystemstate(struct SystemState *state) {
   state->slow_avg = 0.15;
   state->power_saver = false;
   state->onion_count = DEFAULT_ONIONCOUNT;
@@ -175,34 +176,29 @@ void init_systemstate_defaults(struct SystemState *state) {
   state->colors.palette_size = DEFAULT_PALETTE_SPLIT;
   colorsystem_setcolors(&state->colors, default_palette,
                         sizeof(default_palette) / sizeof(u32));
+  state->draw_state.tools = malloc(sizeof(default_tooldata));
 }
 
 void set_screenstate_defaults(struct ScreenState *state) {
   state->offset_x = 0;
   state->offset_y = 0;
   state->zoom = 1;
-  state->layer_width = LAYER_WIDTH;   // DEFAULT_LAYER_WIDTH;
-  state->layer_height = LAYER_HEIGHT; // DEFAULT_LAYER_HEIGHT;
-  state->screen_width = 320;          // These two should literally never change
-  state->screen_height = 240; // GSP_SCREEN_WIDTH; //GSP_SCREEN_HEIGHT_BOTTOM;
+  state->layer_width = LAYER_WIDTH;
+  state->layer_height = LAYER_HEIGHT;
+  state->screen_width = 320; // These two should literally never change
+  state->screen_height = 240;
   state->screen_color = SCREEN_COLOR;
   state->bg_color = CANVAS_BG_COLOR;
 
   state->layer_visibility = (1 << LAYER_COUNT) - 1; // All visible
 }
 
-void init_default_drawstate(struct DrawState *state) {
+void set_default_drawstate(struct DrawState *state) {
   state->zoom_power = 0;
   state->page = 0;
   state->layer = DEFAULT_START_LAYER;
   state->mode = DRAWMODE_NORMAL;
 
-  // state->palette_count = sizeof(default_palette) / sizeof(u32);
-  // state->palette = malloc(state->palette_count * sizeof(u16));
-  // convert_palette(default_palette, state->palette, state->palette_count);
-  // state->current_color = state->palette + DEFAULT_PALETTE_STARTINDEX;
-
-  state->tools = malloc(sizeof(default_tooldata));
   memcpy(state->tools, default_tooldata, sizeof(default_tooldata));
   state->current_tool = state->tools + TOOL_PENCIL;
 
@@ -211,9 +207,9 @@ void init_default_drawstate(struct DrawState *state) {
 }
 
 // Only really applies to default initialized states
-void free_default_drawstate(struct DrawState *state) {
-  free(state->tools);
-  // free(state->palette);
+void free_defaultsystemstate(struct SystemState *state) {
+  free(state->draw_state.tools);
+  colorsystem_free(&state->colors);
 }
 
 void set_cpadprofile_canvas(struct CpadProfile *profile) {
@@ -840,8 +836,7 @@ void inc_drawstate_mode(struct ScreenState *scrst, struct DrawState *drwst) {
   }
 }
 
-void run_options_menu(struct SystemState *sys) { // struct ScreenState * scrst,
-                                                 // struct DrawState * drwst) {
+void run_options_menu(struct SystemState *sys) {
   char menu[256];
   char visibility[4][3] = {"", "b", "t", "bt"};
   char modes[3][16] = {"Normal", "Animation", "Small Animation"};
@@ -1117,8 +1112,7 @@ EXPORTPAGEEND:;
 #define MAIN_NEWDRAW()                                                         \
   {                                                                            \
     draw_data_end = saved_last = draw_data;                                    \
-    free_default_drawstate(&sys.draw_state);                                   \
-    init_default_drawstate(&sys.draw_state);                                   \
+    set_default_drawstate(&sys.draw_state);                                    \
     sys.colors.index = PALETTE_STARTINDEX;                                     \
     set_screenstate_defaults(&sys.screen_state);                               \
     FLUSH_LAYERS();                                                            \
@@ -1151,12 +1145,10 @@ int main(int argc, char **argv) {
 
   LOGDBG("INITIALIZED")
 
-  // struct DrawState drwst;
-  // struct ScreenState scrst;
   struct SystemState sys;
 
-  init_systemstate_defaults(&sys);
-  init_default_drawstate(&sys.draw_state); // Just in case
+  create_defaultsystemstate(&sys);
+  set_default_drawstate(&sys.draw_state);
   set_screenstate_defaults(&sys.screen_state);
   set_cpadprofile_canvas(&sys.cpad);
 
@@ -1235,11 +1227,6 @@ int main(int argc, char **argv) {
     hidTouchRead(&current_touch);
     hidCircleRead(&pos);
 
-    // u16 po = (sys.draw_state.current_color - sys.draw_state.palette) /
-    //          DEFAULT_PALETTE_SPLIT;
-    // u8 pi = (sys.draw_state.current_color - sys.draw_state.palette) %
-    //         DEFAULT_PALETTE_SPLIT;
-
     // Respond to user input
     if (kDown & KEY_L && !(kHeld & KEY_R)) {
       palette_active = !palette_active;
@@ -1262,10 +1249,8 @@ int main(int argc, char **argv) {
       set_drawstate_tool(&sys.draw_state, TOOL_ERASER);
     if (kDown & KEY_Y)
       set_drawstate_tool(&sys.draw_state, TOOL_SLOW);
-    if (kHeld & KEY_L && kDown & KEY_R && palette_active) {
+    if (kHeld & KEY_L && kDown & KEY_R && palette_active)
       colorsystem_nextpalette(&sys.colors, 1);
-      // shift_drawstate_color(&sys.draw_state, DEFAULT_PALETTE_SPLIT);
-    }
     if (kDown & KEY_SELECT) {
       sys.draw_state.layer = (sys.draw_state.layer + 1) % LAYER_COUNT;
     }
@@ -1323,18 +1308,20 @@ int main(int argc, char **argv) {
 
     u16 curcol = colorsystem_getcolor(&sys.colors);
     if (kDown & KEY_TOUCH) {
-      pending.color = curcol;
+      pending.color = sys.draw_state.current_tool->has_static_color
+                          ? sys.draw_state.current_tool->static_color
+                          : curcol;
       pending.style = sys.draw_state.current_tool->style;
       pending.width = sys.draw_state.current_tool->width;
       pending.layer = sys.draw_state.layer;
     }
     if (kUp & KEY_TOUCH) {
       end_frame = current_frame;
+      // Something of a hack: might get rid of it later.
+      // This makes the palette disappear on selection (if desired)
       if (close_palette) {
         close_palette = false;
-        palette_active =
-            false; // Something of a hack: might get rid of it later.
-                   // This makes the palette disappear on selection
+        palette_active = false;
       }
     }
 
@@ -1484,8 +1471,7 @@ int main(int argc, char **argv) {
   }
 ENDMAINLOOP:;
 
-  free_default_drawstate(&sys.draw_state);
-  colorsystem_free(&sys.colors);
+  free_defaultsystemstate(&sys);
   free_lineringbuffer(&scandata);
   free_linepackage(&pending);
   free(save_filename);

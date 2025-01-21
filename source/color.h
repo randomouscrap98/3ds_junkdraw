@@ -45,7 +45,8 @@ static inline u16 colorsystem_getpaletteoffset(struct ColorSystem *cs) {
 }
 // Set the total color based on offset into current palette
 static inline u16 colorsystem_setpaletteoffset(struct ColorSystem *cs, u16 i) {
-  return colorsystem_getpaletteslot(cs) * cs->palette_size + i;
+  cs->index = colorsystem_getpaletteslot(cs) * cs->palette_size + i;
+  return cs->index;
 }
 
 u32 rgb24_to_rgba32c(u32 rgb);
