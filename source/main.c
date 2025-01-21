@@ -1223,10 +1223,12 @@ int main(int argc, char **argv) {
         while (coldat && coldat < draw_data_end) {
           coldat = datamem_scanstroke(coldat, draw_data_end, MAX_DRAW_DATA,
                                       sys.draw_state.page, &colstroke);
-          if (!colstroke)
+          if (!colstroke) // No more to read
             break;
           // TODO: put this in draw sys as a function
           u16 hcol = chars_to_int(colstroke + 2, 3);
+          if (hcol == 0) // Skip eraser
+            continue;
           for (int lci = 0; lci < NUM_LASTCOLORS; lci++) {
             if (last_colbuf[lci] == hcol)
               goto colscanloopend;
