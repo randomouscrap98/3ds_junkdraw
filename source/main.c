@@ -1457,12 +1457,6 @@ int main(int argc, char **argv) {
     draw_layers(layers, LAYER_COUNT, &sys);
     draw_scrollbars(&sys.screen_state);
     draw_colorpicker(&sys.colors, !palette_active);
-    // draw_colorpicker(sys.draw_state.palette + po * DEFAULT_PALETTE_SPLIT,
-    //                  DEFAULT_PALETTE_SPLIT,
-    //                  sys.draw_state.current_tool->has_static_color
-    //                      ? DEFAULT_PALETTE_SPLIT + 1
-    //                      : pi,
-    //                  !palette_active);
 
     C3D_FrameEnd(0);
 
