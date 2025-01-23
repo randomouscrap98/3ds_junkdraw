@@ -566,10 +566,12 @@ void fill_colorhistory(struct ColorSystem *cs, char *draw_start, char *draw_end,
                        u16 page) {
   char *coldat = draw_start;
   char *colstroke = NULL;
+  u32 history[COLORSYS_HISTORY];
   for (int lci = 0; lci < COLORSYS_HISTORY; lci++) {
-    cs->history[lci] = 0xFFFF;
+    history[lci] = 0xFFFF;
   }
-  int lchead = 0;
+  u16 ihistory = 1; // id counter so newer colors overwrite older
+  u8 histmax = 0;   // maximum color slot filled
   while (coldat && coldat < draw_end) {
     coldat =
         datamem_scanstroke(coldat, draw_end, MAX_DRAW_DATA, page, &colstroke);
@@ -579,13 +581,45 @@ void fill_colorhistory(struct ColorSystem *cs, char *draw_start, char *draw_end,
     u16 hcol = chars_to_int(colstroke + 2, 3);
     if (hcol == 0) // Skip eraser
       continue;
-    for (int lci = 0; lci < COLORSYS_HISTORY; lci++) {
-      if (cs->history[lci] == hcol)
+    u32 hval = hcol | (ihistory << 16);
+    for (int lci = 0; lci < histmax; lci++) {
+      if ((history[lci] & 0xFFFF) == hcol) {
+        history[lci] = hval;
         goto colscanloopend;
+      }
     }
-    cs->history[lchead] = hcol;
-    lchead = (lchead + 1) & (COLORSYS_HISTORY - 1);
+    // Need to add a new color.
+    if (histmax < COLORSYS_HISTORY) { // Simple, have a slot
+      history[histmax++] = hval;
+    } else { // Have to find the oldest color ugh
+      u32 mincol = UINT32_MAX;
+      int imin = 0;
+      for (int lci = 0; lci < COLORSYS_HISTORY; lci++) {
+        if (history[lci] < mincol) {
+          mincol = history[lci];
+          imin = lci;
+        }
+      }
+      history[imin] = hval;
+    }
   colscanloopend:;
+    // No more scanning if too much (don't want to lag)
+    if (ihistory++ == 0xFFFF)
+      break;
+  }
+  // Now we can sort the colors since top 16 bits is recent id
+  for (int i = 1; i < COLORSYS_HISTORY; i++) {
+    u32 x = history[i];
+    int j = i;
+    while (j > 0 && history[j - 1] < x) {
+      history[j] = history[j - 1];
+      j--;
+    }
+    history[j] = x;
+  }
+  // Then history is just lower 16 bits
+  for (int lci = 0; lci < COLORSYS_HISTORY; lci++) {
+    cs->history[lci] = history[lci] & 0xFFFF;
   }
 }
 
