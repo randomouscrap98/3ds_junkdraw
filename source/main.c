@@ -821,16 +821,18 @@ void run_options_menu(struct SystemState *sys) {
   char menu[256];
   char visibility[4][3] = {"", "b", "t", "bt"};
   char modes[3][16] = {"Normal", "Animation", "Small Animation"};
+  char colpickers[2][16] = {"Palette", "RGB"};
   s32 menuopt = 0;
   while (1) {
     // Recreate menu every time, since we have dynamic values. To make life
     // easier, we just sprintf everything into the array with newlines, then
     // replace newlines with 0
     sprintf(menu,
-            "Mode: %s\nOnion layers: %d\nOnion darkness: %.1f\nLayer "
+            "Color Picker: %s\nMode: %s\nOnion layers: %d\nOnion darkness: "
+            "%.1f\nLayer "
             "visibility: %s\nSlow pen friction: %.2f\nPower saving: %s\nExit\n",
-            modes[sys->draw_state.mode], sys->onion_count,
-            sys->onion_blendstart,
+            colpickers[sys->colors.mode], modes[sys->draw_state.mode],
+            sys->onion_count, sys->onion_blendstart,
             visibility[sys->screen_state.layer_visibility], 1 - sys->slow_avg,
             sys->power_saver ? "on" : "off");
     for (int x = strlen(menu); x >= 0; x--) {
@@ -841,29 +843,32 @@ void run_options_menu(struct SystemState *sys) {
         easy_menu("Options", menu, MAINMENU_TOP, 0, menuopt, KEY_B | KEY_START);
     switch (menuopt) {
     case 0:
+      sys->colors.mode = (sys->colors.mode + 1) % COLORSYSMODE_COUNT;
+      break;
+    case 1:
       inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
       break;
-    case 1: // onion layers
+    case 2: // onion layers
       sys->onion_count = (sys->onion_count + 1) % (MAXONION + 1);
       break;
-    case 2: // onion darkness
+    case 3: // onion darkness
       sys->onion_blendstart += 0.1;
       if (sys->onion_blendstart > 0.91) {
         sys->onion_blendstart = 0.1;
       }
       sys->onion_blendend = DCV_MAX(0.01, sys->onion_blendstart - 0.25);
       break;
-    case 3: // layer visibility
+    case 4: // layer visibility
       sys->screen_state.layer_visibility =
           (sys->screen_state.layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
       break;
-    case 4: // slow avg
+    case 5: // slow avg
       sys->slow_avg += 0.05;
       if (sys->slow_avg > 0.51) {
         sys->slow_avg = 0.05;
       }
       break;
-    case 5: // power saver
+    case 6: // power saver
       sys->power_saver = !sys->power_saver;
       osSetSpeedupEnable(!sys->power_saver);
       break;

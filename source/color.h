@@ -5,6 +5,7 @@
 
 #define COLORSYSMODE_PALETTE 0
 #define COLORSYSMODE_RGB 1
+#define COLORSYSMODE_COUNT 2
 
 // THIS MUST BE A POWER OF 2!!
 #define COLORSYS_HISTORY 32
@@ -17,6 +18,9 @@ struct ColorSystem {
   u16 palette_size; // Numer of colors in a single "palette"
   u8 mode;          // Color picking mode
   u16 index;        // If in palette mode, index into colors
+  u8 r;             // Red value if in rgb mode
+  u8 g;             // green value in rgb mode
+  u8 b;             // blue value in rgb mode
 };
 
 // Regardless of the mode, get the current color from the color system
