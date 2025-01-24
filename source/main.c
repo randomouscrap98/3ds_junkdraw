@@ -486,28 +486,6 @@ struct SimpleLine *add_point_to_stroke(struct LinePackage *pending,
   return line;
 }
 
-// Given a touch position (presumably on the color palette), update the selected
-// palette index within the color system. Includes history
-int update_paletteselect(const touchPosition *pos, struct ColorSystem *cs) {
-  u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
-  u16 xind = (pos->px - PALETTE_OFSX) / shift;
-  u16 yind = (pos->py - PALETTE_OFSY) / shift;
-  if (yind < 8) {
-    if (xind < 8) {
-      u16 new_index = (yind << 3) + xind;
-      if (new_index >= 0 && new_index < cs->palette_size) {
-        colorsystem_setpaletteoffset(cs, new_index);
-        return 1;
-      }
-    } else if (xind >= 9 && xind < 9 + (COLORSYS_HISTORY >> 3)) {
-      colorsystem_trysetcolor(
-          cs, cs->history[(yind * (COLORSYS_HISTORY >> 3)) + xind - 9]);
-      return 2;
-    }
-  }
-  return 0;
-}
-
 // Fill the historical colors in colorsystem with colors from the given page.
 void fill_colorhistory(struct ColorSystem *cs, char *draw_start, char *draw_end,
                        u16 page) {
@@ -1346,7 +1324,9 @@ int main(int argc, char **argv) {
     // Ignore first frame touches
     else if (touching) {
       if (palette_active) {
-        if (update_paletteselect(&current_touch, &sys.colors))
+        int action = update_colorpicker(&sys.colors, &current_touch);
+        if (action == 2 ||
+            (action == 1 && sys.colors.mode == COLORSYSMODE_PALETTE))
           close_palette = true;
       } else {
         // Keep this outside the if statement below so it can be used for

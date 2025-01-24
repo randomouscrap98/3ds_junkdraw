@@ -9,10 +9,6 @@ void draw_colorpicker_collapsed(struct ColorSystem *cs) {
                     rgba16_to_rgba32c(colorsystem_getcolor(cs)));
 }
 
-// void draw_colorpicker_palettemode(struct ColorSystem *cs) {
-//
-// }
-
 // Draw (JUST draw) the entire color picker area, which may include other
 // stateful controls
 void draw_colorpicker(struct ColorSystem *cs, bool collapsed) {
@@ -23,10 +19,9 @@ void draw_colorpicker(struct ColorSystem *cs, bool collapsed) {
   } else if (cs->mode == COLORSYSMODE_PALETTE) {
   }
 
-  u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
-  u16 total_width = (9 + (COLORSYS_HISTORY >> 3)) * shift +
-                    (PALETTE_OFSX << 1) + PALETTE_SWATCHMARGIN;
-  u16 total_height = 8 * shift + (PALETTE_OFSY << 1) + PALETTE_SWATCHMARGIN;
+  u16 shift = PALETTE_SHIFT;
+  u16 total_width = PALETTE_INNERW + (PALETTE_OFSX << 1);
+  u16 total_height = PALETTE_INNERH + (PALETTE_OFSY << 1);
   C2D_DrawRectSolid(0, 0, 0.5f, total_width, total_height, PALETTE_BG);
 
   if (cs->mode == COLORSYSMODE_PALETTE) {
@@ -48,8 +43,38 @@ void draw_colorpicker(struct ColorSystem *cs, bool collapsed) {
                         PALETTE_SWATCHWIDTH, PALETTE_SWATCHWIDTH,
                         rgba16_to_rgba32c(palette[i]));
     }
+  } else if (cs->mode == COLORSYSMODE_RGB) {
+    u8 rgbarr[3] = {cs->r, cs->g, cs->b};
+
+    // The sliders
+    for (int i = 0; i < 3; i++) {
+      // Slightly off from center to make it closer to the color list thing
+      C2D_DrawRectSolid(PALETTE_OFSX + (2.5 + 2 * i) * shift -
+                            PALETTE_SWATCHMARGIN * 0.5 - 1,
+                        PALETTE_RGBCLICKSTART, 0.5f, PALETTE_SWATCHMARGIN,
+                        PALETTE_RGBCLICKH * 32 - 1, PALETTE_SLIDERBG);
+      C2D_DrawRectSolid(
+          PALETTE_OFSX + (2 + 2 * i) * shift + PALETTE_SWATCHMARGIN - 1,
+          PALETTE_RGBCLICKSTART + PALETTE_RGBCLICKH * (31 - rgbarr[i]), 0.5f,
+          PALETTE_SWATCHWIDTH, PALETTE_RGBCLICKH - 1, PALETTE_SLIDERBG);
+    }
+
+    for (u16 i = 0; i < 32; i++) {
+      u16 cols[3] = {rgb_to_rgba16(31 - i, cs->g, cs->b),
+                     rgb_to_rgba16(cs->r, 31 - i, cs->b),
+                     rgb_to_rgba16(cs->r, cs->g, 31 - i)};
+
+      for (int j = 0; j < 3; j++) {
+        C2D_DrawRectSolid(PALETTE_OFSX + (1 + 2 * j) * shift +
+                              PALETTE_SWATCHMARGIN,
+                          PALETTE_RGBCLICKSTART + i * PALETTE_RGBCLICKH, 0.5f,
+                          PALETTE_SWATCHWIDTH, PALETTE_RGBCLICKH - 1,
+                          rgba16_to_rgba32c(cols[j]));
+      }
+    }
   }
 
+  // History section, always in the same place
   for (u16 i = 0; i < COLORSYS_HISTORY; i++) {
     // REALLY hope the optimizing compiler fixes this...
     u16 x = i % (COLORSYS_HISTORY >> 3);
@@ -60,4 +85,44 @@ void draw_colorpicker(struct ColorSystem *cs, bool collapsed) {
                       PALETTE_SWATCHWIDTH, PALETTE_SWATCHWIDTH,
                       rgba16_to_rgba32c(cs->history[i]));
   }
+}
+
+// Given a touch position (presumably on the color palette), update the selected
+// palette index within the color system. Includes history
+int update_colorpicker(struct ColorSystem *cs, const touchPosition *pos) {
+  u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
+  u16 xind = (pos->px - PALETTE_OFSX) / shift;
+  u16 yind = (pos->py - PALETTE_OFSY) / shift;
+  if (yind < 8) {
+    if (xind < 8) {
+      if (cs->mode == COLORSYSMODE_PALETTE) {
+        u16 new_index = (yind << 3) + xind;
+        if (new_index >= 0 && new_index < cs->palette_size) {
+          colorsystem_setpaletteoffset(cs, new_index);
+          return 1;
+        }
+      } else if (cs->mode == COLORSYSMODE_RGB) {
+        // THIS WILL OVERFLOW, THAT'S OK!
+        xind = (xind - 1) / 2; // THere's 1 unused slot plus each takes up 2
+        if (xind < 3) {
+          int newval =
+              31 - ((pos->py - PALETTE_RGBCLICKSTART) / PALETTE_RGBCLICKH);
+          if (newval >= 0 && newval < 32) {
+            if (xind == 0)
+              cs->r = newval;
+            if (xind == 1)
+              cs->g = newval;
+            if (xind == 2)
+              cs->b = newval;
+            return 1;
+          }
+        }
+      }
+    } else if (xind >= 9 && xind < 9 + (COLORSYS_HISTORY >> 3)) {
+      u16 setcol = cs->history[(yind * (COLORSYS_HISTORY >> 3)) + xind - 9];
+      if (colorsystem_trysetcolor(cs, setcol))
+        return 2;
+    }
+  }
+  return 0;
 }

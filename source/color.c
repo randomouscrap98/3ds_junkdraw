@@ -5,8 +5,7 @@ u16 colorsystem_getcolor(struct ColorSystem *cs) {
   if (cs->mode == COLORSYSMODE_PALETTE) {
     return cs->colors[cs->index];
   } else if (cs->mode == COLORSYSMODE_RGB) {
-    return 0x8000 | ((cs->r & 0b11111) << 10) | ((cs->g & 0b11111) << 5) |
-           (cs->b & 0b11111);
+    return rgb_to_rgba16(cs->r, cs->g, cs->b);
   }
   return 0;
 }
@@ -48,6 +47,7 @@ int colorsystem_trysetcolor(struct ColorSystem *cs, u16 color) {
     cs->r = (color >> 10) & 0b11111;
     cs->g = (color >> 5) & 0b11111;
     cs->b = (color) & 0b11111;
+    return 1;
   }
   return 0;
 }

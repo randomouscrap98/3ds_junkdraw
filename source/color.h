@@ -53,6 +53,11 @@ static inline u16 colorsystem_setpaletteoffset(struct ColorSystem *cs, u16 i) {
   return cs->index;
 }
 
+// Convert rgb (in the 0 to 31 range) to a true rgb
+static inline u16 rgb_to_rgba16(u8 r, u8 g, u8 b) {
+  return 0x8000 | ((r & 0b11111) << 10) | ((g & 0b11111) << 5) | (b & 0b11111);
+}
+
 u32 rgb24_to_rgba32c(u32 rgb);
 u32 rgba32c_to_rgba16c_32(u32 val);
 u16 rgba32c_to_rgba16c(u32 val);

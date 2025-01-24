@@ -3,7 +3,7 @@
 
 #include <3ds.h>
 
-#define VERSION "0.4.1"
+#define VERSION "0.4.2_p1"
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE "saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE "screenshots/"
