@@ -18,15 +18,7 @@
 #define CANVAS_LAYER_COLOR C2D_Color32(0, 0, 0, 0)
 
 #define PALETTE_COLORS 64
-#define PALETTE_SWATCHWIDTH 18
-#define PALETTE_SWATCHMARGIN 2
-#define PALETTE_SELECTED_COLOR C2D_Color32f(1, 0, 0, 1)
-#define PALETTE_BG C2D_Color32f(0.3, 0.3, 0.3, 1)
 #define PALETTE_STARTINDEX 1
-#define PALETTE_MINISIZE 10
-#define PALETTE_MINIPADDING 1
-#define PALETTE_OFSX 10
-#define PALETTE_OFSY 10
 
 #define MAINMENU_TOP 6 // Where to put the menu?
 #define MAINMENU_TITLE "Main menu:"
