@@ -1,11 +1,17 @@
 #include "color.h"
+// #include <math.h>
 #include <stdlib.h>
 
 u16 colorsystem_getcolor(struct ColorSystem *cs) {
   if (cs->mode == COLORSYSMODE_PALETTE) {
-    return cs->colors[cs->index];
+    if (cs->index < cs->num_colors)
+      return cs->colors[cs->index];
+    else
+      return cs->forcecolor;
   } else if (cs->mode == COLORSYSMODE_RGB) {
     return rgb_to_rgba16(cs->r, cs->g, cs->b);
+  } else if (cs->mode == COLORSYSMODE_AUTOPALETTE) {
+    return cs->forcecolor;
   }
   return 0;
 }
@@ -43,10 +49,17 @@ int colorsystem_trysetcolor(struct ColorSystem *cs, u16 color) {
         return 1;
       }
     }
+    // FORCE the setting of the color if not found
+    cs->forcecolor = color;
+    cs->index = 65535;
+    return 1;
   } else if (cs->mode == COLORSYSMODE_RGB) {
     cs->r = (color >> 10) & 0b11111;
     cs->g = (color >> 5) & 0b11111;
     cs->b = (color) & 0b11111;
+    return 1;
+  } else if (cs->mode == COLORSYSMODE_AUTOPALETTE) {
+    cs->forcecolor = color;
     return 1;
   }
   return 0;
@@ -132,3 +145,24 @@ void convert_palette(u32 * original, u16 * destination, u16 size)
    for(int i = 0; i < size; i++)
       destination[i] = rgba32c_to_rgba16(rgb24_to_rgba32c(original[i]));
 }
+
+// u32 hsv_to_rgb24(float h, float s, float v){
+//     float r, g, b;
+// 
+//     int i = floor(h * 6);
+//     float f = h * 6 - i;
+//     float p = v * (1 - s);
+//     float q = v * (1 - f * s);
+//     float t = v * (1 - (1 - f) * s);
+// 
+//     switch(i % 6){
+//         case 0: r = v, g = t, b = p; break;
+//         case 1: r = q, g = v, b = p; break;
+//         case 2: r = p, g = v, b = t; break;
+//         case 3: r = p, g = q, b = v; break;
+//         case 4: r = t, g = p, b = v; break;
+//         case 5: r = v, g = p, b = q; break;
+//     }
+// 
+//     return (((u32)(r * 255) & 255) << 16) | (((u32)(g * 255) & 255) << 8) | ((u32)(b * 255) & 255);
+// }

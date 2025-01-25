@@ -16,7 +16,6 @@ void draw_colorpicker(struct ColorSystem *cs, bool collapsed) {
   if (collapsed) {
     draw_colorpicker_collapsed(cs);
     return;
-  } else if (cs->mode == COLORSYSMODE_PALETTE) {
   }
 
   u16 shift = PALETTE_SHIFT;
@@ -71,6 +70,32 @@ void draw_colorpicker(struct ColorSystem *cs, bool collapsed) {
                           PALETTE_SWATCHWIDTH, PALETTE_RGBCLICKH - 1,
                           rgba16_to_rgba32c(cols[j]));
       }
+    }
+  } else if (cs->mode == COLORSYSMODE_AUTOPALETTE) {
+    // u16 col = 0x8000;
+    for (u16 i = 0; i < 32768; i++) {
+      // TODO: an implicit 32 wide thing
+      u16 x = i % 181; //& 255;
+      u16 y = i / 181; //>> 3;
+
+      // if ((i & 0xFFF) == 0) {
+      //   C3D_FrameEnd(0);
+      //   C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+      // }
+
+      // if (i == selected_index) {
+      //   C2D_DrawRectSolid(PALETTE_OFSX + x * shift, PALETTE_OFSY + y * shift,
+      //                     0.5f, shift, shift, PALETTE_SELECTED_COLOR);
+      // }
+
+      C2D_DrawRectSolid(PALETTE_OFSX + x, PALETTE_OFSY + y, 0.5f, 1, 1,
+                        rgba16_to_rgba32c(0x8000 + i));
+      // C2D_DrawRectSolid(PALETTE_RGBCLICKSTART + x * PALETTE_RGBCLICKH,
+      //                   PALETTE_RGBCLICKSTART + y * PALETTE_RGBCLICKH, 0.5f,
+      //                   PALETTE_RGBCLICKH - 1, PALETTE_RGBCLICKH - 1,
+      //                   rgba16_to_rgba32c(col));
+      // // col = 0x8000 + ((col + 273) & 32767);
+      // col = 0x8000 + ((col + 273) & 32767);
     }
   }
 
