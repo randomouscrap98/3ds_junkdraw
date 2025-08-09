@@ -1095,6 +1095,8 @@ EXPORTPAGEEND:;
     if (kHeld & KEY_R) {                                                       \
       sys.draw_state.page = UTILS_CLAMP(                                       \
           sys.draw_state.page + x * ((kHeld & KEY_L) ? 10 : 1), 0, MAX_PAGE);  \
+      reset_ringstack(&undostack);                                             \
+      reset_ringstack(&redostack);                                             \
       FLUSH_LAYERS();                                                          \
     } else {                                                                   \
       sys.draw_state.zoom_power = UTILS_CLAMP(sys.draw_state.zoom_power + x,   \
@@ -1189,8 +1191,9 @@ int main(int argc, char **argv) {
     LOGDBG("ERR: COULD NOT INIT LRB PENDING");
   }
 
-  struct UndoRingStack undostack;
-  init_undoringstack(&undostack, MAX_UNDO);
+  struct RingStack undostack, redostack;
+  init_ringstack(&undostack, MAX_UNDO);
+  init_ringstack(&redostack, MAX_UNDO);
   if (!undostack.positions) {
     LOGDBG("ERR: COULD NOT INIT UNDOBUFFER");
   }
@@ -1246,12 +1249,28 @@ int main(int argc, char **argv) {
       shift_drawstate_width(&sys.draw_state, -(kHeld & KEY_R ? 5 : 1));
     if (kDown & KEY_A) {
       if (kHeld & KEY_R) {
+        char *redo = ringstack_pop(&redostack);
+        if (redo != NULL) {
+          ringstack_push(&undostack, draw_data_end);
+          draw_data_end = redo;
+          FLUSH_LAYERS();
+        } else {
+          LOGDBG("ERR: No redos in buffer!\n");
+        }
       } else {
         set_drawstate_tool(&sys.draw_state, TOOL_PENCIL);
       }
     }
     if (kDown & KEY_B) {
       if (kHeld & KEY_R) {
+        char *undo = ringstack_pop(&undostack);
+        if (undo != NULL) {
+          ringstack_push(&redostack, draw_data_end);
+          draw_data_end = undo;
+          FLUSH_LAYERS();
+        } else {
+          LOGDBG("ERR: No undos in buffer!\n");
+        }
       } else {
         set_drawstate_tool(&sys.draw_state, TOOL_ERASER);
       }
@@ -1317,6 +1336,8 @@ int main(int argc, char **argv) {
 
     u16 curcol = colorsystem_getcolor(&sys.colors);
     if (kDown & KEY_TOUCH) {
+      reset_ringstack(&redostack);
+      ringstack_push(&undostack, draw_data_end);
       pending.color = sys.draw_state.current_tool->has_static_color
                           ? sys.draw_state.current_tool->static_color
                           : curcol;
@@ -1339,7 +1360,7 @@ int main(int argc, char **argv) {
       set_screenstate_zoom(&sys.screen_state,
                            pow(2, sys.draw_state.zoom_power));
 
-    if (kRepeat & ~(KEY_TOUCH) || !current_frame) {
+    if (kRepeat & ~(KEY_TOUCH) || !current_frame || (kUp & KEY_TOUCH)) {
       print_status(sys.draw_state.current_tool->width, sys.draw_state.layer,
                    sys.draw_state.zoom_power,
                    sys.draw_state.current_tool - sys.draw_state.tools, curcol,
@@ -1478,7 +1499,8 @@ ENDMAINLOOP:;
 
   free_defaultsystemstate(&sys);
   free_lineringbuffer(&scandata);
-  free_undoringstack(&undostack);
+  free_ringstack(&undostack);
+  free_ringstack(&redostack);
   free_linepackage(&pending);
   free(save_filename);
   free(draw_data);
