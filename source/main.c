@@ -1177,6 +1177,7 @@ int main(int argc, char **argv) {
   u32 current_frame = 0;
   u32 end_frame = 0;
   s8 last_zoom_power = 0;
+  char tempc; // Used for anything, very short life
 
   struct LinePackage pending;
   init_linepackage(&pending);
@@ -1256,8 +1257,8 @@ int main(int argc, char **argv) {
           ringstack_push(&undostack, draw_data_end);
           draw_data_end = redo;
           FLUSH_LAYERS();
-        } else {
-          LOGDBG("ERR: No redos in buffer!\n");
+          // } else {
+          //   LOGDBG("ERR: No redos in buffer!\n");
         }
       } else {
         set_drawstate_tool(&sys.draw_state, TOOL_PENCIL);
@@ -1270,8 +1271,8 @@ int main(int argc, char **argv) {
           ringstack_push(&redostack, draw_data_end);
           draw_data_end = undo;
           FLUSH_LAYERS();
-        } else {
-          LOGDBG("ERR: No undos in buffer!\n");
+          // } else {
+          //   LOGDBG("ERR: No undos in buffer!\n");
         }
       } else {
         set_drawstate_tool(&sys.draw_state, TOOL_ERASER);
@@ -1296,11 +1297,13 @@ int main(int argc, char **argv) {
           MAIN_NEWDRAW();
         break;
       case MAINMENU_SAVE:
+        tempc = *draw_data_end;
         *draw_data_end = 0;
         if (save_drawing(save_filename, draw_data) == 0) {
           saved_last = draw_data_end;
           PRINT_DATAUSAGE(); // Should this be out in the main loop?
         }
+        *draw_data_end = tempc;
         break;
       case MAINMENU_LOAD:
         if (MAIN_UNSAVEDCHECK(
@@ -1338,8 +1341,10 @@ int main(int argc, char **argv) {
 
     u16 curcol = colorsystem_getcolor(&sys.colors);
     if (kDown & KEY_TOUCH) {
-      reset_ringstack(&redostack);
-      ringstack_push(&undostack, draw_data_end);
+      if (!palette_active) {
+        reset_ringstack(&redostack);
+        ringstack_push(&undostack, draw_data_end);
+      }
       pending.color = sys.draw_state.current_tool->has_static_color
                           ? sys.draw_state.current_tool->static_color
                           : curcol;
