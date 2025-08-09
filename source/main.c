@@ -27,6 +27,7 @@ u32 __stacksize__ = 512 * 1024;
 #include "filesys.h"
 #include "input.h"
 #include "render_palette.h"
+#include "undo.h"
 // #include "my3ds.h"
 
 #include "setup.h"
@@ -747,12 +748,12 @@ void print_data(char *data, char *dataptr, char *saveptr) {
   char numbers[51];
   sprintf(numbers, "%ld %ld  %s(%05.2f%%)", unsaved, datasize, active_x1b,
           percent);
-  printf("\x1b[28;1H%s %s%*s", status_x1b, numbers,
+  printf("\x1b[28;1H%s%s%*s", status_x1b, numbers,
          PRINTDATA_WIDTH - (strlen(numbers) - strlen(active_x1b)), "");
 }
 
 void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color,
-                  u16 page) {
+                  u16 page, u16 undosize) {
   char tool_chars[TOOL_COUNT + 1];
   strcpy(tool_chars, TOOL_CHARS);
 
@@ -762,7 +763,7 @@ void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color,
   char activebg_x1b[PSX1BLEN];
   get_printmods(status_x1b, active_x1b, statusbg_x1b, activebg_x1b);
 
-  printf("\x1b[30;1H%s W:%s%02d%s L:", status_x1b, active_x1b, width,
+  printf("\x1b[30;1H%sW:%s%02d%s L:", status_x1b, active_x1b, width,
          status_x1b);
   char layernames[] =
       LAYER_CHARS; // apparently layer 1 is the top, but we display it backwards
@@ -782,7 +783,8 @@ void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color,
   for (u8 i = 0; i < TOOL_COUNT; i++)
     printf("%s%c", i == tool ? activebg_x1b : active_x1b, tool_chars[i]);
   printf("%s P:%s%03d", status_x1b, active_x1b, page + 1);
-  printf("%s C:%s%#06x", status_x1b, active_x1b, color);
+  printf("%s C:%s#%04x", status_x1b, active_x1b, color);
+  printf("%s U:%s%02d", status_x1b, active_x1b, undosize);
 }
 
 void print_time(bool showcolon) {
@@ -792,7 +794,7 @@ void print_time(bool showcolon) {
   time_t rawtime = time(NULL);
   struct tm *timeinfo = localtime(&rawtime);
 
-  printf("\x1b[30;45H%s%02d%c%02d", status_x1b, timeinfo->tm_hour,
+  printf("\x1b[30;46H%s%02d%c%02d", status_x1b, timeinfo->tm_hour,
          showcolon ? ':' : ' ', timeinfo->tm_min);
 }
 
@@ -1187,6 +1189,12 @@ int main(int argc, char **argv) {
     LOGDBG("ERR: COULD NOT INIT LRB PENDING");
   }
 
+  struct UndoRingStack undostack;
+  init_undoringstack(&undostack, MAX_UNDO);
+  if (!undostack.positions) {
+    LOGDBG("ERR: COULD NOT INIT UNDOBUFFER");
+  }
+
   char *save_filename = malloc(MAX_FILENAME * sizeof(char));
   char *draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
   char *stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
@@ -1236,10 +1244,18 @@ int main(int argc, char **argv) {
       shift_drawstate_width(&sys.draw_state, (kHeld & KEY_R ? 5 : 1));
     if (kRepeat & KEY_DLEFT)
       shift_drawstate_width(&sys.draw_state, -(kHeld & KEY_R ? 5 : 1));
-    if (kDown & KEY_A)
-      set_drawstate_tool(&sys.draw_state, TOOL_PENCIL);
-    if (kDown & KEY_B)
-      set_drawstate_tool(&sys.draw_state, TOOL_ERASER);
+    if (kDown & KEY_A) {
+      if (kHeld & KEY_R) {
+      } else {
+        set_drawstate_tool(&sys.draw_state, TOOL_PENCIL);
+      }
+    }
+    if (kDown & KEY_B) {
+      if (kHeld & KEY_R) {
+      } else {
+        set_drawstate_tool(&sys.draw_state, TOOL_ERASER);
+      }
+    }
     if (kDown & KEY_Y)
       set_drawstate_tool(&sys.draw_state, TOOL_SLOW);
     if (kHeld & KEY_L && kDown & KEY_R && palette_active)
@@ -1327,7 +1343,7 @@ int main(int argc, char **argv) {
       print_status(sys.draw_state.current_tool->width, sys.draw_state.layer,
                    sys.draw_state.zoom_power,
                    sys.draw_state.current_tool - sys.draw_state.tools, curcol,
-                   sys.draw_state.page);
+                   sys.draw_state.page, undostack.size);
     }
 
     touching = (kHeld & KEY_TOUCH) > 0;
@@ -1462,6 +1478,7 @@ ENDMAINLOOP:;
 
   free_defaultsystemstate(&sys);
   free_lineringbuffer(&scandata);
+  free_undoringstack(&undostack);
   free_linepackage(&pending);
   free(save_filename);
   free(draw_data);

@@ -3,7 +3,7 @@
 
 #include <3ds.h>
 
-#define VERSION "0.4.2_p2"
+#define VERSION "0.4.3_p1"
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE "saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE "screenshots/"
@@ -65,6 +65,9 @@
 
 #define BREPEAT_DELAY 20
 #define BREPEAT_INTERVAL 7
+
+// Undo
+#define MAX_UNDO 99
 
 // Release mode is a special mode
 // #define RELEASE
