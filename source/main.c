@@ -1108,6 +1108,8 @@ EXPORTPAGEEND:;
 
 #define MAIN_NEWDRAW()                                                         \
   {                                                                            \
+    reset_ringstack(&undostack);                                               \
+    reset_ringstack(&redostack);                                               \
     draw_data_end = saved_last = draw_data;                                    \
     set_default_drawstate(&sys.draw_state);                                    \
     sys.colors.index = PALETTE_STARTINDEX;                                     \
