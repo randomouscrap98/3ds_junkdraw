@@ -23,8 +23,9 @@ I'm sorry in advance.
 * **LEFT/RIGHT** : change brush width
 * **R+L** : change palette (the default is the one that starts with bright red followed by black)
 * **R+LEFT/RIGHT** : REALLY change brush width
-* **R+UP/DOWN** : change page (can have thousands)
+* **R+UP/DOWN** : change page (can have hundreds)
 * **R+L+UP/DOWN** : REALLY change page (please don't do this)
+* **R+B/R+A** : Undo / Redo. Changing pages resets undo buffer
 
 ## Debugging
 It's difficult to debug on the 3DS. As such, if you need to inspect the drawing data at a granular
