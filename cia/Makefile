@@ -3,6 +3,8 @@
 MYGAME=3ds_junkdraw
 
 all: cxitool makerom ../${MYGAME}.3dsx
+	./cxitool ../${MYGAME}.3dsx ${MYGAME}.cxi
+	./makerom -v -f cia -o ${MYGAME}.cia -target t -i ${MYGAME}.cxi:0:0 # -ignoresig
 	echo "Done"
 
 cxitool: 3dstools
@@ -15,7 +17,7 @@ cxitool: 3dstools
 
 makerom: Project_CTR
 	cd Project_CTR/makerom && make deps && make
-	cp Project_CTR/makerom/makerom .
+	cp Project_CTR/makerom/bin/makerom .
 
 Project_CTR:
 	git clone https://github.com/3DSGuy/Project_CTR.git
