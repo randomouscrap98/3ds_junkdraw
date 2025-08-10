@@ -1,5 +1,4 @@
 #include "color.h"
-// #include <math.h>
 #include <stdlib.h>
 
 u16 colorsystem_getcolor(struct ColorSystem *cs) {

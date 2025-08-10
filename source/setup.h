@@ -1,7 +1,13 @@
 #ifndef __SETUP_HEADER_
 #define __SETUP_HEADER_
 
+// NOTE: this is meant to included only once, in main!
+
 #include <3ds.h>
+#include <stdarg.h>
+#include <stdio.h>
+
+#include "log.h"
 
 #define VERSION "0.4.4_p1"
 #define FOLDER_BASE "/3ds/junkdraw/"
@@ -76,60 +82,44 @@
 // individually compiled portion of this app. Probably not the right way to do
 // this.
 
+// Uncomment for much more logging
+// #define TRACE_PRINT
+
 #ifdef RELEASE
 // Put anything that goes specifically for release in here
 #else
 // Put everything for debug mode in here
 #define DEBUG_PRINT
-#define DEBUG_PRINT_TIME
 #define DEBUG_RUNTESTS
-
-#define DEBUG_PRINT_MINROW 21
-#define DEBUG_PRINT_ROWS 5
-
-extern u8 _db_prnt_row; // What the hell is this
-#define DEBUG_PRINT_SPECIAL()                                                  \
-  {                                                                            \
-    printf("\x1b[%d;1H\x1b[33m", _db_prnt_row + DEBUG_PRINT_MINROW);           \
-    _db_prnt_row = (_db_prnt_row + 1) % DEBUG_PRINT_ROWS;                      \
-  }
-
 #endif
 
 // -------- LOGGING ----------
 
-#ifdef DEBUG_PRINT_TIME
-#define LOGTIME()                                                              \
-  {                                                                            \
-    time_t rawtime = time(NULL);                                               \
-    struct tm *timeinfo = localtime(&rawtime);                                 \
-    printf("[%02d:%02d:%02d] ", timeinfo->tm_hour, timeinfo->tm_min,           \
-           timeinfo->tm_sec);                                                  \
-  }
-#else
-#define LOGTIME()
-#endif
+#define DEBUG_PRINT_MINROW 21
+#define DEBUG_PRINT_ROWS 5
+
+#define LOGBASE(fmt)                                                           \
+  va_list args;                                                                \
+  va_start(args, fmt);                                                         \
+  static u8 _db_prnt_row;                                                      \
+  printf("\x1b[%d;1H\x1b[33m", _db_prnt_row + DEBUG_PRINT_MINROW);             \
+  _db_prnt_row = (_db_prnt_row + 1) % DEBUG_PRINT_ROWS;                        \
+  time_t rawtime = time(NULL);                                                 \
+  struct tm *timeinfo = localtime(&rawtime);                                   \
+  printf("[%02d:%02d:%02d] ", timeinfo->tm_hour, timeinfo->tm_min,             \
+         timeinfo->tm_sec);                                                    \
+  vprintf(fmt, args);                                                          \
+  va_end(args);
 
 #ifdef DEBUG_PRINT
-#ifdef DEBUG_PRINT_SPECIAL
-#undef LOGDBG
-#define LOGDBG(f_, ...)                                                        \
-  {                                                                            \
-    DEBUG_PRINT_SPECIAL();                                                     \
-    LOGTIME();                                                                 \
-    printf((f_), ##__VA_ARGS__);                                               \
-  }
+void LOGDBG(const char *fmt, ...) { LOGBASE(fmt); }
 #else
-#undef LOGDBG
-#define LOGDBG(f_, ...)                                                        \
-  {                                                                            \
-    LOGTIME();                                                                 \
-    printf((f_), ##__VA_ARGS__);                                               \
-  }
+void LOGDBG(const char *fmt, ...) {}
 #endif
+#ifdef TRACE_PRINT
+void LOGTRACE(const char *fmt, ...) { LOGBASE(fmt); }
 #else
-#undef LOGDBG
-#define LOGDBG(f_, ...)
+void LOGTRACE(const char *fmt, ...) {}
 #endif
 
 #endif

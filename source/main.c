@@ -35,6 +35,7 @@ u32 __stacksize__ = 512 * 1024;
 #include "undo.h"
 // #include "my3ds.h"
 
+#include "log.h"
 #include "setup.h"
 #include "system.h"
 
@@ -203,7 +204,8 @@ struct ToolData default_tooldata[] = {
 
 // Set some default values and malloc anything needed in the SystemState
 void create_defaultsystemstate(struct SystemState *state) {
-  set_default_settings(state);
+  load_settings(state, SETTINGS_PATH);
+  // set_default_settings(state);
   // state->slow_avg = 0.15;
   // state->power_saver = false;
   // state->onion_count = DEFAULT_ONIONCOUNT;
@@ -1151,7 +1153,7 @@ int main(int argc, char **argv) {
   consoleInit(GFX_TOP, NULL);
   C3D_RenderTarget *screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
-  LOGDBG("INITIALIZED")
+  LOGDBG("INITIALIZED");
 
   struct SystemState sys;
 
