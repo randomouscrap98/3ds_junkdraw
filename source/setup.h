@@ -3,10 +3,11 @@
 
 #include <3ds.h>
 
-#define VERSION "0.4.3_p2"
+#define VERSION "0.4.4_p1"
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE "saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE "screenshots/"
+#define SETTINGS_PATH FOLDER_BASE "settings.ini"
 
 // UI stuff
 #define SCROLL_WIDTH 3
@@ -22,7 +23,6 @@
 
 #define MAINMENU_TOP 6 // Where to put the menu?
 #define MAINMENU_TITLE "Main menu:"
-// #define MAINMENU_ITEMS(animon) "New\0Save\0Load\0Export PNG\0"(animon)
 #define MAINMENU_ITEMS                                                         \
   "New\0Save\0Load\0Export PNG\0Export GIF\0Options\0Exit App\0"
 #define MAINMENU_NEW 0

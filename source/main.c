@@ -1,3 +1,4 @@
+#include "settings.h"
 #include <3ds.h>
 
 u32 __stacksize__ = 512 * 1024;
@@ -16,6 +17,9 @@ u32 __stacksize__ = 512 * 1024;
 #define MSF_GIF_IMPL
 #include <msf_gif.h>
 
+#define INI_IMPLEMENTATION
+#include <ini.h>
+
 // #define DEBUG_COORD
 // #define DEBUG_DATAPRINT
 // #define DEBUG_IGNORERECT
@@ -27,6 +31,7 @@ u32 __stacksize__ = 512 * 1024;
 #include "filesys.h"
 #include "input.h"
 #include "render_palette.h"
+#include "settings.h"
 #include "undo.h"
 // #include "my3ds.h"
 
@@ -198,12 +203,14 @@ struct ToolData default_tooldata[] = {
 
 // Set some default values and malloc anything needed in the SystemState
 void create_defaultsystemstate(struct SystemState *state) {
-  state->slow_avg = 0.15;
-  state->power_saver = false;
-  state->onion_count = DEFAULT_ONIONCOUNT;
-  state->onion_blendstart = DEFAULT_ONIONBLENDSTART;
-  state->onion_blendend = DEFAULT_ONIONBLENDEND;
-  memset(&state->colors, 0, sizeof(struct ColorSystem));
+  set_default_settings(state);
+  // state->slow_avg = 0.15;
+  // state->power_saver = false;
+  // state->onion_count = DEFAULT_ONIONCOUNT;
+  // state->onion_blendstart = DEFAULT_ONIONBLENDSTART;
+  // state->onion_blendend = DEFAULT_ONIONBLENDEND;
+  colorsystem_init(&state->colors);
+  // memset(&state->colors, 0, sizeof(struct ColorSystem));
   state->colors.palette_size = DEFAULT_PALETTE_SPLIT;
   colorsystem_setcolors(&state->colors, default_palette,
                         sizeof(default_palette) / sizeof(u32));
@@ -831,6 +838,7 @@ void run_options_menu(struct SystemState *sys) {
   char visibility[][3] = {"", "b", "t", "bt"};
   char modes[][16] = {"Normal", "Animation", "Small Animation"};
   char colpickers[][16] = {"Palette", "RGB", "Auto Palette"};
+  float newonionstart;
   s32 menuopt = 0;
   while (1) {
     // Recreate menu every time, since we have dynamic values. To make life
@@ -861,11 +869,12 @@ void run_options_menu(struct SystemState *sys) {
       sys->onion_count = (sys->onion_count + 1) % (MAXONION + 1);
       break;
     case 3: // onion darkness
-      sys->onion_blendstart += 0.1;
-      if (sys->onion_blendstart > 0.91) {
-        sys->onion_blendstart = 0.1;
+      newonionstart = sys->onion_blendstart + 0.1;
+      set_systemstate_onionstart(sys, newonionstart);
+      // We hit some preset cap, so reset to bottom
+      if (fabs(newonionstart - sys->onion_blendstart) > 0.01) {
+        set_systemstate_onionstart(sys, 0.1);
       }
-      sys->onion_blendend = DCV_MAX(0.01, sys->onion_blendstart - 0.25);
       break;
     case 4: // layer visibility
       sys->screen_state.layer_visibility =

@@ -2,6 +2,7 @@
 #define __HEADER_COLOR
 
 #include <3ds.h>
+#include <string.h>
 
 #define COLORSYSMODE_PALETTE 0
 #define COLORSYSMODE_RGB 1
@@ -24,6 +25,10 @@ struct ColorSystem {
   u8 b;             // blue value in rgb mode
   u16 forcecolor;   // For anything that just has a color, no index
 };
+
+static inline void colorsystem_init(struct ColorSystem *cs) {
+  memset(cs, 0, sizeof(struct ColorSystem));
+}
 
 // Regardless of the mode, get the current color from the color system
 u16 colorsystem_getcolor(struct ColorSystem *cs);

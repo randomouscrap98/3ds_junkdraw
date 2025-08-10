@@ -25,9 +25,9 @@ void delete_layer(struct LayerData page);
 // -------------- SCREEN --------------
 
 #define MAXONION 3
-#define DEFAULT_ONIONCOUNT 3
-#define DEFAULT_ONIONBLENDSTART 0.3
-#define DEFAULT_ONIONBLENDEND 0.05
+// #define DEFAULT_ONIONCOUNT 3
+// #define DEFAULT_ONIONBLENDSTART 0.3
+// #define DEFAULT_ONIONBLENDEND 0.05
 
 // Variables for modifying display of drawing
 struct ScreenState {
@@ -114,5 +114,16 @@ struct SystemState {
   struct CpadProfile cpad;
   struct ColorSystem colors;
 };
+
+static inline void set_systemstate_onionstart(struct SystemState *sys,
+                                              float start) {
+  // TODO: some magic numbers, what are they?
+  sys->onion_blendstart = start;
+  if (sys->onion_blendstart > 0.91)
+    sys->onion_blendstart = 0.91;
+  sys->onion_blendend = sys->onion_blendstart - 0.25;
+  if (sys->onion_blendend < 0.01)
+    sys->onion_blendend = 0.01;
+}
 
 #endif
