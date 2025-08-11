@@ -841,6 +841,7 @@ void run_options_menu(struct SystemState *sys) {
   char colpickers[][16] = {"Palette", "RGB", "Auto Palette"};
   float newonionstart;
   s32 menuopt = 0;
+  bool settings_changed = false;
   while (1) {
     // Recreate menu every time, since we have dynamic values. To make life
     // easier, we just sprintf everything into the array with newlines, then
@@ -848,7 +849,8 @@ void run_options_menu(struct SystemState *sys) {
     sprintf(menu,
             "Color Picker: %s\nMode: %s\nOnion layers: %d\nOnion darkness: "
             "%.1f\nLayer "
-            "visibility: %s\nSlow pen friction: %.2f\nPower saving: %s\nExit\n",
+            "visibility: %s\nSlow pen friction: %.2f\nPower saving: %s\nReset "
+            "to defaults\nExit\n",
             colpickers[sys->colors.mode], modes[sys->draw_state.mode],
             sys->onion_count, sys->onion_blendstart,
             visibility[sys->screen_state.layer_visibility], 1 - sys->slow_avg,
@@ -861,15 +863,19 @@ void run_options_menu(struct SystemState *sys) {
         easy_menu("Options", menu, MAINMENU_TOP, 0, menuopt, KEY_B | KEY_START);
     switch (menuopt) {
     case 0:
+      settings_changed = true;
       sys->colors.mode = (sys->colors.mode + 1) % COLORSYSMODE_COUNT;
       break;
     case 1:
+      settings_changed = true;
       inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
       break;
     case 2: // onion layers
+      settings_changed = true;
       sys->onion_count = (sys->onion_count + 1) % (MAXONION + 1);
       break;
     case 3: // onion darkness
+      settings_changed = true;
       newonionstart = sys->onion_blendstart + 0.1;
       set_systemstate_onionstart(sys, newonionstart);
       // We hit some preset cap, so reset to bottom
@@ -878,25 +884,34 @@ void run_options_menu(struct SystemState *sys) {
       }
       break;
     case 4: // layer visibility
+      settings_changed = true;
       sys->screen_state.layer_visibility =
           (sys->screen_state.layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
       break;
     case 5: // slow avg
+      settings_changed = true;
       sys->slow_avg += 0.05;
       if (sys->slow_avg > 0.51) {
         sys->slow_avg = 0.05;
       }
       break;
     case 6: // power saver
+      settings_changed = true;
       sys->power_saver = !sys->power_saver;
       osSetSpeedupEnable(!sys->power_saver);
       break;
+    case 7: // defaults
+      settings_changed = true;
+      set_default_settings(sys);
+      break;
     default:
-      PRINTINFO("Saving settings...");
-      if (save_settings(sys, SETTINGS_PATH) != 0) {
-        LOGDBG("ERR: Can't save settings!");
+      if (settings_changed) {
+        PRINTINFO("Saving settings...");
+        if (save_settings(sys, SETTINGS_PATH) != 0) {
+          LOGDBG("ERR: Can't save settings!");
+        }
+        PRINTCLEAR();
       }
-      PRINTCLEAR();
       return;
     }
   }
