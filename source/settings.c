@@ -4,6 +4,7 @@
 #include "settings.h"
 #include "system.h"
 
+#define DEFAULTKEY "default"
 #define SLOWAVGKEY "slow_avg"
 #define POWERSAVEKEY "power_saver"
 #define ONIONCOUNTKEY "onion_count"
@@ -12,18 +13,9 @@
 
 #define MAXSETTINGSREAD 2048
 
-// TODO: get rid of this later
-// #include "console.h"
-
 void load_settings_raw(struct SystemState *sys, char *settings) {
-  // printf("%s\n", settings);
-  // printf_flush("\x1b[%d;1H%-150s\x1b[%d;2H\x1b[%dmSettings len: %d", 6, "",
-  // 6,
-  //              33, strlen(settings));
-  // while (1) {
-  // }
   ini_t ini = ini_parse_str(settings, NULL);
-  initable_t *iniroot = ini_get_table(&ini, INI_ROOT);
+  initable_t *iniroot = ini_get_table(&ini, DEFAULTKEY);
   sys->slow_avg = (float)ini_as_num(ini_get(iniroot, SLOWAVGKEY));
   sys->power_saver = (bool)ini_as_int(ini_get(iniroot, POWERSAVEKEY));
   sys->onion_count = (int)ini_as_int(ini_get(iniroot, ONIONCOUNTKEY));
@@ -47,7 +39,8 @@ int save_settings(struct SystemState *sys, const char *path) {
   // NOTE: DO NOT SET LAYER VISIBILITY! That should always default to "all"
   // and is runtime dependent anyway
   snprintf(settings,MAXSETTINGSREAD,
-    //"version = 1\n"
+    "[" DEFAULTKEY "]\n"
+    "version = 1\n"
     SLOWAVGKEY " = %f\n"
     POWERSAVEKEY " = %d\n"
     ONIONCOUNTKEY " = %d\n"
