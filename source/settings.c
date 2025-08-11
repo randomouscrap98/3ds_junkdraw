@@ -11,11 +11,6 @@
 #define ONIONSTARTKEY "onion_blendstart"
 #define COLORMODEKEY "color_mode"
 
-// // C lets you redefine stuff... right?
-// #ifndef LOGDBG
-// #define LOGDBG(f_, ...)
-// #endif
-
 // NOTE: DO NOT SET LAYER VISIBILITY! That should always default to "all"
 // and is runtime dependent anyway
 /* clang-format off */

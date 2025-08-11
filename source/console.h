@@ -10,9 +10,6 @@
 #define ENTERTEXT_CHAR "_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 #define ENTERTEXT_CHARARRSIZE 50
 
-// C lets you redefine stuff... right?
-// #define LOGDBG(f_, ...)
-
 // General utils (is this really console?)
 u32 char_occurrences(const char *string, char c);
 

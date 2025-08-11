@@ -3,11 +3,6 @@
 
 #include <stdlib.h>
 
-// C lets you redefine stuff... right?
-// #ifndef LOGDBG
-// #define LOGDBG(f_, ...)
-// #endif
-
 void init_lineringbuffer(struct LineRingBuffer *buffer, u16 capacity) {
   // To safely read a stroke with unknown amount of lines, add extra padding
   // equal to the max stroke lines

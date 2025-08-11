@@ -8,11 +8,6 @@
 // JUST needed for M_PI??
 #include <citro3d.h>
 
-// // C lets you redefine stuff... right?
-// #ifndef LOGDBG
-// #define LOGDBG(f_, ...)
-// #endif
-
 // ------- GENERAL UTILS ---------
 
 #define DCV_NOVARIMAXSCAN

@@ -3,11 +3,6 @@
 
 #include <stdlib.h>
 
-// C lets you redefine stuff... right?
-// #ifndef LOGDBG
-// #define LOGDBG(f_, ...)
-// #endif
-
 void init_ringstack(struct RingStack *buffer, u16 capacity) {
   buffer->capacity = capacity;
   buffer->positions = malloc(sizeof(char *) * buffer->capacity);

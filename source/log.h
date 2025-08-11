@@ -1,8 +1,7 @@
 #ifndef __LOG_HEADER_
 #define __LOG_HEADER_
 
-// #include <stdio.h>
-
+// void LOGERR(const char *, ...);
 void LOGDBG(const char *, ...);
 void LOGTRACE(const char *, ...);
 

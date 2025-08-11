@@ -41,6 +41,8 @@
 
 #define PRINTDATA_WIDTH 40
 #define STATUS_MAINCOLOR 36
+#define STATUS_WARNING 33
+#define STATUS_ERROR 31
 #define STATUS_ACTIVECOLOR 37
 #define FILELOAD_MENUCOUNT 10
 
@@ -75,14 +77,14 @@
 // Undo
 #define MAX_UNDO 99
 
-// Release mode is a special mode
-// #define RELEASE
-
 // These are all compiler config things, which may be applied to any
 // individually compiled portion of this app. Probably not the right way to do
 // this.
 
-// Uncomment for much more logging
+// Release mode is a special mode
+// #define RELEASE
+
+// Much more logging
 // #define TRACE_PRINT
 
 #ifdef RELEASE
@@ -98,11 +100,13 @@
 #define DEBUG_PRINT_MINROW 21
 #define DEBUG_PRINT_ROWS 5
 
-#define LOGBASE(fmt)                                                           \
+// The actual logging function for our program
+#define LOGBASE(fmt, color)                                                    \
   va_list args;                                                                \
   va_start(args, fmt);                                                         \
   static u8 _db_prnt_row;                                                      \
-  printf("\x1b[%d;1H\x1b[33m", _db_prnt_row + DEBUG_PRINT_MINROW);             \
+  printf("\x1b[%d;1H%50s", _db_prnt_row + DEBUG_PRINT_MINROW, "");             \
+  printf("\x1b[%d;1H\x1b[%dm", _db_prnt_row + DEBUG_PRINT_MINROW, color);      \
   _db_prnt_row = (_db_prnt_row + 1) % DEBUG_PRINT_ROWS;                        \
   time_t rawtime = time(NULL);                                                 \
   struct tm *timeinfo = localtime(&rawtime);                                   \
@@ -111,15 +115,22 @@
   vprintf(fmt, args);                                                          \
   va_end(args);
 
+// void LOGERR(const char *fmt, ...) {
+// #ifdef DEBUG_PRINT
+//   LOGBASE(fmt, STATUS_ERROR);
+// #endif
+// }
+
+void LOGDBG(const char *fmt, ...) {
 #ifdef DEBUG_PRINT
-void LOGDBG(const char *fmt, ...) { LOGBASE(fmt); }
-#else
-void LOGDBG(const char *fmt, ...) {}
+  LOGBASE(fmt, STATUS_WARNING);
 #endif
+}
+
+void LOGTRACE(const char *fmt, ...) {
 #ifdef TRACE_PRINT
-void LOGTRACE(const char *fmt, ...) { LOGBASE(fmt); }
-#else
-void LOGTRACE(const char *fmt, ...) {}
+  LOGBASE(fmt, STATUS_WARNING);
 #endif
+}
 
 #endif

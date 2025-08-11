@@ -275,7 +275,7 @@ u32 _drw_cmd_cnt = 0;
   }
 #define MY_FLUSHCHECK()                                                        \
   if (_drw_cmd_cnt > MY_C2DOBJLIMITSAFETY) {                                   \
-    LOGDBG("FLUSHING %ld DRAW CMDS PREMATURELY\n", _drw_cmd_cnt);              \
+    LOGTRACE("FLUSHING %ld DRAW CMDS PREMATURELY\n", _drw_cmd_cnt);            \
     MY_FLUSH();                                                                \
   }
 
@@ -960,7 +960,7 @@ int save_drawing(char *filename, char *data) {
   char fullpath[MAX_FILEPATH];
   char temp_msg[MAX_FILEPATH];
 
-  // LOGDBG("SAVEFILENAME: %s", filename);
+  LOGTRACE("SAVEFILENAME: %s", filename);
 
   if (enter_text_fixed("Enter a filename: ", MAINMENU_TOP, filename,
                        MAX_FILENAMESHOW, !strlen(filename),
@@ -1024,7 +1024,7 @@ char *load_drawing(char *data_container, char *final_filename) {
 
   final_filename[0] = 0;
   strcpy(final_filename, get_menu_item(all_files, MAX_ALLFILENAMES, sel));
-  // LOGDBG("LOADFILENAME: %s", final_filename);
+  LOGTRACE("LOADFILENAME: %s", final_filename);
 
   PRINTINFO("Loading file %s...", final_filename)
   aptSetHomeAllowed(false);
@@ -1153,7 +1153,7 @@ int main(int argc, char **argv) {
   consoleInit(GFX_TOP, NULL);
   C3D_RenderTarget *screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
-  LOGDBG("INITIALIZED");
+  LOGTRACE("INITIALIZED");
 
   struct SystemState sys;
 
@@ -1165,7 +1165,7 @@ int main(int argc, char **argv) {
   // Very silly global so rect drawing functions know screen dimensions and such
   _drawrect_scrst = &sys.screen_state;
 
-  LOGDBG("SET SCREENSTATE/CANVAS");
+  LOGTRACE("SET SCREENSTATE/CANVAS");
 
   // weird byte order? 16 bits of color are at top
   const u32 layer_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
@@ -1178,7 +1178,7 @@ int main(int argc, char **argv) {
   for (int i = 0; i < LAYER_COUNT; i++)
     create_layer(layers + i, subtex);
 
-  LOGDBG("CREATED LAYERS");
+  LOGTRACE("CREATED LAYERS");
 
   bool touching = false;
   bool palette_active = false;
@@ -1226,7 +1226,7 @@ int main(int argc, char **argv) {
     LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
   }
 
-  LOGDBG("SYSTEM MALLOC");
+  LOGTRACE("SYSTEM MALLOC");
 
   MAIN_NEWDRAW();
   mkdir_p(SAVE_BASE);
@@ -1268,8 +1268,8 @@ int main(int argc, char **argv) {
           ringstack_push(&undostack, draw_data_end);
           draw_data_end = redo;
           FLUSH_LAYERS();
-          // } else {
-          //   LOGDBG("ERR: No redos in buffer!\n");
+        } else {
+          LOGTRACE("ERR: No redos in buffer!\n");
         }
       } else {
         set_drawstate_tool(&sys.draw_state, TOOL_PENCIL);
@@ -1282,8 +1282,8 @@ int main(int argc, char **argv) {
           ringstack_push(&redostack, draw_data_end);
           draw_data_end = undo;
           FLUSH_LAYERS();
-          // } else {
-          //   LOGDBG("ERR: No undos in buffer!\n");
+        } else {
+          LOGTRACE("ERR: No undos in buffer!\n");
         }
       } else {
         set_drawstate_tool(&sys.draw_state, TOOL_ERASER);

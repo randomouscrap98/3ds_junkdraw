@@ -6,15 +6,6 @@
 #include <png.h>
 #include <string.h>
 
-// TODO: Why was it set like this in the past?
-// C lets you redefine stuff... right?
-// #define LOGDBG(f_, ...)
-
-// C lets you redefine stuff... right?
-// #ifndef LOGDBG
-// #define LOGDBG(f_, ...)
-// #endif
-
 // Taken verbatim from
 // https://gist.github.com/JonathonReinhart/8c0d90191c38af2dcadb102c4e202950
 int mkdir_p(const char *path) {
@@ -48,12 +39,12 @@ int mkdir_p(const char *path) {
     }
   }
 
-  if (mkdir(_path, S_IRWXU) != 0 && errno != EEXIST) {
+  if (mkdir(_path, S_IRWXU) == 0) {
+    LOGDBG("Created directory: %s\n", path);
+  } else if (errno != EEXIST) {
     LOGDBG("MKDIR_P: Couldn't make final path: %s\n", _path);
     return -1;
   }
-
-  LOGDBG("Created directory: %s\n", path);
 
   return 0;
 }
