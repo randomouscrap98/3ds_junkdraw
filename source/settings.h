@@ -4,7 +4,7 @@
 #include "system.h"
 
 void set_default_settings(struct SystemState *);
-void save_settings(struct SystemState *, const char *);
-void load_settings(struct SystemState *, const char *);
+int save_settings(struct SystemState *, const char *);
+int load_settings(struct SystemState *, const char *);
 
 #endif

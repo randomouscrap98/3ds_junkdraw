@@ -204,19 +204,18 @@ struct ToolData default_tooldata[] = {
 
 // Set some default values and malloc anything needed in the SystemState
 void create_defaultsystemstate(struct SystemState *state) {
-  load_settings(state, SETTINGS_PATH);
-  // set_default_settings(state);
-  // state->slow_avg = 0.15;
-  // state->power_saver = false;
-  // state->onion_count = DEFAULT_ONIONCOUNT;
-  // state->onion_blendstart = DEFAULT_ONIONBLENDSTART;
-  // state->onion_blendend = DEFAULT_ONIONBLENDEND;
   colorsystem_init(&state->colors);
-  // memset(&state->colors, 0, sizeof(struct ColorSystem));
   state->colors.palette_size = DEFAULT_PALETTE_SPLIT;
   colorsystem_setcolors(&state->colors, default_palette,
                         sizeof(default_palette) / sizeof(u32));
   state->draw_state.tools = malloc(sizeof(default_tooldata));
+
+  PRINTINFO("Loading settings...");
+  if (load_settings(state, SETTINGS_PATH) != 0) {
+    LOGDBG("No settings.ini; using defaults");
+    set_default_settings(state); // Just in case, load default settings
+  }
+  PRINTCLEAR();
 }
 
 void set_screenstate_defaults(struct ScreenState *state) {
@@ -893,6 +892,11 @@ void run_options_menu(struct SystemState *sys) {
       osSetSpeedupEnable(!sys->power_saver);
       break;
     default:
+      PRINTINFO("Saving settings...");
+      if (save_settings(sys, SETTINGS_PATH) != 0) {
+        LOGDBG("ERR: Can't save settings!");
+      }
+      PRINTCLEAR();
       return;
     }
   }

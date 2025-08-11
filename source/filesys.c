@@ -110,22 +110,27 @@ int write_file(const char *filename, const char *data) {
 }
 
 char *read_file(const char *filename, char *container, u32 maxread) {
-  char *result = NULL;
+  u32 conlen = 0;
   FILE *loadfile = fopen(filename, "r");
   if (loadfile == NULL) {
     LOGDBG("ERR: Couldn't open file %s", filename);
     return NULL;
   } else {
-    result = fgets(container, maxread, loadfile);
-    if (result == NULL) {
-      LOGDBG("ERR: Couldn't read file %s", filename);
-    } else {
-      result = container + strlen(container);
+    while (1) {
+      char *result = fgets(container + conlen, maxread - conlen, loadfile);
+      if (result == NULL) {
+        if (!feof(loadfile)) {
+          LOGDBG("ERR: Couldn't read file %s", filename);
+        }
+        break;
+      } else {
+        conlen += strlen(result);
+      }
     }
   }
 
   fclose(loadfile);
-  return result;
+  return container + conlen;
 }
 
 #define MYPNG_FORMAT PNG_COLOR_TYPE_RGBA
