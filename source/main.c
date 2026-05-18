@@ -775,6 +775,7 @@ void serveFileHttp() {
 	server.sin_port = htons (80);
 	server.sin_addr.s_addr = gethostid();
 
+  LOGDBG("BROWSER: http://%s/", inet_ntoa(server.sin_addr));
   PRINTINFO("BROWSER: http://%s/", inet_ntoa(server.sin_addr));
 
   if ( (ret = bind (sock, (struct sockaddr *) &server, sizeof (server))) ) {
@@ -783,9 +784,13 @@ void serveFileHttp() {
 	}
 
   // Set socket non blocking so we can still read input to exit
-	fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) | O_NONBLOCK);
+	if((ret = fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) | O_NONBLOCK)) ) {
+		PRINTERR("fcntl: %d %s\n", errno, strerror(errno));
+    goto SERVEEND;
+  }
 
-	if ( (ret = listen( sock, 5)) ) { // IDK what this does
+  // Begin listen, let N clients connect at once
+	if ( (ret = listen( sock, SOC_MAXCLIENTS)) ) {
 		PRINTERR("listen: %d %s\n", errno, strerror(errno));
     goto SERVEEND;
 	}
@@ -815,8 +820,14 @@ void serveFileHttp() {
   aptSetHomeAllowed(true);
 
 SERVEEND:
-  if(sock>0) { close(sock); }
-  if(csock>0) { close(csock); }
+  if(sock>0) { 
+    LOGDBG("Closing socket %d", sock);
+    close(sock); 
+  }
+  if(csock>0) { 
+    LOGDBG("Closing csocket %d", sock);
+    close(csock); 
+  }
   if(socInitialized) {
     LOGDBG("Shutting down SOC");
     socExit();
