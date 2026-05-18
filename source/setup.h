@@ -30,14 +30,15 @@
 #define MAINMENU_TOP 6 // Where to put the menu?
 #define MAINMENU_TITLE "Main menu:"
 #define MAINMENU_ITEMS                                                         \
-  "New\0Save\0Load\0Export PNG\0Export GIF\0Options\0Exit App\0"
+  "New\0Save\0Load\0Export PNG\0Export GIF\0Download Export\0Options\0Exit App\0"
 #define MAINMENU_NEW 0
 #define MAINMENU_SAVE 1
 #define MAINMENU_LOAD 2
 #define MAINMENU_EXPORT 3
 #define MAINMENU_EXPORTGIF 4
-#define MAINMENU_OPTIONS 5
-#define MAINMENU_EXIT 6
+#define MAINMENU_DOWNLOADEXPORT 5
+#define MAINMENU_OPTIONS 6
+#define MAINMENU_EXIT 7
 
 #define PRINTDATA_WIDTH 40
 #define STATUS_MAINCOLOR 36
@@ -52,6 +53,10 @@
 #define MAX_FILEPATH 256
 #define MAX_TEMPSTRING 2048
 #define MAX_ALLFILENAMES 65535
+
+// Networking
+#define SOC_ALIGN 0x1000
+#define SOC_BUFFERSIZE 0x10000
 
 // Drawing system
 #define MIN_ZOOMPOWER -2

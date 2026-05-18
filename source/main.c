@@ -13,6 +13,15 @@ u32 __stacksize__ = 512 * 1024;
 #include <string.h>
 #include <time.h>
 
+// Networking stuff added this 2026-05-18
+#include <fcntl.h>
+#include <malloc.h>
+#include <errno.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 #define MSF_GIF_NO_SSE2
 #define MSF_GIF_IMPL
 #include <msf_gif.h>
@@ -727,6 +736,93 @@ EXPORTGIFEND:;
   return ret;
 }
 
+void serveFileHttp() {
+  PRINTCLEAR();
+
+  static u32 *SOC_buffer = NULL;
+  bool socInitialized = false;
+  s32 sock = -1, csock = -1;
+	struct sockaddr_in client;
+	struct sockaddr_in server;
+  u32 clientlen;
+
+  // We only allocate the SOC buffer once and leave it there...
+  if(SOC_buffer == NULL) {
+    SOC_buffer = (u32*)memalign(SOC_ALIGN, SOC_BUFFERSIZE);
+  }
+  if(SOC_buffer == NULL) {
+    PRINTERR("Can't allocate SOC buf");
+    goto SERVEEND;
+  }
+  int ret;
+  if((ret = socInit(SOC_buffer, SOC_BUFFERSIZE)) != 0) {
+    PRINTERR("Can't init SOC");
+    goto SERVEEND;
+  }
+  socInitialized = true;
+
+  clientlen = sizeof(client);
+	sock = socket (AF_INET, SOCK_STREAM, IPPROTO_IP);
+	if (sock < 0) {
+    PRINTERR("socket: %d %s", errno, strerror(errno));
+    goto SERVEEND;
+	}
+
+	memset (&server, 0, sizeof (server));
+	memset (&client, 0, sizeof (client));
+
+	server.sin_family = AF_INET;
+	server.sin_port = htons (80);
+	server.sin_addr.s_addr = gethostid();
+
+  PRINTINFO("BROWSER: http://%s/", inet_ntoa(server.sin_addr));
+
+  if ( (ret = bind (sock, (struct sockaddr *) &server, sizeof (server))) ) {
+		PRINTERR("bind: %d %s\n", errno, strerror(errno));
+    goto SERVEEND;
+	}
+
+  // Set socket non blocking so we can still read input to exit
+	fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) | O_NONBLOCK);
+
+	if ( (ret = listen( sock, 5)) ) { // IDK what this does
+		PRINTERR("listen: %d %s\n", errno, strerror(errno));
+    goto SERVEEND;
+	}
+
+  aptSetHomeAllowed(false);
+
+  while (aptMainLoop()) {
+    hidScanInput();
+
+    if (aptCheckHomePressRejected()) {
+      LOGDBG("HOME REJECTED");
+    }
+
+    if(hidKeysDownRepeat()) {
+      break;
+    }
+
+    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+    // Draw here?
+    // draw_easy_menu(&state);
+    C3D_FrameEnd(0);
+  }
+
+  PRINTINFO("SHUTTING DOWN...");
+  PRINTCLEAR();
+
+  aptSetHomeAllowed(true);
+
+SERVEEND:
+  if(sock>0) { close(sock); }
+  if(csock>0) { close(csock); }
+  if(socInitialized) {
+    LOGDBG("Shutting down SOC");
+    socExit();
+  }
+}
+
 // -- MENU/PRINT STUFF --
 
 void print_controls() {
@@ -1378,6 +1474,9 @@ int main(int argc, char **argv) {
       case MAINMENU_EXPORTGIF:
         run_gif_menu(&sys, draw_data, draw_data_end, save_filename);
         FLUSH_LAYERS(); // Why not...
+        break;
+      case MAINMENU_DOWNLOADEXPORT:
+        serveFileHttp();
         break;
       }
     }
