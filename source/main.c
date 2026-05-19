@@ -772,6 +772,15 @@ void serveFileHttp() {
     return; // No need to cleanup, haven't done anything yet
   }
 
+  // Extension is everything past last dot
+  char * extension = last_savepath + strlen(last_savepath);
+  while(--extension != last_savepath) {
+    if(*extension == '.') {
+      extension++;
+      break;
+    }
+  }
+
   static u32 *SOC_buffer = NULL;
   bool socInitialized = false;
   s32 sock = -1, csock = -1;
@@ -780,7 +789,6 @@ void serveFileHttp() {
   u32 clientlen;
   char temp[4098];
   char http_200[] = "HTTP/1.1 200 OK\r\n";
-  char http_html_hdr[] = "Content-type: image/png\r\n\r\n";
 
   // We only allocate the SOC buffer once and leave it there...
   if(SOC_buffer == NULL) {
@@ -811,7 +819,16 @@ void serveFileHttp() {
 	server.sin_port = htons (80);
 	server.sin_addr.s_addr = gethostid();
 
-  PRINTINFO("BROWSER: http://%s/", inet_ntoa(server.sin_addr));
+  // char * filename = last_savepath + strlen(last_savepath);
+  // while(--filename != last_savepath) {
+  //   if(*filename == '/') {
+  //     filename++;
+  //     break;
+  //   }
+  // }
+  PRINTINFO("BROWSER: http://%s/\n\n Press any key to stop", inet_ntoa(server.sin_addr));
+  //PRINTINFO("FILE: %s\n BROWSER: http://%s/\n\n Press any key to stop", 
+            //filename, inet_ntoa(server.sin_addr));
 
   if ( (ret = bind (sock, (struct sockaddr *) &server, sizeof (server))) ) {
 		PRINTERR("bind: %d %s\n", errno, strerror(errno));
@@ -849,7 +866,8 @@ void serveFileHttp() {
       LOGDBG("RECV: %d bytes", ret);
 
       _SOCKCHECK(send(csock, http_200, strlen(http_200),0), "send");
-      _SOCKCHECK(send(csock, http_html_hdr, strlen(http_html_hdr),0), "send");
+      sprintf(temp, "Content-type: image/%s\r\n\r\n", extension);
+      _SOCKCHECK(send(csock, temp, strlen(temp), 0), "send");
 
       // Now read from the given file into a small buffer and send it over and over.
       if(fseek(loadfile, 0, SEEK_SET)) {
@@ -858,6 +876,9 @@ void serveFileHttp() {
       }
       while (1) {
         unsigned long count = fread(temp, 1, sizeof(temp) - 2, loadfile);
+        if(count) {
+          _SOCKCHECK(send(csock, temp, count, 0), "send");
+        }
         if(count != sizeof(temp) - 2) {
           if (!feof(loadfile)) {
             PRINTERR("Failed to read file %s", last_savepath);
@@ -865,7 +886,6 @@ void serveFileHttp() {
           }
           break;
         } 
-        _SOCKCHECK(send(csock, temp, count, 0), "send");
       }
 
 			close(csock);
