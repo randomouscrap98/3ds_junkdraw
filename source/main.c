@@ -738,6 +738,25 @@ EXPORTGIFEND:;
   return ret;
 }
 
+#define _SOCKBLOCK(sock, block) { \
+	int socflags = fcntl(sock, F_GETFL, 0); \
+  if(socflags < 0) { \
+	  PRINTERR("fcntl get: %d %s\n", errno, strerror(errno)); \
+    goto SERVEEND; \
+  } \
+  socflags = block ? (socflags & ~O_NONBLOCK) : (socflags | O_NONBLOCK); \
+	if(fcntl(sock, F_SETFL, socflags) < 0) { \
+	  PRINTERR("fcntl set: %d %s\n", errno, strerror(errno)); \
+    goto SERVEEND; \
+  } \
+}
+
+#define _SOCKCHECK(result, name) { \
+  if(result < 0) { \
+    PRINTERR(name": %d %s\n", errno, strerror(errno)); \
+    goto SERVEEND; \
+  }
+
 void serveFileHttp() {
   PRINTCLEAR();
 
@@ -752,7 +771,7 @@ void serveFileHttp() {
 	struct sockaddr_in client;
 	struct sockaddr_in server;
   u32 clientlen;
-  char temp[1026];
+  char temp[4098];
   char http_200[] = "HTTP/1.1 200 OK\r\n";
   char http_html_hdr[] = "Content-type: image/png\r\n\r\n";
 
@@ -794,15 +813,7 @@ void serveFileHttp() {
 	}
 
   // Set socket non blocking so we can still read input to exit
-	int socflags = fcntl(sock, F_GETFL, 0);
-  if(socflags < 0) {
-	  PRINTERR("fcntl get: %d %s\n", errno, strerror(errno));
-    goto SERVEEND;
-  }
-	if((ret = fcntl(sock, F_SETFL, socflags | O_NONBLOCK)) < 0) {
-	  PRINTERR("fcntl set: %d %s\n", errno, strerror(errno));
-    goto SERVEEND;
-  }
+  _SOCKBLOCK(sock, 0);
 
   // Begin listen, let N clients connect at once
 	if ( (ret = listen( sock, SOC_MAXCLIENTS)) ) {
@@ -824,34 +835,18 @@ void serveFileHttp() {
 			}
 		} else {
 			// set client socket to blocking to simplify sending data back
-      socflags = fcntl(csock, F_GETFL, 0);
-      if(socflags < 0) {
-        PRINTERR("fcntl cget: %d %s\n", errno, strerror(errno));
-        goto SERVEEND;
-      }
-      if((ret = fcntl(csock, F_SETFL, socflags & ~O_NONBLOCK)) < 0) {
-        PRINTERR("fcntl cset: %d %s\n", errno, strerror(errno));
-        goto SERVEEND;
-      }
+      _SOCKBLOCK(csock, 1);
 			LOGDBG("Connecting port %d from %s\n", client.sin_port, inet_ntoa(client.sin_addr));
-			memset (temp, 0, 1026);
+			memset (temp, 0, sizeof(temp));
 
-			ret = recv (csock, temp, 1024, 0);
+			ret = recv (csock, temp, sizeof(temp) - 2, 0);
       LOGDBG("RECV: %d bytes", ret);
 
-      if(send(csock, http_200, strlen(http_200),0) < 0) {
-        PRINTERR("send: %d %s\n", errno, strerror(errno));
-        goto SERVEEND;
-      }
-      if(send(csock, http_html_hdr, strlen(http_html_hdr),0) < 0) {
-        PRINTERR("send2: %d %s\n", errno, strerror(errno));
-        goto SERVEEND;
-      }
-      strcpy(temp, "PNG");
-      if(send(csock, temp, strlen(temp),0) < 0) {
-        PRINTERR("send3: %d %s\n", errno, strerror(errno));
-        goto SERVEEND;
-      }
+      _SOCKCHECK(send(csock, http_200, strlen(http_200),0), "send");
+      _SOCKCHECK(send(csock, http_html_hdr, strlen(http_html_hdr),0), "send");
+
+      // Now read from the given file into a small buffer and send it over and over.
+
 
 			close(csock);
       LOGDBG("Closed %s", inet_ntoa(client.sin_addr));
