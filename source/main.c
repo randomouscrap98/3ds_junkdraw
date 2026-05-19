@@ -681,6 +681,9 @@ struct GifSettings {
   u16 csecsperframe;
 };
 
+// A global to store the last savepath of any export
+char last_savepath[MAX_FILEPATH] = {0};
+
 int export_gif(struct ScreenState *scrst, struct GifSettings *settings,
                char *data, char *data_end, char *basename) {
   aptSetHomeAllowed(false);
@@ -694,15 +697,14 @@ int export_gif(struct ScreenState *scrst, struct GifSettings *settings,
     goto EXPORTGIFEND;
   }
 
-  char savepath[MAX_FILEPATH];
   time_t now = time(NULL);
-  sprintf(savepath, "%s%s_%jd.gif", SCREENSHOTS_BASE,
+  sprintf(last_savepath, "%s%s_%jd.gif", SCREENSHOTS_BASE,
           strlen(basename) ? basename : "new", now);
 
   MsfGifState gifState = {};
-  FILE *fp = fopen(savepath, "wb");
+  FILE *fp = fopen(last_savepath, "wb");
   if (fp == NULL) {
-    PRINTERR("ERR: Couldn't open gif for writing: %s\n", savepath);
+    PRINTERR("ERR: Couldn't open gif for writing: %s\n", last_savepath);
     ret = 1;
     goto EXPORTGIFEND;
   }
@@ -728,7 +730,7 @@ int export_gif(struct ScreenState *scrst, struct GifSettings *settings,
     goto EXPORTGIFEND;
   }
   fclose(fp);
-  PRINTINFO("Exported gif to: %s", savepath);
+  PRINTINFO("Exported gif to: %s", last_savepath);
 EXPORTGIFEND:;
   aptSetHomeAllowed(true);
   aptSetSleepAllowed(true);
@@ -738,6 +740,11 @@ EXPORTGIFEND:;
 
 void serveFileHttp() {
   PRINTCLEAR();
+
+  if(strlen(last_savepath) == 0) {
+    PRINTERR("No file exported this session!");
+    return;
+  }
 
   static u32 *SOC_buffer = NULL;
   bool socInitialized = false;
@@ -784,8 +791,13 @@ void serveFileHttp() {
 	}
 
   // Set socket non blocking so we can still read input to exit
-	if((ret = fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) | O_NONBLOCK)) ) {
-		PRINTERR("fcntl: %d %s\n", errno, strerror(errno));
+	int socflags = fcntl(sock, F_GETFL, 0);
+  if(socflags < 0) {
+	  PRINTERR("fcntl get: %d %s\n", errno, strerror(errno));
+    goto SERVEEND;
+  }
+	if((ret = fcntl(sock, F_SETFL, socflags | O_NONBLOCK)) < 0) {
+	  PRINTERR("fcntl set: %d %s\n", errno, strerror(errno));
     goto SERVEEND;
   }
 
@@ -1200,9 +1212,9 @@ int export_page(struct ScreenState *scrst, page_num page, char *data,
     goto EXPORTPAGEEND;
   }
 
-  char savepath[MAX_FILEPATH];
+  //char savepath[MAX_FILEPATH];
   time_t now = time(NULL);
-  sprintf(savepath, "%s%s_%d_%jd.png", SCREENSHOTS_BASE,
+  sprintf(last_savepath, "%s%s_%d_%jd.png", SCREENSHOTS_BASE,
           strlen(basename) ? basename : "new", page, now);
 
   u32 *exported = export_page_raw(scrst, page, data, data_end);
@@ -1215,10 +1227,10 @@ int export_page(struct ScreenState *scrst, page_num page, char *data,
   PRINTINFO("Exporting page %d: converting to png...", page);
 
   if (write_citropng(exported, scrst->layer_width, scrst->layer_height,
-                     savepath) == 0) {
-    PRINTINFO("Exported page to: %s", savepath);
+                     last_savepath) == 0) {
+    PRINTINFO("Exported page to: %s", last_savepath);
   } else {
-    PRINTERR("FAILED to export: %s", savepath);
+    PRINTERR("FAILED to export: %s", last_savepath);
     ret = 1;
     goto EXPORTPAGEEND;
   }
