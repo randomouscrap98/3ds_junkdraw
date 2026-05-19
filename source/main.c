@@ -824,12 +824,12 @@ void serveFileHttp() {
 			}
 		} else {
 			// set client socket to blocking to simplify sending data back
-      socflags = fcntl(sock, F_GETFL, 0);
+      socflags = fcntl(csock, F_GETFL, 0);
       if(socflags < 0) {
         PRINTERR("fcntl cget: %d %s\n", errno, strerror(errno));
         goto SERVEEND;
       }
-      if((ret = fcntl(sock, F_SETFL, socflags & ~O_NONBLOCK)) < 0) {
+      if((ret = fcntl(csock, F_SETFL, socflags & ~O_NONBLOCK)) < 0) {
         PRINTERR("fcntl cset: %d %s\n", errno, strerror(errno));
         goto SERVEEND;
       }
@@ -839,12 +839,22 @@ void serveFileHttp() {
 			ret = recv (csock, temp, 1024, 0);
       LOGDBG("RECV: %d bytes", ret);
 
-      send(csock, http_200, strlen(http_200),0);
-      send(csock, http_html_hdr, strlen(http_html_hdr),0);
+      if(send(csock, http_200, strlen(http_200),0) < 0) {
+        PRINTERR("send: %d %s\n", errno, strerror(errno));
+        goto SERVEEND;
+      }
+      if(send(csock, http_html_hdr, strlen(http_html_hdr),0) < 0) {
+        PRINTERR("send2: %d %s\n", errno, strerror(errno));
+        goto SERVEEND;
+      }
       strcpy(temp, "PNG");
-      send(csock, temp, strlen(temp),0);
+      if(send(csock, temp, strlen(temp),0) < 0) {
+        PRINTERR("send3: %d %s\n", errno, strerror(errno));
+        goto SERVEEND;
+      }
 
-			close (csock);
+			close(csock);
+      LOGDBG("Closed %s", inet_ntoa(client.sin_addr));
 			csock = -1;
 		}
 
