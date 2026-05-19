@@ -755,7 +755,8 @@ EXPORTGIFEND:;
   if(result < 0) { \
     PRINTERR(name": %d %s\n", errno, strerror(errno)); \
     goto SERVEEND; \
-  }
+  } \
+}
 
 void serveFileHttp() {
   PRINTCLEAR();
@@ -763,6 +764,12 @@ void serveFileHttp() {
   if(strlen(last_savepath) == 0) {
     PRINTERR("No file exported this session!");
     return;
+  }
+
+  FILE *loadfile = fopen(last_savepath, "rb");
+  if (loadfile == NULL) {
+    PRINTERR("Couldn't open file %s", last_savepath);
+    return; // No need to cleanup, haven't done anything yet
   }
 
   static u32 *SOC_buffer = NULL;
@@ -804,7 +811,6 @@ void serveFileHttp() {
 	server.sin_port = htons (80);
 	server.sin_addr.s_addr = gethostid();
 
-  // LOGDBG("BROWSER: http://%s/", inet_ntoa(server.sin_addr));
   PRINTINFO("BROWSER: http://%s/", inet_ntoa(server.sin_addr));
 
   if ( (ret = bind (sock, (struct sockaddr *) &server, sizeof (server))) ) {
@@ -846,7 +852,21 @@ void serveFileHttp() {
       _SOCKCHECK(send(csock, http_html_hdr, strlen(http_html_hdr),0), "send");
 
       // Now read from the given file into a small buffer and send it over and over.
-
+      if(fseek(loadfile, 0, SEEK_SET)) {
+        PRINTERR("Failed to seek to start: %s", last_savepath);
+        goto SERVEEND;
+      }
+      while (1) {
+        unsigned long count = fread(temp, 1, sizeof(temp) - 2, loadfile);
+        if(count != sizeof(temp) - 2) {
+          if (!feof(loadfile)) {
+            PRINTERR("Failed to read file %s", last_savepath);
+            goto SERVEEND;
+          }
+          break;
+        } 
+        _SOCKCHECK(send(csock, temp, count, 0), "send");
+      }
 
 			close(csock);
       LOGDBG("Closed %s", inet_ntoa(client.sin_addr));
@@ -873,6 +893,9 @@ void serveFileHttp() {
   aptSetHomeAllowed(true);
 
 SERVEEND:
+  if(loadfile) {
+    fclose(loadfile);
+  }
   if(sock>0) { 
     LOGDBG("Closing socket %d", sock);
     close(sock); 
