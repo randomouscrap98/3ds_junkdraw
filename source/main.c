@@ -752,6 +752,9 @@ void serveFileHttp() {
 	struct sockaddr_in client;
 	struct sockaddr_in server;
   u32 clientlen;
+  char temp[1026];
+  char http_200[] = "HTTP/1.1 200 OK\r\n";
+  char http_html_hdr[] = "Content-type: image/png\r\n\r\n";
 
   // We only allocate the SOC buffer once and leave it there...
   if(SOC_buffer == NULL) {
@@ -782,7 +785,7 @@ void serveFileHttp() {
 	server.sin_port = htons (80);
 	server.sin_addr.s_addr = gethostid();
 
-  LOGDBG("BROWSER: http://%s/", inet_ntoa(server.sin_addr));
+  // LOGDBG("BROWSER: http://%s/", inet_ntoa(server.sin_addr));
   PRINTINFO("BROWSER: http://%s/", inet_ntoa(server.sin_addr));
 
   if ( (ret = bind (sock, (struct sockaddr *) &server, sizeof (server))) ) {
@@ -811,6 +814,39 @@ void serveFileHttp() {
 
   while (aptMainLoop()) {
     hidScanInput();
+
+    csock = accept (sock, (struct sockaddr *) &client, &clientlen);
+
+		if (csock<0) {
+			if(errno != EAGAIN) {
+				PRINTERR("accept: %d %s\n", errno, strerror(errno));
+        goto SERVEEND;
+			}
+		} else {
+			// set client socket to blocking to simplify sending data back
+      socflags = fcntl(sock, F_GETFL, 0);
+      if(socflags < 0) {
+        PRINTERR("fcntl cget: %d %s\n", errno, strerror(errno));
+        goto SERVEEND;
+      }
+      if((ret = fcntl(sock, F_SETFL, socflags & ~O_NONBLOCK)) < 0) {
+        PRINTERR("fcntl cset: %d %s\n", errno, strerror(errno));
+        goto SERVEEND;
+      }
+			LOGDBG("Connecting port %d from %s\n", client.sin_port, inet_ntoa(client.sin_addr));
+			memset (temp, 0, 1026);
+
+			ret = recv (csock, temp, 1024, 0);
+      LOGDBG("RECV: %d bytes", ret);
+
+      send(csock, http_200, strlen(http_200),0);
+      send(csock, http_html_hdr, strlen(http_html_hdr),0);
+      strcpy(temp, "PNG");
+      send(csock, temp, strlen(temp),0);
+
+			close (csock);
+			csock = -1;
+		}
 
     if (aptCheckHomePressRejected()) {
       LOGDBG("HOME REJECTED");

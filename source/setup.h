@@ -56,8 +56,8 @@
 
 // Networking
 #define SOC_ALIGN 0x1000
-#define SOC_BUFFERSIZE 0x10000
-#define SOC_MAXCLIENTS 2
+#define SOC_BUFFERSIZE 0x100000
+#define SOC_MAXCLIENTS 1
 
 // Drawing system
 #define MIN_ZOOMPOWER -2
