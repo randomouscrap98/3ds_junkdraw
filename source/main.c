@@ -1052,8 +1052,6 @@ void inc_drawstate_mode(struct ScreenState *scrst, struct DrawState *drwst) {
 
 void run_options_menu(struct SystemState *sys) {
   char menu[256];
-  char visibility[][3] = {"", "b", "t", "bt"};
-  char modes[][16] = {"Normal", "Animation", "Small Animation"};
   char colpickers[][16] = {"Palette", "RGB", "Auto Palette"};
   float newonionstart;
   s32 menuopt = 0;
@@ -1063,14 +1061,12 @@ void run_options_menu(struct SystemState *sys) {
     // easier, we just sprintf everything into the array with newlines, then
     // replace newlines with 0
     sprintf(menu,
-            "Color Picker: %s\nMode: %s\nOnion layers: %d\nOnion darkness: "
-            "%.1f\nLayer "
-            "visibility: %s\nSlow pen friction: %.2f\nPower saving: %s\nReset "
+            "Color Picker: %s\nOnion layers: %d\nOnion darkness: "
+            "%.1f\nSlow pen friction: %.2f\nPower saving: %s\nReset "
             "to defaults\nExit\n",
-            colpickers[sys->colors.mode], modes[sys->draw_state.mode],
+            colpickers[sys->colors.mode], 
             sys->onion_count, sys->onion_blendstart,
-            visibility[sys->screen_state.layer_visibility], 1 - sys->slow_avg,
-            sys->power_saver ? "on" : "off");
+            1 - sys->slow_avg, sys->power_saver ? "on" : "off");
     for (int x = strlen(menu); x >= 0; x--) {
       if (menu[x] == '\n')
         menu[x] = 0;
@@ -1078,19 +1074,15 @@ void run_options_menu(struct SystemState *sys) {
     menuopt =
         easy_menu("Options", menu, MAINMENU_TOP, 0, menuopt, KEY_B | KEY_START);
     switch (menuopt) {
-    case 0:
+    case 0: // color picker mode
       settings_changed = true;
       sys->colors.mode = (sys->colors.mode + 1) % COLORSYSMODE_COUNT;
       break;
-    case 1:
-      settings_changed = true;
-      inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
-      break;
-    case 2: // onion layers
+    case 1: // onion layers
       settings_changed = true;
       sys->onion_count = (sys->onion_count + 1) % (MAXONION + 1);
       break;
-    case 3: // onion darkness
+    case 2: // onion darkness
       settings_changed = true;
       newonionstart = sys->onion_blendstart + 0.1;
       set_systemstate_onionstart(sys, newonionstart);
@@ -1099,24 +1091,19 @@ void run_options_menu(struct SystemState *sys) {
         set_systemstate_onionstart(sys, 0.1);
       }
       break;
-    case 4: // layer visibility
-      settings_changed = true;
-      sys->screen_state.layer_visibility =
-          (sys->screen_state.layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
-      break;
-    case 5: // slow avg
+    case 3: // slow avg
       settings_changed = true;
       sys->slow_avg += 0.05;
       if (sys->slow_avg > 0.51) {
         sys->slow_avg = 0.05;
       }
       break;
-    case 6: // power saver
+    case 4: // power saver
       settings_changed = true;
       sys->power_saver = !sys->power_saver;
       osSetSpeedupEnable(!sys->power_saver);
       break;
-    case 7: // defaults
+    case 5: // defaults
       settings_changed = true;
       set_default_settings(sys);
       break;
@@ -1128,6 +1115,39 @@ void run_options_menu(struct SystemState *sys) {
         }
         PRINTCLEAR();
       }
+      return;
+    }
+  }
+}
+
+void run_runtime_options_menu(struct SystemState *sys) {
+  char menu[256];
+  char visibility[][3] = {"", "b", "t", "bt"};
+  char modes[][16] = {"Normal", "Animation", "Small Animation"};
+  s32 menuopt = 0;
+  while (1) {
+    // Recreate menu every time, since we have dynamic values. To make life
+    // easier, we just sprintf everything into the array with newlines, then
+    // replace newlines with 0
+    sprintf(menu,
+            "Draw Mode: %s\nLayer visibility: %s\nExit\n",
+            modes[sys->draw_state.mode], 
+            visibility[sys->screen_state.layer_visibility]);
+    for (int x = strlen(menu); x >= 0; x--) {
+      if (menu[x] == '\n')
+        menu[x] = 0;
+    }
+    menuopt =
+        easy_menu("Runtime Options", menu, MAINMENU_TOP, 0, menuopt, KEY_B | KEY_START);
+    switch (menuopt) {
+    case 0:
+      inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
+      break;
+    case 1: // layer visibility
+      sys->screen_state.layer_visibility =
+          (sys->screen_state.layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
+      break;
+    default:
       return;
     }
   }
@@ -1577,6 +1597,11 @@ int main(int argc, char **argv) {
       case MAINMENU_OPTIONS:
         // Run options system
         run_options_menu(&sys);
+        FLUSH_LAYERS(); // Why not...
+        break;
+      case MAINMENU_RUNTIMEOPTIONS:
+        // Run runtime options system (settings here not saved)
+        run_runtime_options_menu(&sys);
         FLUSH_LAYERS(); // Why not...
         break;
       case MAINMENU_EXPORT:
