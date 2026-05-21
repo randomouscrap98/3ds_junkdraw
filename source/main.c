@@ -1137,9 +1137,14 @@ void run_gif_menu(struct SystemState *sys, char *draw_data, char *draw_data_end,
                   char *filename) {
   char menu[256];
   s32 menuopt = 0;
-  struct GifSettings settings;
-  settings.bitdepth = 16;
-  settings.csecsperframe = 5;
+  static struct GifSettings settings;
+  static bool setup = false;
+  if(!setup) {
+    settings.bitdepth = 16;
+    settings.csecsperframe = 5;
+    setup = true;
+  }
+
   while (1) {
     // Recreate menu every time, since we have dynamic values. To make life
     // easier, we just sprintf everything into the array with newlines, then
