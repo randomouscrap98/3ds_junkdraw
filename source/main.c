@@ -1734,9 +1734,14 @@ int main(int argc, char **argv) {
       }
     }
 
-    draw_pointers[dp_ofs] =
-        scan_lines(&scandata, draw_pointers[dp_ofs], draw_data_end,
-                   sys.draw_state.page - dp_ofs);
+    int drawpage = sys.draw_state.page - dp_ofs;
+    if(sys.anim_loop > 0 && sys.anim_loop > sys.draw_state.page) {
+      drawpage = (drawpage + sys.anim_loop) % sys.anim_loop;
+    } else {
+      drawpage = DCV_MAX(drawpage, 0);
+    }
+    draw_pointers[dp_ofs] = scan_lines(
+      &scandata, draw_pointers[dp_ofs], draw_data_end, drawpage);
     draw_from_buffer(&scandata, layers, &sys.screen_state);
 
     C2D_Flush();
