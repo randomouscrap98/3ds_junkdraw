@@ -407,9 +407,10 @@ void draw_layers(const struct LayerData *layers, layer_num layer_count,
   // We draw the onion skin stuff first
   if (sys->draw_state.mode == DRAWMODE_ANIMATION ||
       sys->draw_state.mode == DRAWMODE_ANIMATION2) {
-    // The offset from current page for onion skin
-    for (int o = -DCV_MIN(sys->onion_count, sys->draw_state.page); o <= -1;
-         o++) {
+    // The offset from current page for onion skin. WARN: This used to max out
+    // at the page but now it maxes out at animation loop
+    int max_layers = get_systemstate_max_onionlayers(sys);
+    for (int o = -max_layers; o <= -1; o++) {
       for (int i = 0; i < 4; i++) {
         tint.corners[i].color = 0xFFFFFFFF; // Setable sometime?
         tint.corners[i].blend =
@@ -1130,9 +1131,11 @@ void run_runtime_options_menu(struct SystemState *sys) {
     // easier, we just sprintf everything into the array with newlines, then
     // replace newlines with 0
     sprintf(menu,
-            "Draw Mode: %s\nLayer visibility: %s\nExit\n",
+            "Draw Mode: %s\nLayer visibility: %s\n"
+            "Onion Loop+: %d\nOnion Loop-: %d\nExit\n",
             modes[sys->draw_state.mode], 
-            visibility[sys->screen_state.layer_visibility]);
+            visibility[sys->screen_state.layer_visibility],
+            sys->anim_loop, sys->anim_loop);
     for (int x = strlen(menu); x >= 0; x--) {
       if (menu[x] == '\n')
         menu[x] = 0;
@@ -1146,6 +1149,12 @@ void run_runtime_options_menu(struct SystemState *sys) {
     case 1: // layer visibility
       sys->screen_state.layer_visibility =
           (sys->screen_state.layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
+      break;
+    case 2: // anim loop up
+      sys->anim_loop++;
+      break;
+    case 3: // anim loop down
+      if(sys->anim_loop > 0) { sys->anim_loop--; }
       break;
     default:
       return;
@@ -1698,7 +1707,7 @@ int main(int argc, char **argv) {
       }
     }
 
-    int oend = DCV_MIN(sys.onion_count, sys.draw_state.page);
+    int oend = get_systemstate_max_onionlayers(&sys);
     int dp_ofs = 0;
 
     // Find the place to stop looking for the appropriate draw pointer to work
@@ -1706,8 +1715,7 @@ int main(int argc, char **argv) {
     for (dp_ofs = 0; dp_ofs <= oend; dp_ofs++) {
       onion_offset(&sys.draw_state, -dp_ofs, &_msr_ofsx,
                    &_msr_ofsy); // This works for 0 (returns 0,0)
-      if (dp_ofs ==
-          oend) // Don't bother with any logic below, this is the last slot.
+      if (dp_ofs == oend) // Don't bother with any logic below, this is the last slot.
         break;
       if (sys.draw_state.mode == DRAWMODE_ANIMATION ||
           sys.draw_state.mode == DRAWMODE_ANIMATION2) {

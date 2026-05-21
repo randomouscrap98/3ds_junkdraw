@@ -95,6 +95,7 @@ u8 get_drawstate_tool(const struct DrawState *state);
 // Variables for system stuff, probably shouldn't change between loads etc
 struct SystemState {
   u8 onion_count;
+  u16 anim_loop;
 
   // This is the target blend for the last onion layer. The other layers are
   // calculated based on this blend target.
@@ -124,6 +125,18 @@ static inline void set_systemstate_onionstart(struct SystemState *sys,
   sys->onion_blendend = sys->onion_blendstart - 0.25;
   if (sys->onion_blendend < 0.01)
     sys->onion_blendend = 0.01;
+}
+
+// Calculate the maximum onionlayers we're going to show
+static inline int get_systemstate_max_onionlayers(const struct SystemState * sys) {
+  int max_layers = sys->onion_count; // Assume it's the actual count
+  int cut = sys->anim_loop; // figure out if either anim_loop or the page cuts it
+  if(cut == 0)
+    cut = sys->draw_state.page;
+  if(cut < max_layers) // return the lesser of the two
+    return cut;
+  else
+    return max_layers;
 }
 
 #endif
