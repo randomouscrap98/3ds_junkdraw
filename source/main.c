@@ -1076,6 +1076,43 @@ EXPORTPAGEEND:;
 
 // ---------------- MENUS ---------------------
 
+void run_edit_menu(struct SystemState *sys, char ** draw_data, char ** draw_end) {
+  char menu[256];
+  s32 menuopt = 0;
+  static u16 target_page = 0;
+  while (1) {
+    // Recreate menu every time, since we have dynamic values. To make life
+    // easier, we just sprintf everything into the array with newlines, then
+    // replace newlines with 0
+    sprintf(menu,
+            "Target page: %d\nPaste target\nSwap target\n"
+            "Exit\n", target_page + 1);
+    for (int x = strlen(menu); x >= 0; x--) {
+      if (menu[x] == '\n')
+        menu[x] = 0;
+    }
+    menuopt =
+        easy_menu("Edit", menu, MAINMENU_TOP, 0, menuopt, KEY_B | KEY_START);
+    switch (menuopt) {
+    case 0: // color picker mode
+      target_page = sys->draw_state.page;
+      break;
+    case 1:
+      if(easy_warn("WARN: PASTE OVER PAGE", 
+                   "This action cannot be undone!!\n\n Really paste page?", MAINMENU_TOP)) {
+      }
+      break;
+    case 2:
+      if(easy_warn("WARN: SWAP PAGES", 
+                   "This action cannot be undone!!\n\n Really swap pages?", MAINMENU_TOP)) {
+      }
+      break;
+    default:
+      return;
+    }
+  }
+}
+
 void run_options_menu(struct SystemState *sys) {
   char menu[256];
   char colpickers[][16] = {"Palette", "RGB", "Auto Palette"};
@@ -1471,9 +1508,8 @@ int main(int argc, char **argv) {
     if (kDown & KEY_START) {
       switch (easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, 0,
                         KEY_B | KEY_START)) {
-      case MAINMENU_EXIT:
-        if (MAIN_UNSAVEDCHECK("Really quit?"))
-          goto ENDMAINLOOP;
+      case MAINMENU_EDIT:
+        run_edit_menu(&sys, &draw_data, &draw_data_end);
         break;
       case MAINMENU_NEW:
         if (MAIN_UNSAVEDCHECK("Are you sure you want to start anew?"))
@@ -1506,6 +1542,9 @@ int main(int argc, char **argv) {
           }
         }
         break;
+      case MAINMENU_EXPORT:
+        run_export_menu(&sys, draw_data, draw_data_end, save_filename);
+        break;
       case MAINMENU_OPTIONS:
         // Run options system
         run_options_menu(&sys);
@@ -1516,18 +1555,10 @@ int main(int argc, char **argv) {
         run_runtime_options_menu(&sys, last_used_page(draw_data, draw_data_end - draw_data));
         FLUSH_LAYERS(); // Why not...
         break;
-      case MAINMENU_EXPORT:
-        run_export_menu(&sys, draw_data, draw_data_end, save_filename);
-        // export_page(&sys.screen_state, sys.draw_state.page, draw_data,
-        //            draw_data_end, save_filename);
+      case MAINMENU_EXIT:
+        if (MAIN_UNSAVEDCHECK("Really quit?"))
+          goto ENDMAINLOOP;
         break;
-      // case MAINMENU_EXPORTGIF:
-      //   run_gif_menu(&sys, draw_data, draw_data_end, save_filename);
-      //   FLUSH_LAYERS(); // Why not...
-      //   break;
-      // case MAINMENU_DOWNLOADEXPORT:
-      //   serveFileHttp();
-      //   break;
       }
     }
 

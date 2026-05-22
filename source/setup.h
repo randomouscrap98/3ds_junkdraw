@@ -9,7 +9,7 @@
 
 #include "log.h"
 
-#define VERSION "0.4.4_p3"
+#define VERSION "0.4.4_p4"
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE "saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE "screenshots/"
