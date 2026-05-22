@@ -30,14 +30,15 @@
 #define MAINMENU_TOP 7 // Where to put the menu?
 #define MAINMENU_TITLE "Junkdraw menu"
 #define MAINMENU_ITEMS                                                         \
-  "New\0Save\0Load\0Export\0Options\0Session Options\0Exit App\0"
-#define MAINMENU_NEW 0
-#define MAINMENU_SAVE 1
-#define MAINMENU_LOAD 2
-#define MAINMENU_EXPORT 3
-#define MAINMENU_OPTIONS 4
-#define MAINMENU_RUNTIMEOPTIONS 5
-#define MAINMENU_EXIT 6
+  "Edit\0New\0Save\0Load\0Export\0Options\0Session Options\0Exit App\0"
+#define MAINMENU_EDIT 0
+#define MAINMENU_NEW 1
+#define MAINMENU_SAVE 2
+#define MAINMENU_LOAD 3
+#define MAINMENU_EXPORT 4
+#define MAINMENU_OPTIONS 5
+#define MAINMENU_RUNTIMEOPTIONS 6
+#define MAINMENU_EXIT 7
 
 #define PRINTDATA_WIDTH 40
 #define STATUS_MAINCOLOR 36

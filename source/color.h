@@ -12,6 +12,8 @@
 // THIS MUST BE A POWER OF 2!!
 #define COLORSYS_HISTORY 32
 
+extern u32 default_palette[];
+
 // To initialize, memset 0
 struct ColorSystem {
   u16 history[COLORSYS_HISTORY]; // A small buffer for historical color
@@ -34,6 +36,7 @@ static inline void colorsystem_init(struct ColorSystem *cs) {
 u16 colorsystem_getcolor(struct ColorSystem *cs);
 // Malloc some colors and convert them all
 void colorsystem_setcolors(struct ColorSystem *cs, u32 *colors, u16 numcolors);
+void colorsystem_setcolors_default(struct ColorSystem *cs);
 void colorsystem_free(struct ColorSystem *cs);
 // Shift the palette up or down by given amount. Return the new index
 u16 colorsystem_nextpalette(struct ColorSystem *cs, s8 ofs);
