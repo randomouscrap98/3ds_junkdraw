@@ -937,10 +937,11 @@ SERVEEND:
 
 void print_controls() {
   printf("\x1b[0m");
-  printf("     L - change color        R - general modifier\n");
-  printf(" LF/RT - line width     UP/DWN - zoom (+R - page)\n");
+  printf("     L - color picker        R - general modifier\n");
+  printf("LFT/RT - line width     UP/DWN - zoom (+R - page)\n");
   printf("SELECT - change layers   START - menu\n");
   printf("  ABXY - change tools    C-PAD - scroll canvas\n");
+  printf(" R+B/A - undo/redo    COLP+L+R - change palette\n");
   printf("--------------------------------------------------");
 }
 
@@ -1096,6 +1097,7 @@ int save_drawing(char *filename, char *data) {
       aptSetHomeAllowed(true);
       aptSetSleepAllowed(true);
       aptCheckHomePressRejected();
+      LOGDBG("Save complete: %s", filename);
       return result;
     }
   }
@@ -1145,6 +1147,7 @@ char *load_drawing(char *data_container, char *final_filename) {
   aptSetHomeAllowed(true);
   aptSetSleepAllowed(true);
   aptCheckHomePressRejected();
+  LOGDBG("Load complete: %s", final_filename);
 
 END:
   free(all_files);
@@ -1272,7 +1275,7 @@ void run_options_menu(struct SystemState *sys) {
   }
 }
 
-void run_runtime_options_menu(struct SystemState *sys) {
+void run_runtime_options_menu(struct SystemState *sys, int lastpage) {
   char menu[256];
   char visibility[][3] = {"", "b", "t", "bt"};
   char modes[][16] = {"Normal", "Animation", "Small Animation"};
@@ -1283,7 +1286,8 @@ void run_runtime_options_menu(struct SystemState *sys) {
     // replace newlines with 0
     sprintf(menu,
             "Draw Mode: %s\nLayer visibility: %s\n"
-            "Page Loop+: %d\nPage Loop-: %d\nExit\n",
+            "Page Loop+: %d\nPage Loop-: %d\n"
+            "Page Loop Clear\nPage Loop Last Pg\nExit\n",
             modes[sys->draw_state.mode], 
             visibility[sys->screen_state.layer_visibility],
             sys->anim_loop, sys->anim_loop);
@@ -1306,6 +1310,12 @@ void run_runtime_options_menu(struct SystemState *sys) {
       break;
     case 3: // anim loop down
       if(sys->anim_loop > 0) { sys->anim_loop--; }
+      break;
+    case 4: // anim loop 0
+      sys->anim_loop = 0;
+      break;
+    case 5: // anim loop 0
+      sys->anim_loop = lastpage;
       break;
     default:
       return;
@@ -1420,6 +1430,7 @@ void run_export_menu(struct SystemState *sys, char *draw_data, char *draw_data_e
     pending.line_count = 0;                                                    \
     current_frame = end_frame = 0;                                             \
     printf("\x1b[1;1H");                                                       \
+    /*printf("--------------------- Start ----------------------");*/          \
     print_controls();                                                          \
     print_framing();                                                           \
     PRINT_DATAUSAGE();                                                         \
@@ -1559,7 +1570,7 @@ int main(int argc, char **argv) {
           draw_data_end = redo;
           FLUSH_LAYERS();
         } else {
-          LOGTRACE("ERR: No redos in buffer!\n");
+          LOGDBG("ERR: No redos in buffer!\n");
         }
       } else {
         set_drawstate_tool(&sys.draw_state, TOOL_PENCIL);
@@ -1573,7 +1584,7 @@ int main(int argc, char **argv) {
           draw_data_end = undo;
           FLUSH_LAYERS();
         } else {
-          LOGTRACE("ERR: No undos in buffer!\n");
+          LOGDBG("ERR: No undos in buffer!\n");
         }
       } else {
         set_drawstate_tool(&sys.draw_state, TOOL_ERASER);
@@ -1631,7 +1642,7 @@ int main(int argc, char **argv) {
         break;
       case MAINMENU_RUNTIMEOPTIONS:
         // Run runtime options system (settings here not saved)
-        run_runtime_options_menu(&sys);
+        run_runtime_options_menu(&sys, last_used_page(draw_data, draw_data_end - draw_data));
         FLUSH_LAYERS(); // Why not...
         break;
       case MAINMENU_EXPORT:

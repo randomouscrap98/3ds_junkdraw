@@ -27,16 +27,14 @@
 #define PALETTE_COLORS 64
 #define PALETTE_STARTINDEX 1
 
-#define MAINMENU_TOP 6 // Where to put the menu?
-#define MAINMENU_TITLE "Main menu:"
+#define MAINMENU_TOP 7 // Where to put the menu?
+#define MAINMENU_TITLE "Junkdraw menu"
 #define MAINMENU_ITEMS                                                         \
   "New\0Save\0Load\0Export\0Options\0Session Options\0Exit App\0"
 #define MAINMENU_NEW 0
 #define MAINMENU_SAVE 1
 #define MAINMENU_LOAD 2
 #define MAINMENU_EXPORT 3
-// #define MAINMENU_EXPORTGIF 4
-// #define MAINMENU_DOWNLOADEXPORT 5
 #define MAINMENU_OPTIONS 4
 #define MAINMENU_RUNTIMEOPTIONS 5
 #define MAINMENU_EXIT 6
@@ -107,20 +105,19 @@
 #define DEBUG_PRINT_MINROW 21
 #define DEBUG_PRINT_ROWS 5
 
-// The actual logging function for our program
-#define LOGBASE(fmt, color)                                                    \
-  va_list args;                                                                \
-  va_start(args, fmt);                                                         \
-  static u8 _db_prnt_row;                                                      \
-  printf("\x1b[%d;1H%50s", _db_prnt_row + DEBUG_PRINT_MINROW, "");             \
-  printf("\x1b[%d;1H\x1b[%dm", _db_prnt_row + DEBUG_PRINT_MINROW, color);      \
-  _db_prnt_row = (_db_prnt_row + 1) % DEBUG_PRINT_ROWS;                        \
-  time_t rawtime = time(NULL);                                                 \
-  struct tm *timeinfo = localtime(&rawtime);                                   \
-  printf("[%02d:%02d:%02d] ", timeinfo->tm_hour, timeinfo->tm_min,             \
-         timeinfo->tm_sec);                                                    \
-  vprintf(fmt, args);                                                          \
-  va_end(args);
+static inline void logbase(u8 color, const char * fmt, va_list args) {
+  static u8 _db_prnt_row = 0;
+  static u8 _db_prnt_num = 0;
+  printf("\x1b[%d;1H%50s", _db_prnt_row + DEBUG_PRINT_MINROW, "");
+  printf("\x1b[%d;1H\x1b[%dm", _db_prnt_row + DEBUG_PRINT_MINROW, color);
+  _db_prnt_row = (_db_prnt_row + 1) % DEBUG_PRINT_ROWS;
+  _db_prnt_num = (_db_prnt_num + 1) % 100;
+  time_t rawtime = time(NULL);
+  struct tm *timeinfo = localtime(&rawtime);
+  printf("[%02d|%02d:%02d] ", _db_prnt_num, timeinfo->tm_hour, timeinfo->tm_min);
+  //printf("[%02d:%02d:%02d] ", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+  vprintf(fmt, args);
+}
 
 // void LOGERR(const char *fmt, ...) {
 // #ifdef DEBUG_PRINT
@@ -130,13 +127,19 @@
 
 void LOGDBG(const char *fmt, ...) {
 #ifdef DEBUG_PRINT
-  LOGBASE(fmt, STATUS_WARNING);
+  va_list args;
+  va_start(args, fmt);
+  logbase(STATUS_WARNING, fmt, args);
+  va_end(args);
 #endif
 }
 
 void LOGTRACE(const char *fmt, ...) {
 #ifdef TRACE_PRINT
-  LOGBASE(fmt, STATUS_WARNING);
+  va_list args;
+  va_start(args, fmt);
+  LOGBASE(STATUS_WARNING, fmt, args);
+  va_end(args);
 #endif
 }
 
