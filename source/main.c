@@ -686,7 +686,7 @@ struct GifSettings {
 char last_savepath[MAX_FILEPATH] = {0};
 
 int export_gif(struct ScreenState *scrst, struct GifSettings *settings,
-               char *data, char *data_end, char *basename) {
+               char *data, char *data_end, char *basename, int lastpage) {
   aptSetHomeAllowed(false);
   aptSetSleepAllowed(false);
   int ret = 0;
@@ -711,11 +711,13 @@ int export_gif(struct ScreenState *scrst, struct GifSettings *settings,
   }
   msf_gif_begin_to_file(&gifState, scrst->layer_width, scrst->layer_height,
                         (MsfGifFileWriteFunc)fwrite, (void *)fp);
-  int lastpageused = last_used_page(data, data_end - data);
-  for (int i = 0; i <= lastpageused; i++) {
-    PRINTINFO("Exporting page %d / %d...", i + 1, lastpageused + 1);
+  if(lastpage == 0) {
+    lastpage = last_used_page(data, data_end - data);
+  }
+  for (int i = 0; i <= lastpage; i++) {
+    PRINTINFO("Exporting page %d / %d...", i + 1, lastpage + 1);
     u32 *page = export_page_raw(scrst, i, data, data_end);
-    PRINTINFO("Packing gif page %d / %d...", i + 1, lastpageused + 1);
+    PRINTINFO("Packing gif page %d / %d...", i + 1, lastpage + 1);
     if (!msf_gif_frame_to_file(&gifState, (uint8_t *)page,
                                settings->csecsperframe, settings->bitdepth,
                                scrst->layer_width * 4)) {
@@ -1132,7 +1134,7 @@ void run_runtime_options_menu(struct SystemState *sys) {
     // replace newlines with 0
     sprintf(menu,
             "Draw Mode: %s\nLayer visibility: %s\n"
-            "Onion Loop+: %d\nOnion Loop-: %d\nExit\n",
+            "Page Loop+: %d\nPage Loop-: %d\nExit\n",
             modes[sys->draw_state.mode], 
             visibility[sys->screen_state.layer_visibility],
             sys->anim_loop, sys->anim_loop);
@@ -1204,7 +1206,7 @@ void run_gif_menu(struct SystemState *sys, char *draw_data, char *draw_data_end,
       break;
     case 3: // export
       export_gif(&sys->screen_state, &settings, draw_data, draw_data_end,
-                 filename);
+                 filename, sys->anim_loop ? sys->anim_loop - 1 : 0);
       return;
     default:
       return;
