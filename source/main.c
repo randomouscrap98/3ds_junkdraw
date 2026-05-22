@@ -1373,8 +1373,14 @@ EXPORTPAGEEND:;
 #define MAIN_UPDOWN(x)                                                         \
   {                                                                            \
     if (kHeld & KEY_R) {                                                       \
-      sys.draw_state.page = UTILS_CLAMP(                                       \
-          sys.draw_state.page + x * ((kHeld & KEY_L) ? 10 : 1), 0, MAX_PAGE);  \
+      int diff = x * ((kHeld & KEY_L) ? 10 : 1);                            \
+      if(sys.anim_loop > 0) {                                                  \
+        sys.draw_state.page = (sys.draw_state.page + diff + sys.anim_loop) %   \
+                               sys.anim_loop;                                  \
+      } else {                                                                 \
+        sys.draw_state.page = UTILS_CLAMP(                                     \
+            sys.draw_state.page + diff, 0, MAX_PAGE);                          \
+      }                                                                        \
       reset_ringstack(&undostack);                                             \
       reset_ringstack(&redostack);                                             \
       FLUSH_LAYERS();                                                          \
