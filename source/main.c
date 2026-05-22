@@ -1330,8 +1330,10 @@ void run_export_menu(struct SystemState *sys, char *draw_data, char *draw_data_e
     // easier, we just sprintf everything into the array with newlines, then
     // replace newlines with 0
     sprintf(menu,
-            "Export PNG\nExport GIF\nDownload Export\nGIF Colors: %d\nGIF Frame time: %dms\nExit\n",
-            1 << settings.bitdepth, settings.csecsperframe * 10);
+            "Export PNG\nExport GIF\nDownload Export\nGIF Colors: %d\n"
+            "GIF Frame time +100: %dms\nGIF Frame time +10: %dms\nExit\n",
+            1 << settings.bitdepth, settings.csecsperframe * 10,
+            settings.csecsperframe * 10);
     for (int x = strlen(menu); x >= 0; x--) {
       if (menu[x] == '\n')
         menu[x] = 0;
@@ -1355,10 +1357,12 @@ void run_export_menu(struct SystemState *sys, char *draw_data, char *draw_data_e
       if (settings.bitdepth > 16)
         settings.bitdepth = 2;
       break;
-    case 4: // Frame time
+    case 4: // Frame time +100
+      settings.csecsperframe+=9;
+    case 5: // Frame time +10
       settings.csecsperframe++;
-      if (settings.csecsperframe > 20)
-        settings.csecsperframe = 1;
+      if (settings.csecsperframe > 200)
+        settings.csecsperframe -= 200;
       break;
     // case 2: // shortcut to fix animation size
     //   inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
