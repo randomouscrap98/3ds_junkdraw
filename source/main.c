@@ -46,6 +46,7 @@ u32 __stacksize__ = 512 * 1024;
 #include "log.h"
 #include "setup.h"
 #include "system.h"
+#include "convert.h"
 
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
@@ -74,6 +75,8 @@ u32 __stacksize__ = 512 * 1024;
 #define MY_C2DOBJLIMIT 8192
 #define MY_C2DOBJLIMITSAFETY MY_C2DOBJLIMIT - 100
 #define PSX1BLEN 30
+#define FILE_HEADER_LENGTH 16
+#define MAX_FILE_DATA (MAX_DRAW_DATA + FILE_HEADER_LENGTH)
 
 #define TOOL_PENCIL 0
 #define TOOL_ERASER 1
@@ -1013,12 +1016,22 @@ char *load_drawing(char *data_container, char *final_filename) {
   aptSetHomeAllowed(false);
   aptSetSleepAllowed(false);
   get_rawfile_location(final_filename, fullpath);
-  result = read_file(fullpath, data_container, MAX_DRAW_DATA);
+  result = read_file(fullpath, data_container, MAX_FILE_DATA);
   PRINTCLEAR();
+  if(strncmp(data_container, MAGICSTRING, 8) != 0) {
+    // Try to convert file
+    PRINTINFO("Converting to version 01...");
+    result = convert_00_01(data_container, result, MAX_FILE_DATA);
+    if(result == NULL) {
+      LOGDBG("Conversion failure!");
+    }
+  }
   aptSetHomeAllowed(true);
   aptSetSleepAllowed(true);
   aptCheckHomePressRejected();
-  LOGDBG("Load complete: %s", final_filename);
+  if(result) {
+    LOGDBG("Load complete: %s", final_filename);
+  }
 
 END:
   free(all_files);
@@ -1329,7 +1342,13 @@ void run_export_menu(struct SystemState *sys, char *draw_data, char *draw_data_e
   {                                                                            \
     reset_ringstack(&undostack);                                               \
     reset_ringstack(&redostack);                                               \
+    /* Do this in here JUST IN CASE we support multiple formats */             \
+    /* WARN: CAN'T USE 0 AS PADDING CHAR!!! */                                 \
+    memset(data_container, '_', FILE_HEADER_LENGTH);                           \
+    sprintf(data_container, MAGICSTRING VERSION);                              \
+    draw_data = data_container + FILE_HEADER_LENGTH;                           \
     draw_data_end = saved_last = draw_data;                                    \
+    *draw_data = 0; /* Not strictly necessary */                               \
     set_default_drawstate(&sys.draw_state);                                    \
     sys.colors.index = PALETTE_STARTINDEX;                                     \
     set_screenstate_defaults(&sys.screen_state);                               \
@@ -1422,8 +1441,9 @@ int main(int argc, char **argv) {
   }
 
   char *save_filename = malloc(MAX_FILENAME * sizeof(char));
-  char *draw_data = malloc(MAX_DRAW_DATA * sizeof(char));
+  char *data_container = malloc(MAX_FILE_DATA * sizeof(char));
   char *stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
+  char *draw_data;     // This goes to the start of actual drawing data, past file header
   char *draw_data_end; // NOTE: this is exclusive: it points one past the end.
                        // draw_data_end - draw_data = length
   char *saved_last;
@@ -1431,7 +1451,7 @@ int main(int argc, char **argv) {
   // Draw pointers for us and all our onion friends
   char *draw_pointers[1 + MAXONION];
 
-  if (!save_filename || !draw_data || !stroke_data) {
+  if (!save_filename || !data_container || !stroke_data) {
     LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
   }
 
@@ -1518,7 +1538,7 @@ int main(int argc, char **argv) {
       case MAINMENU_SAVE:
         tempc = *draw_data_end;
         *draw_data_end = 0;
-        if (save_drawing(save_filename, draw_data) == 0) {
+        if (save_drawing(save_filename, data_container) == 0) {
           saved_last = draw_data_end;
           PRINT_DATAUSAGE(); // Should this be out in the main loop?
         }
@@ -1528,7 +1548,7 @@ int main(int argc, char **argv) {
         if (MAIN_UNSAVEDCHECK(
                 "Are you sure you want to load and lose changes?")) {
           MAIN_NEWDRAW();
-          draw_data_end = load_drawing(draw_data, save_filename);
+          draw_data_end = load_drawing(data_container, save_filename);
 
           if (draw_data_end == NULL) {
             PRINTERR("LOAD FAILED!");
@@ -1737,7 +1757,7 @@ ENDMAINLOOP:;
   free_ringstack(&redostack);
   free_linepackage(&pending);
   free(save_filename);
-  free(draw_data);
+  free(data_container);
   free(stroke_data);
 
   for (int i = 0; i < LAYER_COUNT; i++)

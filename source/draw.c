@@ -8,6 +8,9 @@
 // JUST needed for M_PI??
 #include <citro3d.h>
 
+// 2026-05-23: UPDATED FOR VERSION 0.5 FILE VERSION 01
+//             IT IS FULLY INCOMPATIBLE WITH PREVIOUS VERS
+
 // ------- GENERAL UTILS ---------
 
 #define DCV_NOVARIMAXSCAN
@@ -143,6 +146,35 @@ void pixaligned_linefunc(const struct FullLine *line, rectangle_func rect_f)
     oy = y;
   }
 }
+
+// void line_bresenham(const h3d_fb * fb, uint16_t color, int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
+// void pixaligned_linefunc(const struct FullLine *line, rectangle_func rect_f) {
+//   // Honestly, taken from wikipedia https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
+//   int16_t x0 = line->x1;
+//   int16_t x1 = line->x2;
+//   int16_t y0 = line->y1;
+//   int16_t y1 = line->y2;
+//   int16_t dx = abs(x1 - x0);
+//   int16_t sx = x0 < x1 ? 1 : -1;
+//   int16_t dy = -abs(y1 - y0);
+//   int16_t sy = y0 < y1 ? 1 : -1;
+//   int16_t error = dx + dy;
+// 
+//   while(1) {
+//     (*rect_f)(x0, y0, line->width, line->color);
+//     int16_t e2 = 2 * error;
+//     if (e2 >= dy) {
+//       if (x0 == x1) break;
+//       error = error + dy;
+//       x0 = x0 + sx;
+//     }
+//     if (e2 <= dx) {
+//       if (y0 == y1) break;
+//       error = error + dx;
+//       y0 = y0 + sy;
+//     }
+//   }
+// }
 
 // Draw the collection of lines given, starting at the given line and ending
 // before the other given line (first inclusive, last exclusive)
@@ -336,8 +368,7 @@ u32 last_used_page(char *data, u32 length) {
   // Simple: start at one before the end and search backwards for the '.'
   for (char *pos = data + length - 2; pos > data; pos--) {
     if (*pos == '.') {
-      u8 length;
-      return varwidth_to_int(pos + 1, &length);
+      return chars_to_int(pos + 1, DRAWDATA_PAGEBYTES);
     }
   }
   return 0;
@@ -346,8 +377,7 @@ u32 last_used_page(char *data, u32 length) {
 char *write_to_datamem(char *stroke_data, char *stroke_end, u16 page, char *mem,
                        char *mem_end) {
   u32 stroke_size = stroke_end - stroke_data;
-  u32 test_size =
-      DCV_VARIMAXSCAN + stroke_size + 1; // Assume page may be max width
+  u32 test_size = 1 + DRAWDATA_PAGEBYTES + stroke_size;
   u32 mem_free = MAX_DRAW_DATA - (mem_end - mem);
   char *new_end = mem_end;
 
@@ -361,7 +391,7 @@ char *write_to_datamem(char *stroke_data, char *stroke_end, u16 page, char *mem,
     new_end++;
 
     // Next, store the page
-    new_end = int_to_varwidth(page, new_end);
+    new_end = int_to_chars(page, DRAWDATA_PAGEBYTES, new_end);
 
     // Finally, memcopy the whole stroke chunk
     memcpy(new_end, stroke_data, sizeof(char) * stroke_size);
@@ -411,7 +441,6 @@ char *datamem_scanstroke(char *start, char *end, const u32 max_scan,
   }
 
   u16 stroke_page;
-  u8 varwidth;
   char *stop = scanptr + DCV_MIN(end - scanptr, max_scan);
 
   while (scanptr < stop) // end && (scanptr - start) < max_scan)
@@ -421,8 +450,8 @@ char *datamem_scanstroke(char *start, char *end, const u32 max_scan,
 
     // TODO: will crash if last character is the alignment char, or if there
     // just aren't enough characters to read up the page.
-    stroke_page = varwidth_to_int(scanptr, &varwidth);
-    tempptr = scanptr + varwidth; // tmpptr points at the stroke start
+    stroke_page = chars_to_int(scanptr, DRAWDATA_PAGEBYTES);
+    tempptr = scanptr + DRAWDATA_PAGEBYTES; // tmpptr points at the stroke start
 
     // Move scanptr to the next stroke, always
     scanptr = memchr(scanptr, DRAWDATA_ALIGNMENT, (end - scanptr));

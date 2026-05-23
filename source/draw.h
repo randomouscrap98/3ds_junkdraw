@@ -6,6 +6,7 @@
 #define DRAWDATA_ALIGNMENT '.'
 #define LAYER_WIDTH 1000
 #define LAYER_HEIGHT 1000
+#define DRAWDATA_PAGEBYTES 2
 
 // Some guarantees made by the drawing system. I guess you don't HAVE to follow them, 
 // but if you're consuming this, you probably should...

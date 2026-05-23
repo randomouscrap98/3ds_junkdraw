@@ -9,7 +9,9 @@
 
 #include "log.h"
 
-#define VERSION "0.4.4_p4"
+#define VERSION "0.5.0_p1"
+#define MAGICSTRING "JUNKDRAW"
+#define FILEVERSION "01"
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE "saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE "screenshots/"
@@ -64,7 +66,7 @@
 #define MAX_ZOOMPOWER 4
 #define MIN_WIDTH 1
 #define MAX_WIDTH 64
-#define MAX_PAGE 0xFFFF
+#define MAX_PAGE 998 // 0xFFFF
 
 #define DEFAULT_PALETTE_SPLIT 64
 #define DEFAULT_START_LAYER 1
