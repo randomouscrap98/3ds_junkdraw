@@ -39,16 +39,16 @@ char * convert_00_01(char * data_begin, char * data_end, size_t max_size) {
     // TODO: will crash if last character is the alignment char, or if there
     // just aren't enough characters to read up the page.
     stroke_page = varwidth_to_int(scan, &varwidth);
-    if(varwidth > 2) {
-      LOGDBG("PAGE TOO HIGH! CAN'T CONVERT!");
-      return NULL;
+    if(varwidth == 1) { // 1 means we need to shift over
+      badstrokes++;
     }
     else if(varwidth == 2) { // 2 is the new size, let's just write the new value
       int_to_chars(stroke_page, 2, scan); // FIXES 2-BYTE PAGE IN PLACE!
       convstrokes++;
     }
-    else if(varwidth == 1) { // 2 is ok, 1 is NOT
-      badstrokes++;
+    else {
+      LOGDBG("PAGE TOO HIGH! CAN'T CONVERT!");
+      return NULL;
     }
 
     // Move scanptr to the next stroke, always
@@ -76,8 +76,8 @@ char * convert_00_01(char * data_begin, char * data_end, size_t max_size) {
     if(*scan == ALIGNMENT_00) {
       stroke_page = varwidth_to_int(scan + 1, &varwidth);
       if(varwidth == 1) {
-        int_to_chars(stroke_page, DRAWDATA_PAGEBYTES, scan + 1);
         shift--;
+        int_to_chars(stroke_page, DRAWDATA_PAGEBYTES, scan + 1 + shift);
         if(shift < FHEADER_LEN_01) {
           LOGDBG("PRGERR: BACKWARDS SCAN TOO SHIFTED");
           return NULL;
@@ -88,9 +88,14 @@ char * convert_00_01(char * data_begin, char * data_end, size_t max_size) {
     scan--;
   }
 
+  if(shift != FHEADER_LEN_01) {
+    LOGDBG("PRGERR: BACKWARDS SCAN BADSTROKES COUNT MISMATCH");
+    return NULL;
+  }
+
   // If everything is valid, write out the new header
   memset(data_begin, '_', FHEADER_LEN_01);
   sprintf(data_begin, MAGICSTRING_01 "01");
 
-  return data_end;
+  return new_end;
 }

@@ -1024,8 +1024,12 @@ char *load_drawing(char *data_container, char *final_filename) {
     result = convert_00_01(data_container, result, MAX_FILE_DATA);
     if(result == NULL) {
       LOGDBG("Conversion failure!");
+    } else {
+      LOGDBG("Converted file: v00->v01");
     }
   }
+  // TODO: will need to check version here in the future (but we only have one so...)
+  PRINTCLEAR();
   aptSetHomeAllowed(true);
   aptSetSleepAllowed(true);
   aptCheckHomePressRejected();
