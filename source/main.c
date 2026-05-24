@@ -1104,9 +1104,14 @@ bool run_edit_menu(struct SystemState *sys, char * draw_data, char ** draw_end) 
     // replace newlines with 0
             //"Set source page: %d\nPaste  p%d -> p%d\nSwap   p%d -> p%d\nDelete p%d\n"
     sprintf(menu,
-            "Set source page: %d\nPaste  (%d->%d)\nSwap   (%d->%d)\nDelete (%d)\n"
-            "Exit\n", source_page + 1, source_page + 1, dest_page + 1,
-            source_page + 1, dest_page + 1, dest_page + 1);
+            "Set source page: %d\nPaste  (%d->%d)\nSwap   (%d->%d)\n"
+            "Shift  (%d->%d)\nDelete (%d)\n"
+            "Exit\n", 
+            source_page + 1, 
+            source_page + 1, dest_page + 1,
+            source_page + 1, dest_page + 1, 
+            source_page + 1, dest_page + 1,
+            dest_page + 1);
     for (int x = strlen(menu); x >= 0; x--) {
       if (menu[x] == '\n')
         menu[x] = 0;
@@ -1132,6 +1137,13 @@ bool run_edit_menu(struct SystemState *sys, char * draw_data, char ** draw_end) 
       }
       break;
     case 3:
+      if(easy_warn("WARN: MOVE PAGE", 
+                   "This action cannot be undone!!\n\n Really move page?", MAINMENU_TOP)) {
+        move_page(draw_data, *draw_end, source_page, dest_page);
+        return true;
+      }
+      break;
+    case 4:
       if(easy_warn("WARN: DELETE PAGE", 
                    "This action CANNOT BE UNDONE!!\n\n Really DELETE current page?", MAINMENU_TOP)) {
         *draw_end = delete_page(draw_data, *draw_end, dest_page);

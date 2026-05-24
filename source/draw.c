@@ -613,3 +613,51 @@ char * delete_page(char * start, char * end, const u16 page) {
   
   return new_end;
 }
+
+// Move given page into the slot occupied by destpage, pushing all pages to the right
+// (including destpage). This is effectively removing sourcepage and inserting it to
+// the left of destpage
+void move_page(char * start, char * end, const u16 sourcepage, const u16 destpage) {
+  char * stroke;
+  char * ptr;
+  u32 numtouched = 0;
+
+  if(sourcepage == destpage) {
+    LOGDBG("WARN: skipping useless self-swap");
+    return;
+  }
+
+  int direction = sourcepage < destpage ? 1 : -1;
+
+  // First, set all pages in sourcepage to a non-valid temp page. 12 bits = 4096,
+  // just assume we've reserved some set of the last for this
+  ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, sourcepage, &stroke);
+  while(stroke) {
+    int_to_chars(RSV_PAGE_TMP, DRAWDATA_PAGEBYTES, stroke - DRAWDATA_PAGEBYTES);
+    numtouched++;
+    if(ptr >= end) break;
+    ptr = datamem_scanstroke(ptr, end, MAX_DRAW_DATA, sourcepage, &stroke);
+  }
+
+  // Move from source page to destpage, shifting pages to fill holes
+  for(u16 page = sourcepage; page != destpage; page += direction) {
+    ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, page + direction, &stroke);
+    while(stroke) {
+      int_to_chars(page, DRAWDATA_PAGEBYTES, stroke - DRAWDATA_PAGEBYTES);
+      numtouched++;
+      if(ptr >= end) break;
+      ptr = datamem_scanstroke(ptr, end, MAX_DRAW_DATA, page + direction, &stroke);
+    }
+  }
+
+  // Then go back to old source and write with dest
+  ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, RSV_PAGE_TMP, &stroke);
+  while(stroke) {
+    int_to_chars(destpage, DRAWDATA_PAGEBYTES, stroke - DRAWDATA_PAGEBYTES);
+    numtouched++;
+    if(ptr >= end) break;
+    ptr = datamem_scanstroke(ptr, end, MAX_DRAW_DATA, RSV_PAGE_TMP, &stroke);
+  }
+
+  LOGDBG("Swapped %ld strokes between pg %d and %d", numtouched, sourcepage + 1, destpage + 1);
+}

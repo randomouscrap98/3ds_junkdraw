@@ -93,6 +93,7 @@ u32 last_total_page(char *data, char * data_end);
 char * copy_page(char * start, char * end, const u16 sourcepage, const u16 destpage);
 void swap_pages(char * start, char * end, const u16 sourcepage, const u16 destpage);
 char * delete_page(char * start, char * end, const u16 page);
+void move_page(char * start, char * end, const u16 sourcepage, const u16 destpage);
 
 // -------------- Scan draw system ------------
 
