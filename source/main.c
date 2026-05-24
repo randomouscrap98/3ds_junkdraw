@@ -1266,7 +1266,7 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage) {
       sys->anim_loop = 0;
       break;
     case 5: // anim loop 0
-      sys->anim_loop = lastpage;
+      sys->anim_loop = lastpage + 1;
       break;
     default:
       return;
