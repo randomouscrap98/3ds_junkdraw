@@ -468,3 +468,32 @@ char *datamem_scanstroke(char *start, char *end, const u32 max_scan,
 
   return scanptr;
 }
+
+// Copy the entire contents of given page to the given destination page. Returns the new end
+char * copy_page(char * start, char * end, const u16 sourcepage, const u16 destpage) {
+  char * stroke;
+  char * new_end = end;
+  char * ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, sourcepage, &stroke);
+  u32 numcopied = 0;
+
+  // Scan through, find strokes on given page (only up to old end)
+  while(ptr < end) {
+    // Write new stroke at end. ptr is pointing at NEXT stroke, and stroke is past
+    // the metadata (which we add back in)
+    char * real_start = stroke - (1 + DRAWDATA_PAGEBYTES); // Move stroke back to get meta
+    u32 len = (ptr - real_start); // length includes meta
+    if((new_end + len) - start > MAX_DRAW_DATA) {
+      LOGDBG("Not enough space to copy page!");
+      return end;
+    }
+    memcpy(new_end, real_start, len); // copy WHOLE stroke
+    int_to_chars(destpage, 2, new_end + 1); // overwrite page with given
+    new_end += len;
+    numcopied++;
+    ptr = datamem_scanstroke(ptr, end, MAX_DRAW_DATA, sourcepage, &stroke);
+  }
+
+  LOGDBG("Copied %ld strokes from pg %d to %d", numcopied, sourcepage + 1, destpage + 1);
+
+  return new_end;
+}
