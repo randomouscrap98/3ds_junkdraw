@@ -538,26 +538,47 @@ void swap_pages(char * start, char * end, const u16 sourcepage, const u16 destpa
 }
 
 char * delete_page(char * start, char * end, const u16 page) {
-  // two modes: first mode, scan linearly and shift until we reach alignment.
-  // continue first mode if page not deleted. enter second mode if page
-  // deleted. scan with memchr until page not deleted, add all length to
-  // reclaim amount, enter mode one to continue linear shift
+  char * scan = memchr(start, DRAWDATA_ALIGNMENT, end - start);
+  u32 reclaim = 0;
+  u32 delstrokes = 0;
 
-  // char * scan = memchr(start, DRAWDATA_ALIGNMENT, end - start);
-  // u32 reclaim = 0;
-  // // Linear scan looking for alignment char. If page matches, add length to 
-  // // copy back
-  // //
-  // while (scan < end) {
+  // Linear scan looking for alignment char. If page matches, add length to 
+  while (scan < end) {
+    // Peek page; if next is delete, do something special
+    if(*scan == DRAWDATA_ALIGNMENT && chars_to_int(scan + 1, DRAWDATA_PAGEBYTES) == page) {
+      char * next = memchr(scan + 1, DRAWDATA_ALIGNMENT, end - scan - 1);
+      if(next == NULL) {
+        next = end;
+      }
+      reclaim += (next - scan);
+      scan = next;
+      delstrokes++;
+    }
+    else {
+      if(reclaim > 0) { // This is a normal scan, just move it backwards
+        *(scan - reclaim) = *scan;
+      }
+      scan++;
+    }
+  }
 
-  // char * scan = memchr(start, DRAWDATA_ALIGNMENT, end - start);
-  // }
+  char * new_end = end - reclaim;
 
-  // // First, scan forward and see how much total data we're removing
-  // char * ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, page, &stroke);
-  // while(stroke) {
-  //   reclaim += (ptr - stroke) + 1 + DRAWDATA_PAGEBYTES;
-  //   ptr = datamem_scanstroke(ptr, end, MAX_DRAW_DATA, page, &stroke);
-  // }
-  // return end - reclaim;
+  // Now that the page is deleted and data moved over, we need to shift
+  // over the page metadata
+  u16 lastpage = last_used_page(start, new_end - start);
+
+  for(u16 shiftpage = page; shiftpage < lastpage; shiftpage++) {
+    // Scan for the next page, shift it back into the hole, it leaves a new hole
+    char * stroke;
+    scan = datamem_scanstroke(start, new_end, MAX_DRAW_DATA, shiftpage + 1, &stroke);
+    while(stroke) {
+      int_to_chars(shiftpage, 2, stroke - DRAWDATA_PAGEBYTES);
+      scan = datamem_scanstroke(scan, new_end, MAX_DRAW_DATA, shiftpage + 1, &stroke);
+    }
+  }
+
+  LOGDBG("Deleted %ld strokes for pg %d", delstrokes, page);
+  
+  return new_end;
 }

@@ -1102,8 +1102,9 @@ bool run_edit_menu(struct SystemState *sys, char * draw_data, char ** draw_end) 
     // Recreate menu every time, since we have dynamic values. To make life
     // easier, we just sprintf everything into the array with newlines, then
     // replace newlines with 0
+            //"Set source page: %d\nPaste  p%d -> p%d\nSwap   p%d -> p%d\nDelete p%d\n"
     sprintf(menu,
-            "Set source page: %d\nPaste  p%d -> p%d\nSwap   p%d -> p%d\nDelete p%d\n"
+            "Set source page: %d\nPaste  (%d->%d)\nSwap   (%d->%d)\nDelete (%d)\n"
             "Exit\n", source_page + 1, source_page + 1, dest_page + 1,
             source_page + 1, dest_page + 1, dest_page + 1);
     for (int x = strlen(menu); x >= 0; x--) {
