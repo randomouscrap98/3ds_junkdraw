@@ -477,7 +477,7 @@ char * copy_page(char * start, char * end, const u16 sourcepage, const u16 destp
   u32 numcopied = 0;
 
   // Scan through, find strokes on given page (only up to old end)
-  while(ptr < end) {
+  while(stroke) {
     // Write new stroke at end. ptr is pointing at NEXT stroke, and stroke is past
     // the metadata (which we add back in)
     char * real_start = stroke - (1 + DRAWDATA_PAGEBYTES); // Move stroke back to get meta
@@ -496,4 +496,68 @@ char * copy_page(char * start, char * end, const u16 sourcepage, const u16 destp
   LOGDBG("Copied %ld strokes from pg %d to %d", numcopied, sourcepage + 1, destpage + 1);
 
   return new_end;
+}
+
+// Swap the entire contents of the given two pages
+void swap_pages(char * start, char * end, const u16 sourcepage, const u16 destpage) {
+  char * stroke;
+  char * ptr;
+  u32 numtouched = 0;
+
+  if(sourcepage == destpage) {
+    LOGDBG("WARN: skipping useless self-swap");
+    return;
+  }
+
+  // First, set all pages in sourcepage to a non-valid temp page. 12 bits = 4096,
+  // just assume we've reserved some set of the last for this
+  ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, sourcepage, &stroke);
+  while(stroke) {
+    int_to_chars(RSV_PAGE_TMP, 2, stroke - DRAWDATA_PAGEBYTES);
+    numtouched++;
+    ptr = datamem_scanstroke(ptr, end, MAX_DRAW_DATA, sourcepage, &stroke);
+  }
+
+  // Now, reset and update the destpages to sourcepage
+  ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, destpage, &stroke);
+  while(stroke) {
+    int_to_chars(sourcepage, 2, stroke - DRAWDATA_PAGEBYTES);
+    numtouched++;
+    ptr = datamem_scanstroke(ptr, end, MAX_DRAW_DATA, destpage, &stroke);
+  }
+
+  // Then go back to old source and write with dest
+  ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, RSV_PAGE_TMP, &stroke);
+  while(stroke) {
+    int_to_chars(destpage, 2, stroke - DRAWDATA_PAGEBYTES);
+    numtouched++;
+    ptr = datamem_scanstroke(ptr, end, MAX_DRAW_DATA, RSV_PAGE_TMP, &stroke);
+  }
+
+  LOGDBG("Swapped %ld strokes between pg %d and %d", numtouched, sourcepage + 1, destpage + 1);
+}
+
+char * delete_page(char * start, char * end, const u16 page) {
+  // two modes: first mode, scan linearly and shift until we reach alignment.
+  // continue first mode if page not deleted. enter second mode if page
+  // deleted. scan with memchr until page not deleted, add all length to
+  // reclaim amount, enter mode one to continue linear shift
+
+  // char * scan = memchr(start, DRAWDATA_ALIGNMENT, end - start);
+  // u32 reclaim = 0;
+  // // Linear scan looking for alignment char. If page matches, add length to 
+  // // copy back
+  // //
+  // while (scan < end) {
+
+  // char * scan = memchr(start, DRAWDATA_ALIGNMENT, end - start);
+  // }
+
+  // // First, scan forward and see how much total data we're removing
+  // char * ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, page, &stroke);
+  // while(stroke) {
+  //   reclaim += (ptr - stroke) + 1 + DRAWDATA_PAGEBYTES;
+  //   ptr = datamem_scanstroke(ptr, end, MAX_DRAW_DATA, page, &stroke);
+  // }
+  // return end - reclaim;
 }

@@ -1097,13 +1097,15 @@ bool run_edit_menu(struct SystemState *sys, char * draw_data, char ** draw_end) 
   char menu[256];
   s32 menuopt = 0;
   static u16 source_page = 0;
+  u16 dest_page = sys->draw_state.page;
   while (1) {
     // Recreate menu every time, since we have dynamic values. To make life
     // easier, we just sprintf everything into the array with newlines, then
     // replace newlines with 0
     sprintf(menu,
-            "Source page: %d\nPaste source\nSwap source\n"
-            "Exit\n", source_page + 1);
+            "Set source page: %d\nPaste  p%d -> p%d\nSwap   p%d -> p%d\nDelete p%d\n"
+            "Exit\n", source_page + 1, source_page + 1, dest_page + 1,
+            source_page + 1, dest_page + 1, dest_page + 1);
     for (int x = strlen(menu); x >= 0; x--) {
       if (menu[x] == '\n')
         menu[x] = 0;
@@ -1116,14 +1118,22 @@ bool run_edit_menu(struct SystemState *sys, char * draw_data, char ** draw_end) 
       break;
     case 1:
       if(easy_warn("WARN: PASTE OVER PAGE", 
-                   "This action cannot be undone!!\n\n Really paste page?", MAINMENU_TOP)) {
-        *draw_end = copy_page(draw_data, *draw_end, source_page, sys->draw_state.page);
+                   "This action cannot be undone!!\n\n Really paste page here?", MAINMENU_TOP)) {
+        *draw_end = copy_page(draw_data, *draw_end, source_page, dest_page);
         return true;
       }
       break;
     case 2:
       if(easy_warn("WARN: SWAP PAGES", 
                    "This action cannot be undone!!\n\n Really swap pages?", MAINMENU_TOP)) {
+        swap_pages(draw_data, *draw_end, source_page, dest_page);
+        return true;
+      }
+      break;
+    case 3:
+      if(easy_warn("WARN: DELETE PAGE", 
+                   "This action CANNOT BE UNDONE!!\n\n Really DELETE current page?", MAINMENU_TOP)) {
+        *draw_end = delete_page(draw_data, *draw_end, dest_page);
         return true;
       }
       break;

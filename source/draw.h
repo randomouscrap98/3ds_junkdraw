@@ -13,6 +13,9 @@
 #define MAX_DRAW_DATA (u32)5000000
 #define MAX_STROKE_LINES 5000
 
+#define RSV_PAGE_DEL 4095
+#define RSV_PAGE_TMP 4094
+
 // ---------- GENERAL UTILS ----------------
 
 #define CENTER_RECT_ALIGNPIXEL(x,y,width) \
@@ -85,6 +88,8 @@ char * datamem_scanstroke(char * start, char * end, const u32 max_scan, const u1
 // Find last used page within data given. Should be pretty fast...
 u32 last_used_page(char * data, u32 length);
 char * copy_page(char * start, char * end, const u16 sourcepage, const u16 destpage);
+void swap_pages(char * start, char * end, const u16 sourcepage, const u16 destpage);
+char * delete_page(char * start, char * end, const u16 page);
 
 // -------------- Scan draw system ------------
 
