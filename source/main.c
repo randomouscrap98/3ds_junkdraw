@@ -586,7 +586,7 @@ int export_gif(struct ScreenState *scrst, struct GifSettings *settings,
   msf_gif_begin_to_file(&gifState, scrst->layer_width, scrst->layer_height,
                         (MsfGifFileWriteFunc)fwrite, (void *)fp);
   if(lastpage == 0) {
-    lastpage = last_used_page(data, data_end - data);
+    lastpage = last_total_page(data, data_end);
   }
   for (int i = 0; i <= lastpage; i++) {
     PRINTINFO("Exporting page %d / %d...", i + 1, lastpage + 1);
@@ -1581,7 +1581,7 @@ int main(int argc, char **argv) {
             MAIN_NEWDRAW();
           } else {
             saved_last = draw_data_end;
-            // Find last page, set it.
+            // Find last USED page (that the user touched), set it.
             sys.draw_state.page =
                 last_used_page(draw_data, draw_data_end - draw_data);
             PRINT_DATAUSAGE();
@@ -1598,7 +1598,7 @@ int main(int argc, char **argv) {
         break;
       case MAINMENU_RUNTIMEOPTIONS:
         // Run runtime options system (settings here not saved)
-        run_runtime_options_menu(&sys, last_used_page(draw_data, draw_data_end - draw_data));
+        run_runtime_options_menu(&sys, last_total_page(draw_data, draw_data_end));
         FLUSH_LAYERS(); // Why not...
         break;
       case MAINMENU_EXIT:

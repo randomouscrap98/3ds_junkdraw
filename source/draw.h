@@ -85,8 +85,11 @@ char * convert_data_to_linepack(struct LinePackage * package, char * data, char 
 char * write_to_datamem(char * stroke_data, char * stroke_end, u16 page, char * mem, char * mem_end);
 char * datamem_scanstroke(char * start, char * end, const u32 max_scan, const u16 page, char ** stroke_start);
 
-// Find last used page within data given. Should be pretty fast...
+// Find last used page (that user touched, NOT last page total ) within data given. 
+// Should be pretty fast...
 u32 last_used_page(char * data, u32 length);
+// WARN: This is the last page that has anything on it! It's slower!!
+u32 last_total_page(char *data, char * data_end);
 char * copy_page(char * start, char * end, const u16 sourcepage, const u16 destpage);
 void swap_pages(char * start, char * end, const u16 sourcepage, const u16 destpage);
 char * delete_page(char * start, char * end, const u16 page);

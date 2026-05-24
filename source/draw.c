@@ -361,17 +361,39 @@ char *convert_data_to_linepack(struct LinePackage *package, char *data,
   return endptr;
 }
 
+// WARN: this is not the last page WITH MARKS, it is the last page that the
+// user touched. This is VERY DIFFERENT!!!
 u32 last_used_page(char *data, u32 length) {
   if (length < 2) {
+    LOGTRACE("DATA TOO SMALL, assuming last page 0");
     return 0; // Just safety
   }
   // Simple: start at one before the end and search backwards for the '.'
-  for (char *pos = data + length - 2; pos > data; pos--) {
+  for (char *pos = data + length - 2; pos >= data; pos--) {
     if (*pos == '.') {
       return chars_to_int(pos + 1, DRAWDATA_PAGEBYTES);
     }
   }
+  LOGTRACE("NO DATA FOUND, assuming last page 0");
   return 0;
+}
+
+// WARN: This is the last page that has anything on it! It's slower!!
+u32 last_total_page(char *data, char * data_end) {
+  // if (data_end - data < 2) {
+  //   LOGDBG("DATA TOO SMALL, assuming last page 0");
+  //   return 0; // Just safety
+  // }
+  u16 maxpage = 0;
+  char * ptr = data;
+  while((ptr = memchr(ptr, DRAWDATA_ALIGNMENT, data_end - ptr))) {
+    ptr++;
+    u16 page = chars_to_int(ptr, DRAWDATA_PAGEBYTES);
+    if(page > maxpage) {
+      maxpage = page;
+    }
+  }
+  return maxpage;
 }
 
 char *write_to_datamem(char *stroke_data, char *stroke_end, u16 page, char *mem,
@@ -513,24 +535,27 @@ void swap_pages(char * start, char * end, const u16 sourcepage, const u16 destpa
   // just assume we've reserved some set of the last for this
   ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, sourcepage, &stroke);
   while(stroke) {
-    int_to_chars(RSV_PAGE_TMP, 2, stroke - DRAWDATA_PAGEBYTES);
+    int_to_chars(RSV_PAGE_TMP, DRAWDATA_PAGEBYTES, stroke - DRAWDATA_PAGEBYTES);
     numtouched++;
+    if(ptr >= end) break;
     ptr = datamem_scanstroke(ptr, end, MAX_DRAW_DATA, sourcepage, &stroke);
   }
 
   // Now, reset and update the destpages to sourcepage
   ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, destpage, &stroke);
   while(stroke) {
-    int_to_chars(sourcepage, 2, stroke - DRAWDATA_PAGEBYTES);
+    int_to_chars(sourcepage, DRAWDATA_PAGEBYTES, stroke - DRAWDATA_PAGEBYTES);
     numtouched++;
+    if(ptr >= end) break;
     ptr = datamem_scanstroke(ptr, end, MAX_DRAW_DATA, destpage, &stroke);
   }
 
   // Then go back to old source and write with dest
   ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, RSV_PAGE_TMP, &stroke);
   while(stroke) {
-    int_to_chars(destpage, 2, stroke - DRAWDATA_PAGEBYTES);
+    int_to_chars(destpage, DRAWDATA_PAGEBYTES, stroke - DRAWDATA_PAGEBYTES);
     numtouched++;
+    if(ptr >= end) break;
     ptr = datamem_scanstroke(ptr, end, MAX_DRAW_DATA, RSV_PAGE_TMP, &stroke);
   }
 
@@ -541,6 +566,10 @@ char * delete_page(char * start, char * end, const u16 page) {
   char * scan = memchr(start, DRAWDATA_ALIGNMENT, end - start);
   u32 reclaim = 0;
   u32 delstrokes = 0;
+
+  if(scan != start) {
+    LOGDBG("PRGERR: DID NOT BEGIN DELETE AT START");
+  }
 
   // Linear scan looking for alignment char. If page matches, add length to 
   while (scan < end) {
@@ -566,19 +595,21 @@ char * delete_page(char * start, char * end, const u16 page) {
 
   // Now that the page is deleted and data moved over, we need to shift
   // over the page metadata
-  u16 lastpage = last_used_page(start, new_end - start);
+  u16 lastpage = last_total_page(start, new_end);
+  LOGTRACE("Last page: %d vs this: %d (%ld)", lastpage, page, new_end - start);
 
   for(u16 shiftpage = page; shiftpage < lastpage; shiftpage++) {
     // Scan for the next page, shift it back into the hole, it leaves a new hole
     char * stroke;
     scan = datamem_scanstroke(start, new_end, MAX_DRAW_DATA, shiftpage + 1, &stroke);
     while(stroke) {
-      int_to_chars(shiftpage, 2, stroke - DRAWDATA_PAGEBYTES);
+      int_to_chars(shiftpage, DRAWDATA_PAGEBYTES, stroke - DRAWDATA_PAGEBYTES);
+      if(scan >= new_end) break;
       scan = datamem_scanstroke(scan, new_end, MAX_DRAW_DATA, shiftpage + 1, &stroke);
     }
   }
 
-  LOGDBG("Deleted %ld strokes for pg %d", delstrokes, page);
+  LOGDBG("Deleted %ld strokes for pg %d", delstrokes, page + 1);
   
   return new_end;
 }
