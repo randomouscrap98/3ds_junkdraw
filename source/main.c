@@ -1357,10 +1357,55 @@ void run_export_menu(struct SystemState *sys, char *draw_data, char *draw_data_e
 #define CTRL_SLOWPEN  (1 << 13)
 #define CTRL_NEXTPALETTE (1 << 14)
 #define CTRL_LAYER    (1 << 15)
+#define CTRL_PREVCOLOR (1 << 16)
 
 // Return a constant representing the action the user took 
 u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u32 kHeld) {
   u32 ctrl = 0;
+  // These change with control schemes
+  if(state->control_scheme == 0) {
+    if (kDown & KEY_A) {
+      if (kHeld & (KEY_R | KEY_ZR)) {
+        ctrl |= CTRL_REDO;
+      } else {
+        ctrl |= CTRL_PENCIL;
+      }
+    }
+    if (kDown & KEY_B) {
+      if (kHeld & (KEY_R | KEY_ZR)) {
+        ctrl |= CTRL_UNDO;
+      } else {
+        ctrl |= CTRL_ERASER;
+      }
+    }
+    if (kDown & KEY_Y) {
+      ctrl |= CTRL_SLOWPEN;
+    }
+  } else if(state->control_scheme == 1) {
+    if(kDown & KEY_X) { 
+      ctrl |= CTRL_UNDO;
+    }
+    if(kDown & KEY_Y) { 
+      ctrl |= CTRL_REDO;
+    }
+    if(kDown & KEY_B) { 
+      ctrl |= CTRL_PREVCOLOR;
+    }
+    if(kDown & KEY_A) {
+      switch(state->draw_state.current_tool - state->draw_state.tools) {
+      case TOOL_PENCIL:
+        ctrl |= CTRL_ERASER;
+        break;
+      case TOOL_ERASER:
+        ctrl |= CTRL_SLOWPEN;
+        break;
+      case TOOL_SLOW:
+        ctrl |= CTRL_PENCIL;
+        break;
+      }
+    }
+  }
+  // These don't change with control schemes (yet)
   if (kDown & (KEY_L | KEY_ZL) && !(kHeld & (KEY_R | KEY_ZR))) {
     ctrl |= CTRL_PALETTE;
   }
@@ -1383,23 +1428,6 @@ u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u3
   }
   if (kRepeat & KEY_DLEFT) {
     ctrl |= CTRL_WIDTHDOWN;
-  }
-  if (kDown & KEY_A) {
-    if (kHeld & (KEY_R | KEY_ZR)) {
-      ctrl |= CTRL_REDO;
-    } else {
-      ctrl |= CTRL_PENCIL;
-    }
-  }
-  if (kDown & KEY_B) {
-    if (kHeld & (KEY_R | KEY_ZR)) {
-      ctrl |= CTRL_UNDO;
-    } else {
-      ctrl |= CTRL_ERASER;
-    }
-  }
-  if (kDown & KEY_Y) {
-    ctrl |= CTRL_SLOWPEN;
   }
   if (kHeld & (KEY_L | KEY_ZL) && kDown & (KEY_R | KEY_ZR)) {
     ctrl |= CTRL_NEXTPALETTE;
