@@ -155,6 +155,9 @@ void colorsystem_reset(struct ColorSystem *cs) {
   for(int i = 0; i < COLORSYS_SELECTIONS; i++) {
     cs->selected[i].index = DEFAULT_PALETTE_STARTINDEX + i * 
       (DEFAULT_PALETTE_STARTINDEX_2 - DEFAULT_PALETTE_STARTINDEX);
+    cs->selected[i].r = i * 17;
+    cs->selected[i].g = i * 17;
+    cs->selected[i].b = i * 17;
   }
 }
 
