@@ -23,6 +23,7 @@ void draw_colorpicker(struct ColorSystem *cs, bool collapsed) {
   u16 total_height = PALETTE_INNERH + (PALETTE_OFSY << 1);
   C2D_DrawRectSolid(0, 0, 0.5f, total_width, total_height, PALETTE_BG);
 
+  struct ColorSelect * css = cs->selected + cs->selected_index;
   if (cs->mode == COLORSYSMODE_PALETTE) {
     u16 selected_index = colorsystem_getpaletteoffset(cs);
     u16 *palette = colorsystem_getcurrentpalette(cs);
@@ -43,7 +44,7 @@ void draw_colorpicker(struct ColorSystem *cs, bool collapsed) {
                         rgba16_to_rgba32c(palette[i]));
     }
   } else if (cs->mode == COLORSYSMODE_RGB) {
-    u8 rgbarr[3] = {cs->r, cs->g, cs->b};
+    u8 rgbarr[3] = {css->r, css->g, css->b};
 
     // The sliders
     for (int i = 0; i < 3; i++) {
@@ -59,9 +60,9 @@ void draw_colorpicker(struct ColorSystem *cs, bool collapsed) {
     }
 
     for (u16 i = 0; i < 32; i++) {
-      u16 cols[3] = {rgb_to_rgba16(31 - i, cs->g, cs->b),
-                     rgb_to_rgba16(cs->r, 31 - i, cs->b),
-                     rgb_to_rgba16(cs->r, cs->g, 31 - i)};
+      u16 cols[3] = {rgb_to_rgba16(31 - i, css->g, css->b),
+                     rgb_to_rgba16(css->r, 31 - i, css->b),
+                     rgb_to_rgba16(css->r, css->g, 31 - i)};
 
       for (int j = 0; j < 3; j++) {
         C2D_DrawRectSolid(PALETTE_OFSX + (1 + 2 * j) * shift +
@@ -118,6 +119,7 @@ int update_colorpicker(struct ColorSystem *cs, const touchPosition *pos) {
   u16 shift = PALETTE_SWATCHWIDTH + 2 * PALETTE_SWATCHMARGIN;
   u16 xind = (pos->px - PALETTE_OFSX) / shift;
   u16 yind = (pos->py - PALETTE_OFSY) / shift;
+  struct ColorSelect * css = cs->selected + cs->selected_index;
   if (yind < 8) {
     if (xind < 8) {
       if (cs->mode == COLORSYSMODE_PALETTE) {
@@ -134,11 +136,11 @@ int update_colorpicker(struct ColorSystem *cs, const touchPosition *pos) {
               31 - ((pos->py - PALETTE_RGBCLICKSTART) / PALETTE_RGBCLICKH);
           if (newval >= 0 && newval < 32) {
             if (xind == 0)
-              cs->r = newval;
+              css->r = newval;
             if (xind == 1)
-              cs->g = newval;
+              css->g = newval;
             if (xind == 2)
-              cs->b = newval;
+              css->b = newval;
             return 1;
           }
         }

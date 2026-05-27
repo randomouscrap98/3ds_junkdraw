@@ -111,6 +111,7 @@ void create_defaultsystemstate(struct SystemState *state) {
   colorsystem_init(&state->colors);
   state->colors.palette_size = DEFAULT_PALETTE_SPLIT;
   colorsystem_setcolors_default(&state->colors);
+  colorsystem_reset(&state->colors);
   state->draw_state.tools = malloc(sizeof(default_tooldata));
 
   PRINTINFO("Loading settings...");
@@ -1487,7 +1488,7 @@ u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u3
     draw_data_end = saved_last = draw_data;                                    \
     *draw_data = 0; /* Not strictly necessary */                               \
     set_default_drawstate(&sys.draw_state);                                    \
-    sys.colors.index = PALETTE_STARTINDEX;                                     \
+    /*colorsystem_reset(&sys.colors);*/                                        \
     set_screenstate_defaults(&sys.screen_state);                               \
     FLUSH_LAYERS();                                                            \
     save_filename[0] = '\0';                                                   \
@@ -1632,6 +1633,9 @@ int main(int argc, char **argv) {
     }
     if (control & CTRL_PAGEDOWN) {
       MAIN_UPDOWN(-1, 1)
+    }
+    if (control & CTRL_PREVCOLOR) {
+      sys.colors.selected_index = (sys.colors.selected_index + 1) % COLORSYS_SELECTIONS;
     }
     if (control & CTRL_WIDTHUP)
       shift_drawstate_width(&sys.draw_state, (kHeld & KEY_R ? 5 : 1));

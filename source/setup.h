@@ -26,9 +26,6 @@
 #define CANVAS_BG_COLOR C2D_Color32(255, 255, 255, 255)
 #define CANVAS_LAYER_COLOR C2D_Color32(0, 0, 0, 0)
 
-#define PALETTE_COLORS 64
-#define PALETTE_STARTINDEX 1
-
 #define MAINMENU_TOP 7 // Where to put the menu?
 #define MAINMENU_TITLE "Junkdraw menu"
 #define MAINMENU_ITEMS                                                         \

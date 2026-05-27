@@ -1,7 +1,5 @@
 #include "color.h"
-#include <stdlib.h>
-
-// To make colors:
+#include <stdlib.h> // To make colors:
 // dos2unix colors.txt
 // awk '{printf "0x%s", substr($0, 3); printf (NR % 8 == 0 ? "\n" : ", ")}'
 // colors.txt
@@ -120,15 +118,16 @@ u32 default_palette[] = {
 
 
 u16 colorsystem_getcolor(struct ColorSystem *cs) {
+  struct ColorSelect * css = cs->selected + cs->selected_index;
   if (cs->mode == COLORSYSMODE_PALETTE) {
-    if (cs->index < cs->num_colors)
-      return cs->colors[cs->index];
+    if (css->index < cs->num_colors)
+      return cs->colors[css->index];
     else
-      return cs->forcecolor;
+      return css->forcecolor;
   } else if (cs->mode == COLORSYSMODE_RGB) {
-    return rgb_to_rgba16(cs->r, cs->g, cs->b);
+    return rgb_to_rgba16(css->r, css->g, css->b);
   } else if (cs->mode == COLORSYSMODE_AUTOPALETTE) {
-    return cs->forcecolor;
+    return css->forcecolor;
   }
   return 0;
 }
@@ -151,36 +150,46 @@ void colorsystem_free(struct ColorSystem *cs) {
   cs->colors = NULL;
 }
 
+void colorsystem_reset(struct ColorSystem *cs) {
+  cs->selected_index = 0;
+  for(int i = 0; i < COLORSYS_SELECTIONS; i++) {
+    cs->selected[i].index = DEFAULT_PALETTE_STARTINDEX + i * 
+      (DEFAULT_PALETTE_STARTINDEX_2 - DEFAULT_PALETTE_STARTINDEX);
+  }
+}
+
 u16 colorsystem_nextpalette(struct ColorSystem *cs, s8 ofs) {
-  cs->index =
-      (cs->index + ofs * cs->palette_size + cs->num_colors) % (cs->num_colors);
-  return cs->index;
+  struct ColorSelect * css = cs->selected + cs->selected_index;
+  css->index =
+      (css->index + ofs * cs->palette_size + cs->num_colors) % (cs->num_colors);
+  return css->index;
 }
 
 int colorsystem_trysetcolor(struct ColorSystem *cs, u16 color) {
+  struct ColorSelect * css = cs->selected + cs->selected_index;
   if (cs->mode == COLORSYSMODE_PALETTE) {
-    int start = cs->index;
+    int start = css->index;
     if (cs->palette_size > 0) { // Start at beginning of given block size
       start -= (start % cs->palette_size);
     }
     for (int i = 0; i < cs->num_colors; i++) {
       u16 coli = (i + start) % cs->num_colors;
       if (cs->colors[coli] == color) {
-        cs->index = coli;
+        css->index = coli;
         return 1;
       }
     }
     // FORCE the setting of the color if not found
-    cs->forcecolor = color;
-    cs->index = 65535;
+    css->forcecolor = color;
+    css->index = 65535;
     return 1;
   } else if (cs->mode == COLORSYSMODE_RGB) {
-    cs->r = (color >> 10) & 0b11111;
-    cs->g = (color >> 5) & 0b11111;
-    cs->b = (color) & 0b11111;
+    css->r = (color >> 10) & 0b11111;
+    css->g = (color >> 5) & 0b11111;
+    css->b = (color) & 0b11111;
     return 1;
   } else if (cs->mode == COLORSYSMODE_AUTOPALETTE) {
-    cs->forcecolor = color;
+    css->forcecolor = color;
     return 1;
   }
   return 0;

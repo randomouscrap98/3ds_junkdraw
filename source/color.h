@@ -11,8 +11,21 @@
 
 // THIS MUST BE A POWER OF 2!!
 #define COLORSYS_HISTORY 32
+#define COLORSYS_SELECTIONS 2
+
+#define DEFAULT_PALETTE_COLORS 64
+#define DEFAULT_PALETTE_STARTINDEX 1
+#define DEFAULT_PALETTE_STARTINDEX_2 10
 
 extern u32 default_palette[];
+
+struct ColorSelect {
+  u16 index;        // If in palette mode, index into colors
+  u8 r;             // Red value if in rgb mode
+  u8 g;             // green value in rgb mode
+  u8 b;             // blue value in rgb mode
+  u16 forcecolor;   // For anything that just has a color, no index
+};
 
 // To initialize, memset 0
 struct ColorSystem {
@@ -21,11 +34,8 @@ struct ColorSystem {
   u16 num_colors;   // Amount of colors assigned
   u16 palette_size; // Numer of colors in a single "palette"
   u8 mode;          // Color picking mode
-  u16 index;        // If in palette mode, index into colors
-  u8 r;             // Red value if in rgb mode
-  u8 g;             // green value in rgb mode
-  u8 b;             // blue value in rgb mode
-  u16 forcecolor;   // For anything that just has a color, no index
+  u8 selected_index;
+  struct ColorSelect selected[2];
 };
 
 static inline void colorsystem_init(struct ColorSystem *cs) {
@@ -44,29 +54,30 @@ u16 colorsystem_nextpalette(struct ColorSystem *cs, s8 ofs);
 // things; for instance, setting the color in palette mode will scan for a
 // matching color and only change things if color is found
 int colorsystem_trysetcolor(struct ColorSystem *cs, u16 color);
+void colorsystem_reset(struct ColorSystem *cs);
 
 // Get the current palette slot based on the global index.
 static inline u16 colorsystem_getpaletteslot(struct ColorSystem *cs) {
-  return cs->index / cs->palette_size;
+  return cs->selected[cs->selected_index].index / cs->palette_size;
 }
 // Get a pointer into the current palette
 static inline u16 *colorsystem_getcurrentpalette(struct ColorSystem *cs) {
-  if (cs->index < cs->num_colors)
+  if (cs->selected[cs->selected_index].index < cs->num_colors)
     return cs->colors + colorsystem_getpaletteslot(cs) * cs->palette_size;
   else
     return cs->colors;
 }
 // Get the offset into the current palette slot, useful for drawing interfaces
 static inline u16 colorsystem_getpaletteoffset(struct ColorSystem *cs) {
-  if (cs->index < cs->num_colors)
-    return cs->index % cs->palette_size;
+  if (cs->selected[cs->selected_index].index < cs->num_colors)
+    return cs->selected[cs->selected_index].index % cs->palette_size;
   else // this is a forced color. This return might be stupid
     return 65535;
 }
 // Set the total color based on offset into current palette
 static inline u16 colorsystem_setpaletteoffset(struct ColorSystem *cs, u16 i) {
-  cs->index = colorsystem_getpaletteslot(cs) * cs->palette_size + i;
-  return cs->index;
+  cs->selected[cs->selected_index].index = colorsystem_getpaletteslot(cs) * cs->palette_size + i;
+  return cs->selected[cs->selected_index].index;
 }
 
 // Convert rgb (in the 0 to 31 range) to a true rgb
