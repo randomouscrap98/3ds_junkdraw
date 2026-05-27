@@ -10,6 +10,7 @@
 #define ONIONCOUNTKEY "onion_count"
 #define ONIONSTARTKEY "onion_blendstart"
 #define COLORMODEKEY "color_mode"
+#define CONTROLSCHEMEKEY "control_scheme"
 
 #define MAXSETTINGSREAD 2048
 
@@ -22,6 +23,7 @@ void load_settings_raw(struct SystemState *sys, char *settings) {
   set_systemstate_onionstart(
       sys, (float)ini_as_num(ini_get(iniroot, ONIONSTARTKEY)));
   sys->colors.mode = (int)ini_as_int(ini_get(iniroot, COLORMODEKEY));
+  sys->control_scheme = (u16)ini_as_int(ini_get(iniroot, CONTROLSCHEMEKEY));
   ini_free(&ini);
 }
 
@@ -31,6 +33,7 @@ void set_default_settings(struct SystemState *sys) {
   sys->onion_count = 3;
   set_systemstate_onionstart(sys, 0.3);
   sys->colors.mode = 0;
+  sys->control_scheme = 0;
 }
 
 int save_settings(struct SystemState *sys, const char *path) {
@@ -45,12 +48,14 @@ int save_settings(struct SystemState *sys, const char *path) {
     POWERSAVEKEY " = %d\n"
     ONIONCOUNTKEY " = %d\n"
     ONIONSTARTKEY " = %f\n"
-    COLORMODEKEY " = %d\n",
+    COLORMODEKEY " = %d\n"
+    CONTROLSCHEMEKEY " = %d\n",
       sys->slow_avg,
       sys->power_saver,
       sys->onion_count,
       sys->onion_blendstart,
-      sys->colors.mode
+      sys->colors.mode,
+      sys->control_scheme
     );
   /* clang-format on */
   return write_file(path, settings);

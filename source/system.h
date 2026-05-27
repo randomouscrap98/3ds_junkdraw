@@ -105,6 +105,7 @@ struct SystemState {
   float onion_blendstart;
 
   bool power_saver;
+  u16 control_scheme;
 
   float slow_avg;
   float slowx;

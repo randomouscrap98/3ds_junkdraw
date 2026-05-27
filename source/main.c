@@ -85,6 +85,8 @@ u32 __stacksize__ = 512 * 1024;
 #define TOOL_CHARS "pes"
 #define LAYER_CHARS "bt"
 
+#define CONTROLSCHEME_COUNT 2
+
 // Glitch in citro2d (or so we assume) prevents us from writing into the first 8
 // pixels in the texture. As such, we simply shift the texture over by this
 // amount when drawing. HOWEVER: for extra safety, we just avoid double
@@ -1159,6 +1161,7 @@ bool run_edit_menu(struct SystemState *sys, char * draw_data, char ** draw_end) 
 void run_options_menu(struct SystemState *sys) {
   char menu[256];
   char colpickers[][16] = {"Palette", "RGB", "Auto Palette"};
+  char controlschemes[][16] = {"Default", "Toggle"};
   float newonionstart;
   s32 menuopt = 0;
   bool settings_changed = false;
@@ -1168,11 +1171,12 @@ void run_options_menu(struct SystemState *sys) {
     // replace newlines with 0
     sprintf(menu,
             "Color Picker: %s\nOnion layers: %d\nOnion darkness: "
-            "%.1f\nSlow pen friction: %.2f\nPower saving: %s\nReset "
-            "to defaults\nExit\n",
+            "%.1f\nSlow pen friction: %.2f\nPower saving: %s\n"
+            "Control Scheme: %s\nReset to defaults\nExit\n",
             colpickers[sys->colors.mode], 
             sys->onion_count, sys->onion_blendstart,
-            1 - sys->slow_avg, sys->power_saver ? "on" : "off");
+            1 - sys->slow_avg, sys->power_saver ? "on" : "off",
+            controlschemes[sys->control_scheme]);
     for (int x = strlen(menu); x >= 0; x--) {
       if (menu[x] == '\n')
         menu[x] = 0;
@@ -1209,7 +1213,11 @@ void run_options_menu(struct SystemState *sys) {
       sys->power_saver = !sys->power_saver;
       osSetSpeedupEnable(!sys->power_saver);
       break;
-    case 5: // defaults
+    case 5: // control scheme
+      settings_changed = true;
+      sys->control_scheme = (sys->control_scheme + 1) % CONTROLSCHEME_COUNT;
+      break;
+    case 6: // defaults
       settings_changed = true;
       set_default_settings(sys);
       break;
@@ -1334,6 +1342,77 @@ void run_export_menu(struct SystemState *sys, char *draw_data, char *draw_data_e
   }
 }
 
+#define CTRL_UNDO     (1 << 1)
+#define CTRL_REDO     (1 << 2)
+#define CTRL_MENU     (1 << 3)
+#define CTRL_PALETTE  (1 << 4)
+#define CTRL_ZOOMIN   (1 << 5)
+#define CTRL_ZOOMOUT  (1 << 6)
+#define CTRL_PAGEUP   (1 << 7)
+#define CTRL_PAGEDOWN (1 << 8)
+#define CTRL_WIDTHUP  (1 << 9)
+#define CTRL_WIDTHDOWN (1 << 10)
+#define CTRL_PENCIL   (1 << 11)
+#define CTRL_ERASER   (1 << 12)
+#define CTRL_SLOWPEN  (1 << 13)
+#define CTRL_NEXTPALETTE (1 << 14)
+#define CTRL_LAYER    (1 << 15)
+
+// Return a constant representing the action the user took 
+u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u32 kHeld) {
+  u32 ctrl = 0;
+  if (kDown & (KEY_L | KEY_ZL) && !(kHeld & (KEY_R | KEY_ZR))) {
+    ctrl |= CTRL_PALETTE;
+  }
+  if (kRepeat & KEY_DUP) {
+    if (kHeld & (KEY_R | KEY_ZR)) {
+      ctrl |= CTRL_PAGEUP;
+    } else {
+      ctrl |= CTRL_ZOOMIN;
+    }
+  }
+  if (kRepeat & KEY_DDOWN) {
+    if (kHeld & (KEY_R | KEY_ZR)) {
+      ctrl |= CTRL_PAGEDOWN;
+    } else {
+      ctrl |= CTRL_ZOOMOUT;
+    }
+  }
+  if (kRepeat & KEY_DRIGHT) {
+    ctrl |= CTRL_WIDTHUP;
+  }
+  if (kRepeat & KEY_DLEFT) {
+    ctrl |= CTRL_WIDTHDOWN;
+  }
+  if (kDown & KEY_A) {
+    if (kHeld & (KEY_R | KEY_ZR)) {
+      ctrl |= CTRL_REDO;
+    } else {
+      ctrl |= CTRL_PENCIL;
+    }
+  }
+  if (kDown & KEY_B) {
+    if (kHeld & (KEY_R | KEY_ZR)) {
+      ctrl |= CTRL_UNDO;
+    } else {
+      ctrl |= CTRL_ERASER;
+    }
+  }
+  if (kDown & KEY_Y) {
+    ctrl |= CTRL_SLOWPEN;
+  }
+  if (kHeld & (KEY_L | KEY_ZL) && kDown & (KEY_R | KEY_ZR)) {
+    ctrl |= CTRL_NEXTPALETTE;
+  }
+  if (kDown & KEY_SELECT) {
+    ctrl |= CTRL_LAYER;
+  }
+  if (kDown & KEY_START) {
+    ctrl |= CTRL_MENU;
+  }
+  return ctrl;
+}
+
 
 // --------------------- MAIN -------------------------------
 
@@ -1346,10 +1425,10 @@ void run_export_menu(struct SystemState *sys, char *draw_data, char *draw_data_e
   flush_layers = true;
 
 // Some macros used ONLY for main (think lambdas)
-#define MAIN_UPDOWN(x)                                                         \
+#define MAIN_UPDOWN(x, dopage)                                                 \
   {                                                                            \
-    if (kHeld & KEY_R) {                                                       \
-      int diff = x * ((kHeld & KEY_L) ? 10 : 1);                            \
+    if (dopage) {                                                              \
+      int diff = x * ((kHeld & KEY_L) ? 10 : 1);                               \
       if(sys.anim_loop > 0) {                                                  \
         sys.draw_state.page = (sys.draw_state.page + diff + sys.anim_loop) %   \
                                sys.anim_loop;                                  \
@@ -1504,60 +1583,70 @@ int main(int argc, char **argv) {
     hidTouchRead(&current_touch);
     hidCircleRead(&pos);
 
+    u32 control = get_controls(&sys, kDown, kUp, kRepeat, kHeld);
+
     // Respond to user input
-    if (kDown & KEY_L && !(kHeld & KEY_R)) {
+    if (control & CTRL_PALETTE) {
       palette_active = !palette_active;
       if (palette_active) { // Only calculate the last cols on button press
         fill_colorhistory(&sys.colors, draw_data, draw_data_end,
                           sys.draw_state.page);
       }
     }
-    if (kRepeat & KEY_DUP)
-      MAIN_UPDOWN(1)
-    if (kRepeat & KEY_DDOWN)
-      MAIN_UPDOWN(-1)
-    if (kRepeat & KEY_DRIGHT)
+    if (control & CTRL_ZOOMIN) {
+      MAIN_UPDOWN(1, 0)
+    }
+    if (control & CTRL_ZOOMOUT) {
+      MAIN_UPDOWN(-1, 0)
+    }
+    if (control & CTRL_PAGEUP) {
+      MAIN_UPDOWN(1, 1)
+    }
+    if (control & CTRL_PAGEDOWN) {
+      MAIN_UPDOWN(-1, 1)
+    }
+    if (control & CTRL_WIDTHUP)
       shift_drawstate_width(&sys.draw_state, (kHeld & KEY_R ? 5 : 1));
-    if (kRepeat & KEY_DLEFT)
+    if (control & CTRL_WIDTHDOWN)
       shift_drawstate_width(&sys.draw_state, -(kHeld & KEY_R ? 5 : 1));
-    if (kDown & KEY_A) {
-      if (kHeld & KEY_R) {
-        char *redo = ringstack_pop(&redostack);
-        if (redo != NULL) {
-          ringstack_push(&undostack, draw_data_end);
-          draw_data_end = redo;
-          FLUSH_LAYERS();
-          PRINT_DATAUSAGE();
-        } else {
-          LOGDBG("ERR: No redos in buffer!\n");
-        }
+    if (control & CTRL_REDO) {
+      char *redo = ringstack_pop(&redostack);
+      if (redo != NULL) {
+        ringstack_push(&undostack, draw_data_end);
+        draw_data_end = redo;
+        FLUSH_LAYERS();
+        PRINT_DATAUSAGE();
       } else {
-        set_drawstate_tool(&sys.draw_state, TOOL_PENCIL);
+        LOGDBG("ERR: No redos in buffer!\n");
       }
     }
-    if (kDown & KEY_B) {
-      if (kHeld & KEY_R) {
-        char *undo = ringstack_pop(&undostack);
-        if (undo != NULL) {
-          ringstack_push(&redostack, draw_data_end);
-          draw_data_end = undo;
-          FLUSH_LAYERS();
-          PRINT_DATAUSAGE();
-        } else {
-          LOGDBG("ERR: No undos in buffer!\n");
-        }
+    if (control & CTRL_UNDO) {
+      char *undo = ringstack_pop(&undostack);
+      if (undo != NULL) {
+        ringstack_push(&redostack, draw_data_end);
+        draw_data_end = undo;
+        FLUSH_LAYERS();
+        PRINT_DATAUSAGE();
       } else {
-        set_drawstate_tool(&sys.draw_state, TOOL_ERASER);
+        LOGDBG("ERR: No undos in buffer!\n");
       }
     }
-    if (kDown & KEY_Y)
+    if (control & CTRL_PENCIL) {
+      set_drawstate_tool(&sys.draw_state, TOOL_PENCIL);
+    }
+    if (control & CTRL_ERASER) {
+      set_drawstate_tool(&sys.draw_state, TOOL_ERASER);
+    }
+    if (control & CTRL_SLOWPEN) {
       set_drawstate_tool(&sys.draw_state, TOOL_SLOW);
-    if (kHeld & KEY_L && kDown & KEY_R && palette_active)
+    }
+    if ((control & CTRL_NEXTPALETTE) && palette_active) {
       colorsystem_nextpalette(&sys.colors, 1);
-    if (kDown & KEY_SELECT) {
+    }
+    if (control & CTRL_LAYER) {
       sys.draw_state.layer = (sys.draw_state.layer + 1) % LAYER_COUNT;
     }
-    if (kDown & KEY_START) {
+    if (control & CTRL_MENU) {
       switch (easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, 0,
                         KEY_B | KEY_START)) {
       case MAINMENU_EDIT:
