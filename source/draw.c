@@ -112,8 +112,8 @@ u32 varwidth_to_int(const char *container, u8 *read_count) {
 // javascript's general inability to draw non anti-aliased lines, and I want the
 // strokes saved by this program to be 100% accurately reproducible on
 // javascript)
+/*
 void pixaligned_linefunc(const struct FullLine *line, rectangle_func rect_f)
-// const struct SimpleLine * line, u16 width, u32 color, rectangle_func rect_f)
 {
   float xdiff = line->x2 - line->x1;
   float ydiff = line->y2 - line->y1;
@@ -146,35 +146,37 @@ void pixaligned_linefunc(const struct FullLine *line, rectangle_func rect_f)
     oy = y;
   }
 }
+*/
 
 // void line_bresenham(const h3d_fb * fb, uint16_t color, int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
-// void pixaligned_linefunc(const struct FullLine *line, rectangle_func rect_f) {
-//   // Honestly, taken from wikipedia https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
-//   int16_t x0 = line->x1;
-//   int16_t x1 = line->x2;
-//   int16_t y0 = line->y1;
-//   int16_t y1 = line->y2;
-//   int16_t dx = abs(x1 - x0);
-//   int16_t sx = x0 < x1 ? 1 : -1;
-//   int16_t dy = -abs(y1 - y0);
-//   int16_t sy = y0 < y1 ? 1 : -1;
-//   int16_t error = dx + dy;
-// 
-//   while(1) {
-//     (*rect_f)(x0, y0, line->width, line->color);
-//     int16_t e2 = 2 * error;
-//     if (e2 >= dy) {
-//       if (x0 == x1) break;
-//       error = error + dy;
-//       x0 = x0 + sx;
-//     }
-//     if (e2 <= dx) {
-//       if (y0 == y1) break;
-//       error = error + dx;
-//       y0 = y0 + sy;
-//     }
-//   }
-// }
+void pixaligned_linefunc(const struct FullLine *line, rectangle_func rect_f) {
+  // Honestly, taken from wikipedia https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
+  float ofs = (line->width / 2.0f) - 0.5f;
+  int16_t x0 = floor(line->x1 - ofs);
+  int16_t x1 = floor(line->x2 - ofs);
+  int16_t y0 = floor(line->y1 - ofs);
+  int16_t y1 = floor(line->y2 - ofs);
+  int16_t dx = abs(x1 - x0);
+  int16_t sx = x0 < x1 ? 1 : -1;
+  int16_t dy = -abs(y1 - y0);
+  int16_t sy = y0 < y1 ? 1 : -1;
+  int16_t error = dx + dy;
+
+  while(1) {
+    (*rect_f)(x0, y0, line->width, line->color);
+    int16_t e2 = 2 * error;
+    if (e2 >= dy) {
+      if (x0 == x1) break;
+      error = error + dy;
+      x0 = x0 + sx;
+    }
+    if (e2 <= dx) {
+      if (y0 == y1) break;
+      error = error + dx;
+      y0 = y0 + sy;
+    }
+  }
+}
 
 // Draw the collection of lines given, starting at the given line and ending
 // before the other given line (first inclusive, last exclusive)
