@@ -63,20 +63,24 @@ struct FullLine {
 // A basic representation of a collection of lines. Doesn't understand "tools"
 // or any of that, it JUST has the information required to draw the lines.
 struct LinePackage {
-   u8 style;
-   u8 layer;
-   u16 color;
-   u8 width;
    struct SimpleLine * lines;
    u16 line_count;
    u16 max_lines;
+   u16 color;
+   u8 style;
+   u8 layer;
+   u8 width;
 };
 
 void init_linepackage(struct LinePackage * package);
 void free_linepackage(struct LinePackage * package);
 void convert_to_fullline(const struct LinePackage * package, u16 line_index, struct FullLine * result);
+void convert_to_fullline_precolor(const struct LinePackage *package, u16 line_index,
+                                  u32 color, struct FullLine *result);
 
-void pixaligned_linefunc (const struct FullLine * line, rectangle_func rect_f);
+void pixaligned_func(int16_t x0, int16_t y0, int16_t x1, int16_t y1, u16 width, 
+                             u32 color, rectangle_func rect_f);
+void pixaligned_linefunc(const struct FullLine * line, rectangle_func rect_f);
 void pixaligned_linepackfunc(const struct LinePackage * linepack, u16 pack_start, u16 pack_end, rectangle_func rect_f);
 
 char * convert_linepack_to_data(struct LinePackage * lines, char * container, u32 container_size);

@@ -9,7 +9,7 @@
 
 #include "log.h"
 
-#define VERSION "0.5.0_p3"
+#define VERSION "0.5.0_p4"
 #define MAGICSTRING "JUNKDRAW"
 #define FILEVERSION "01"
 #define FOLDER_BASE "/3ds/junkdraw/"
@@ -72,9 +72,6 @@
 #define LAYER_COUNT 2
 #define TEXTURE_WIDTH 1024
 #define TEXTURE_HEIGHT 1024
-
-// Scanning
-#define MAX_FRAMELINES 1000
 
 #define BREPEAT_DELAY 20
 #define BREPEAT_INTERVAL 7

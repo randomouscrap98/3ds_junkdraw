@@ -1,3 +1,6 @@
+#include "3ds/os.h"
+#include "3ds/result.h"
+#include "3ds/services/apt.h"
 #include "settings.h"
 #include <3ds.h>
 
@@ -72,8 +75,25 @@ u32 __stacksize__ = 512 * 1024;
 #define PRINTWARN(x, ...) PRINTGENERAL(x, 33, ##__VA_ARGS__)
 #define PRINTINFO(x, ...) PRINTGENERAL(x, 37, ##__VA_ARGS__)
 
-#define MY_C2DOBJLIMIT 8192
-#define MY_C2DOBJLIMITSAFETY MY_C2DOBJLIMIT - 100
+// #define O3DS_C2DOBJLIMIT 8192
+// #define O3DS_C2DOBJLIMITSAFETY O3DS_C2DOBJLIMIT - 100
+// #define O3DS_MAXDRAWLINES 1000
+
+// #define N3DS_C2DOBJLIMIT (O3DS_C2DOBJLIMIT * 3)
+// #define N3DS_C2DOBJLIMITSAFETY (O3DS_C2DOBJLIMITSAFETY * 3)
+// #define N3DS_MAXDRAWLINES (O3DS_MAXDRAWLINES * 3 / 2)
+
+// #define N3DS_C2DOBJLIMIT (8192 * 3)
+// #define N3DS_C2DOBJLIMITSAFETY ((8192 - 100) * 3)
+// #define N3DS_MAXDRAWLINES (1000 * 3 / 2)
+
+#define MAX_FRAMELINES 1000 // Having trouble with this...
+
+// These can be overridden. But can't seem to figure out balance...
+u32 _OBJLIMIT = 8192; //N3DS_C2DOBJLIMIT;
+u32 _OBJSAFETY = 8192 - 100; //N3DS_C2DOBJLIMITSAFETY;
+u32 _MAXDRAWLINES = MAX_FRAMELINES; //N3DS_MAXDRAWLINES;
+
 #define PSX1BLEN 30
 #define FILE_HEADER_LENGTH 16
 #define MAX_FILE_DATA (MAX_DRAW_DATA + FILE_HEADER_LENGTH)
@@ -175,7 +195,7 @@ u32 _drw_cmd_cnt = 0;
     _drw_cmd_cnt = 0;                                                          \
   }
 #define MY_FLUSHCHECK()                                                        \
-  if (_drw_cmd_cnt > MY_C2DOBJLIMITSAFETY) {                                   \
+  if (_drw_cmd_cnt > _OBJSAFETY) {                                             \
     LOGTRACE("FLUSHING %ld DRAW CMDS PREMATURELY\n", _drw_cmd_cnt);            \
     MY_FLUSH();                                                                \
   }
@@ -343,14 +363,14 @@ void draw_layers(const struct LayerData *layers, layer_num layer_count,
 void draw_from_buffer(struct LineRingBuffer *scandata, struct LayerData *layers,
                       struct ScreenState *scrst) {
   u16 lineCount = 0;
-  struct FullLine *lines[MAX_FRAMELINES];
+  struct FullLine *lines[MAX_FRAMELINES]; // The largest available
   struct FullLine *next = NULL;
 
   // Repeat while there's something in the buffer and we haven't reached the
   // limit. Essentially, just pull as much as possible out of the ring buffer so
   // we can later draw it per-layer
   while ((next = lineringbuffer_shrink(scandata)) &&
-         lineCount < MAX_FRAMELINES) {
+         lineCount < _MAXDRAWLINES) {
     lines[lineCount] = next;
     lineCount++;
   }
@@ -1512,14 +1532,33 @@ int main(int argc, char **argv) {
   // Enable the higher clock speed on New 3DS
   osSetSpeedupEnable(true);
 
+  bool isn3ds = false;
+  bool isn3dssucceed = false;
+  Result res = APT_CheckNew3DS(&isn3ds);
+
+  if(R_SUCCEEDED(res)) {
+    isn3dssucceed = true;
+    //if(isn3ds) {
+    //  _OBJLIMIT = N3DS_C2DOBJLIMIT;
+    //  _OBJSAFETY = N3DS_C2DOBJLIMITSAFETY;
+    //  _MAXDRAWLINES = N3DS_MAXDRAWLINES;
+    //}
+  } 
+
   C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
-  C2D_Init(MY_C2DOBJLIMIT);
+  C2D_Init(_OBJLIMIT);
   C2D_Prepare();
 
   consoleInit(GFX_TOP, NULL);
   C3D_RenderTarget *screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
   LOGTRACE("INITIALIZED");
+
+  if(isn3ds) {
+    LOGDBG("New 3ds detected");
+  } else if(!isn3dssucceed) {
+    LOGDBG("Failed to check 3ds version");
+  }
 
   struct SystemState sys;
 
@@ -1563,7 +1602,7 @@ int main(int argc, char **argv) {
   }
 
   struct LineRingBuffer scandata;
-  init_lineringbuffer(&scandata, MAX_FRAMELINES);
+  init_lineringbuffer(&scandata, _MAXDRAWLINES);
   if (!scandata.lines) {
     LOGDBG("ERR: COULD NOT INIT LINERINGBUFFER");
   }
@@ -1854,9 +1893,21 @@ int main(int argc, char **argv) {
     } else {
       drawpage = DCV_MAX(drawpage, 0);
     }
+    //TickCounter timer;
+    //osTickCounterStart(&timer);
     draw_pointers[dp_ofs] = scan_lines(
       &scandata, draw_pointers[dp_ofs], draw_data_end, drawpage);
+    // osTickCounterUpdate(&timer);
+    // bool saydraw = lineringbuffer_size(&scandata) > 0;
+    // if(saydraw) { 
+    //   LOGDBG("SCAN: %0.2fms", osTickCounterRead(&timer)); 
+    // }
+    //osTickCounterStart(&timer);
     draw_from_buffer(&scandata, layers, &sys.screen_state);
+    // osTickCounterUpdate(&timer);
+    // if(saydraw) {
+    //   LOGDBG("DRAW: %0.2fms", osTickCounterRead(&timer));
+    // }
 
     C2D_Flush();
     _drw_cmd_cnt = 0;

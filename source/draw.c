@@ -43,6 +43,11 @@ u32 chars_to_int(const char *container, const u8 count) {
   return result;
 }
 
+// Some optimized reads
+#define CHARS_TO_INT_1(container) ((container)[0] - DCV_START)
+#define CHARS_TO_INT_2(container) (((container)[0] - DCV_START) + \
+  (((container)[1] - DCV_START) << DCV_BITSPER))
+
 // A dumb form of 2's compliment that doesn't carry the leading 1's
 s32 special_to_signed(u32 special) {
   if (special & 1)
@@ -108,54 +113,14 @@ u32 varwidth_to_int(const char *container, u8 *read_count) {
 // -- SIMPLE LINE UTILS --
 // ------------------------
 
-// Draw a line using a custom line drawing system (required like this because of
-// javascript's general inability to draw non anti-aliased lines, and I want the
-// strokes saved by this program to be 100% accurately reproducible on
-// javascript)
-/*
-void pixaligned_linefunc(const struct FullLine *line, rectangle_func rect_f)
-{
-  float xdiff = line->x2 - line->x1;
-  float ydiff = line->y2 - line->y1;
-  float dist = sqrt(xdiff * xdiff + ydiff * ydiff);
-  float ang = atan(ydiff / (xdiff ? xdiff : 0.0001)) + (xdiff < 0 ? M_PI : 0);
-  float xang = cos(ang);
-  float yang = sin(ang);
-
-  float x, y;
-  float ox = -1;
-  float oy = -1;
-
-  // Where the "edge" of each rectangle to be drawn is
-  float ofs = (line->width / 2.0) - 0.5;
-
-  // Iterate over an acceptable amount of points on the line and draw
-  // rectangles to create a line.
-  for (float i = 0; i <= dist; i += 0.5) {
-    x = floor(line->x1 + xang * i - ofs);
-    y = floor(line->y1 + yang * i - ofs);
-
-    // If we align to the same pixel as before, no need to draw again.
-    if (ox == x && oy == y)
-      continue;
-
-    // Actually draw a centered rect... however you want to.
-    (*rect_f)(x, y, line->width, line->color);
-
-    ox = x;
-    oy = y;
-  }
-}
-*/
-
-// void line_bresenham(const h3d_fb * fb, uint16_t color, int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
-void pixaligned_linefunc(const struct FullLine *line, rectangle_func rect_f) {
+void pixaligned_func(int16_t x0, int16_t y0, int16_t x1, int16_t y1, u16 width, 
+                     u32 color, rectangle_func rect_f) {
   // Honestly, taken from wikipedia https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
-  float ofs = (line->width / 2.0f) - 0.5f;
-  int16_t x0 = floor(line->x1 - ofs);
-  int16_t x1 = floor(line->x2 - ofs);
-  int16_t y0 = floor(line->y1 - ofs);
-  int16_t y1 = floor(line->y2 - ofs);
+  float ofs = (width / 2.0f) - 0.5f;
+  x0 = floor(x0 - ofs);
+  x1 = floor(x1 - ofs);
+  y0 = floor(y0 - ofs);
+  y1 = floor(y1 - ofs);
   int16_t dx = abs(x1 - x0);
   int16_t sx = x0 < x1 ? 1 : -1;
   int16_t dy = -abs(y1 - y0);
@@ -163,7 +128,7 @@ void pixaligned_linefunc(const struct FullLine *line, rectangle_func rect_f) {
   int16_t error = dx + dy;
 
   while(1) {
-    (*rect_f)(x0, y0, line->width, line->color);
+    (*rect_f)(x0, y0, width, color);
     int16_t e2 = 2 * error;
     if (e2 >= dy) {
       if (x0 == x1) break;
@@ -178,19 +143,26 @@ void pixaligned_linefunc(const struct FullLine *line, rectangle_func rect_f) {
   }
 }
 
+inline void pixaligned_linefunc(const struct FullLine *line, rectangle_func rect_f) {
+  pixaligned_func(
+      line->x1, line->y1, line->x2, line->y2, line->width, line->color, rect_f);
+}
+
 // Draw the collection of lines given, starting at the given line and ending
 // before the other given line (first inclusive, last exclusive)
 // Assumes you're already on the appropriate page you want and all that
 void pixaligned_linepackfunc(const struct LinePackage *linepack, u16 pack_start,
                              u16 pack_end, rectangle_func rect_f) {
-  struct FullLine line;
-
   if (pack_end > linepack->line_count)
     pack_end = linepack->line_count;
 
+  u32 color = rgba16_to_rgba32c(linepack->color);
+
   for (u16 i = pack_start; i < pack_end; i++) {
-    convert_to_fullline(linepack, i, &line);
-    pixaligned_linefunc(&line, rect_f);
+    pixaligned_func(
+        linepack->lines[i].x1, linepack->lines[i].y1,
+        linepack->lines[i].x2, linepack->lines[i].y2,
+        linepack->width, color, rect_f);
   }
 }
 
@@ -205,7 +177,13 @@ void free_linepackage(struct LinePackage *package) { free(package->lines); }
 
 void convert_to_fullline(const struct LinePackage *package, u16 line_index,
                          struct FullLine *result) {
-  result->color = rgba16_to_rgba32c(package->color);
+  convert_to_fullline_precolor(
+      package, line_index, rgba16_to_rgba32c(package->color), result);
+}
+
+void convert_to_fullline_precolor(const struct LinePackage *package, u16 line_index,
+                                  u32 color, struct FullLine *result) {
+  result->color = color;
   result->layer = package->layer;
   result->style = package->style;
   result->width = package->width;
@@ -306,10 +284,10 @@ char *convert_data_to_linepack(struct LinePackage *package, char *data,
   // If data is so short that it can't even parse the preamble, quit
   CVD_LINECHECK(5, "PREAMBLE")
 
-  u32 temp = chars_to_int(endptr, 1);
+  u32 temp = CHARS_TO_INT_1(endptr);
   package->style = temp & 0x7;
   package->layer = (temp >> 3) & 0x1;
-  package->width = chars_to_int(endptr + 1, 1) + 1;
+  package->width = CHARS_TO_INT_1(endptr + 1) + 1;
   package->color = chars_to_int(endptr + 2, 3);
   endptr += 5;
 
@@ -317,8 +295,8 @@ char *convert_data_to_linepack(struct LinePackage *package, char *data,
     CVD_LINECHECK(4, "STROKE FIRST POINT")
 
     // First point is regular simple 4 byte data point.
-    u16 x = chars_to_int(endptr, 2);
-    u16 y = chars_to_int(endptr + 2, 2);
+    u16 x = CHARS_TO_INT_2(endptr);
+    u16 y = CHARS_TO_INT_2(endptr + 2);
     endptr += 4;
 
     u8 scanned = 0;
@@ -467,14 +445,14 @@ char *datamem_scanstroke(char *start, char *end, const u32 max_scan,
   u16 stroke_page;
   char *stop = scanptr + DCV_MIN(end - scanptr, max_scan);
 
-  while (scanptr < stop) // end && (scanptr - start) < max_scan)
+  while (scanptr < stop)
   {
     // Skip the alignment character (TODO: assuming it's 1 byte)
     scanptr++;
 
     // TODO: will crash if last character is the alignment char, or if there
     // just aren't enough characters to read up the page.
-    stroke_page = chars_to_int(scanptr, DRAWDATA_PAGEBYTES);
+    stroke_page = CHARS_TO_INT_2(scanptr);
     tempptr = scanptr + DRAWDATA_PAGEBYTES; // tmpptr points at the stroke start
 
     // Move scanptr to the next stroke, always

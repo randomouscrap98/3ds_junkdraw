@@ -1,4 +1,5 @@
 #include "buffer.h"
+#include "color.h"
 #include "log.h"
 
 #include <stdlib.h>
@@ -70,11 +71,12 @@ char *scan_lines(struct LineRingBuffer *buffer, char *drawdata,
     // scandata is already pointing at the end of the current stroke, so we
     // don't need to reassign it to the output of this conversion.
     convert_data_to_linepack(&buffer->pending, stroke_pointer, scandata);
+    u32 color = rgba16_to_rgba32c(buffer->pending.color);
     // Now, for each line, we're going to create a special "full" line and add
     // it to the circular buffer.
     for (u16 i = 0; i < buffer->pending.line_count; i++) {
       struct FullLine *line = lineringbuffer_grow(buffer);
-      convert_to_fullline(&buffer->pending, i, line);
+      convert_to_fullline_precolor(&buffer->pending, i, color, line);
     }
   }
   return scandata;
