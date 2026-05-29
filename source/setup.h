@@ -9,9 +9,6 @@
 
 #include "log.h"
 
-#define VERSION "0.5.0_p4"
-#define MAGICSTRING "JUNKDRAW"
-#define FILEVERSION "01"
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE "saves/"
 #define SCREENSHOTS_BASE FOLDER_BASE "screenshots/"

@@ -50,6 +50,7 @@ u32 __stacksize__ = 512 * 1024;
 #include "setup.h"
 #include "system.h"
 #include "convert.h"
+#include "version.h"
 
 // TODO: Figure out these weirdness things:
 // - Can't draw on the first 8 pixels along the edge of a target, system crashes
@@ -95,8 +96,7 @@ u32 _OBJSAFETY = 8192 - 100; //N3DS_C2DOBJLIMITSAFETY;
 u32 _MAXDRAWLINES = MAX_FRAMELINES; //N3DS_MAXDRAWLINES;
 
 #define PSX1BLEN 30
-#define FILE_HEADER_LENGTH 16
-#define MAX_FILE_DATA (MAX_DRAW_DATA + FILE_HEADER_LENGTH)
+#define MAX_FILE_DATA (MAX_DRAW_DATA + CUR_FHEADER_LEN)
 
 #define TOOL_PENCIL 0
 #define TOOL_ERASER 1
@@ -1502,9 +1502,8 @@ u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u3
     reset_ringstack(&redostack);                                               \
     /* Do this in here JUST IN CASE we support multiple formats */             \
     /* WARN: CAN'T USE 0 AS PADDING CHAR!!! */                                 \
-    memset(data_container, '_', FILE_HEADER_LENGTH);                           \
-    sprintf(data_container, MAGICSTRING VERSION);                              \
-    draw_data = data_container + FILE_HEADER_LENGTH;                           \
+    CUR_PUTFHEADER(data_container);                                            \
+    draw_data = data_container + CUR_FHEADER_LEN;                              \
     draw_data_end = saved_last = draw_data;                                    \
     *draw_data = 0; /* Not strictly necessary */                               \
     set_default_drawstate(&sys.draw_state);                                    \

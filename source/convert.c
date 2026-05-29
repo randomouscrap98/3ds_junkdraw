@@ -2,6 +2,7 @@
 
 #include "draw.h"
 #include "log.h"
+#include "version.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -94,8 +95,7 @@ char * convert_00_01(char * data_begin, char * data_end, size_t max_size) {
   }
 
   // If everything is valid, write out the new header
-  memset(data_begin, '_', FHEADER_LEN_01);
-  sprintf(data_begin, MAGICSTRING_01 "01");
+  memcpy(data_begin, BASEFHEADER(FVERSION_01), FHEADER_LEN_01);
 
   return new_end;
 }
