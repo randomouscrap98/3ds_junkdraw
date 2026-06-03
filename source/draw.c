@@ -15,6 +15,7 @@
 
 #define DCV_NOVARIMAXSCAN
 
+
 // ------------------------
 // -- DATA CONVERT UTILS --
 // ------------------------
@@ -254,6 +255,21 @@ char *convert_linepack_to_data(struct LinePackage *lines, char *container,
       x = lines->lines[i].x2;
       y = lines->lines[i].y2;
     }
+  } else if (lines->style == LINESTYLE_COLLECTION) {
+    // A very simple storage: each line is just two points, stored
+    // as-is with no variance. VERY fast
+    for (u16 i = 0; i < lines->line_count; i++) {
+      if (container_size - (ptr - container) < 8) {
+        LOGDBG("ERROR: ran out of space in line conversion: original size: %ld\n",
+               container_size);
+        return NULL;
+      }
+
+      ptr = int_to_chars(lines->lines[i].x1, 2, ptr);
+      ptr = int_to_chars(lines->lines[i].y1, 2, ptr);
+      ptr = int_to_chars(lines->lines[i].x2, 2, ptr);
+      ptr = int_to_chars(lines->lines[i].y2, 2, ptr);
+    }
   } else {
     // We DON'T support this!
     LOGDBG("ERR: L2D UNSUPPORTED STROKE: %d\n", lines->style);
@@ -331,6 +347,21 @@ char *convert_data_to_linepack(struct LinePackage *package, char *data,
       package->lines[0].x1 = package->lines[0].x2 = x;
       package->lines[0].y1 = package->lines[0].y2 = y;
       package->line_count++;
+    }
+  } else if (package->style == LINESTYLE_COLLECTION) {
+    while (endptr < data_end) {
+      CVD_LINECHECK(8, "COLLECTION: LINE")
+      struct SimpleLine *line = package->lines + package->line_count;
+      line->x1 = CHARS_TO_INT_2(endptr);
+      line->y1 = CHARS_TO_INT_2(endptr + 2);
+      line->x2 = CHARS_TO_INT_2(endptr + 4);
+      line->y2 = CHARS_TO_INT_2(endptr + 6);
+      endptr += 8;
+      package->line_count++;
+      if (package->line_count > package->max_lines) {
+        LOGDBG("ERR: got a stroke that's too long!");
+        return NULL;
+      }
     }
   } else {
     // We DON'T support this!

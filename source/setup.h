@@ -41,7 +41,8 @@
 #define STATUS_WARNING 33
 #define STATUS_ERROR 31
 #define STATUS_ACTIVECOLOR 37
-#define FILELOAD_MENUCOUNT 10
+
+#define MAX_MENULIST 12
 
 // Filesys
 #define MAX_FILENAME 64

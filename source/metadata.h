@@ -14,6 +14,8 @@ typedef struct {
 
 // Get ISO datetime as a string into buf, but without timezone information...
 int get_iso_datetime(char * buf, u32 size);
+// Get current date as yyyymmdd (make sure buf has 9 free slots, 8 chars + null)
+int get_yyyymmdd(char * buf);
 
 int metacontainer_init(metacontainer * mc, u32 size);
 void metacontainer_free(metacontainer * mc);

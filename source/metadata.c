@@ -5,6 +5,23 @@
 #include <stdlib.h>
 #include <string.h>
 
+int get_yyyymmdd(char * buf) {
+  time_t raw_time;
+  struct tm *local_time;
+  if (time(&raw_time) == (time_t)(-1)) {
+    return -1;
+  }
+  local_time = localtime(&raw_time);
+  if (local_time == NULL) {
+      return -1;
+  }
+  sprintf(buf, "%04d%02d%02d",
+          local_time->tm_year + 1900, // tm_year is years since 1900
+          local_time->tm_mon + 1,     // tm_mon is 0-11
+          local_time->tm_mday);
+
+  return 0;
+}
 
 int get_iso_datetime(char * buf, u32 size) {
   if(size < 20) {
@@ -18,7 +35,6 @@ int get_iso_datetime(char * buf, u32 size) {
     return -1;
   }
 
-  // Convert to UTC (thread-safe variants like gmtime_r are preferred if available)
   local_time = localtime(&raw_time);
   if (local_time == NULL) {
       return -1;

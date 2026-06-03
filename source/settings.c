@@ -11,6 +11,7 @@
 #define ONIONSTARTKEY "onion_blendstart"
 #define COLORMODEKEY "color_mode"
 #define CONTROLSCHEMEKEY "control_scheme"
+#define DATESTAMPEKEY "datestamp"
 
 #define MAXSETTINGSREAD 2048
 
@@ -24,6 +25,7 @@ void load_settings_raw(struct SystemState *sys, char *settings) {
       sys, (float)ini_as_num(ini_get(iniroot, ONIONSTARTKEY)));
   sys->colors.mode = (int)ini_as_int(ini_get(iniroot, COLORMODEKEY));
   sys->control_scheme = (u16)ini_as_int(ini_get(iniroot, CONTROLSCHEMEKEY));
+  sys->do_datestamp = (bool)ini_as_int(ini_get(iniroot, DATESTAMPEKEY));
   ini_free(&ini);
 }
 
@@ -34,6 +36,7 @@ void set_default_settings(struct SystemState *sys) {
   set_systemstate_onionstart(sys, 0.3);
   sys->colors.mode = 0;
   sys->control_scheme = 0;
+  sys->do_datestamp = false;
 }
 
 int save_settings(struct SystemState *sys, const char *path) {
@@ -46,12 +49,14 @@ int save_settings(struct SystemState *sys, const char *path) {
     "version = 1\n"
     SLOWAVGKEY " = %f\n"
     POWERSAVEKEY " = %d\n"
+    DATESTAMPEKEY " = %d\n"
     ONIONCOUNTKEY " = %d\n"
     ONIONSTARTKEY " = %f\n"
     COLORMODEKEY " = %d\n"
     CONTROLSCHEMEKEY " = %d\n",
       sys->slow_avg,
       sys->power_saver,
+      sys->do_datestamp,
       sys->onion_count,
       sys->onion_blendstart,
       sys->colors.mode,

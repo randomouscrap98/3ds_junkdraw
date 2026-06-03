@@ -50,6 +50,7 @@ u32 varwidth_to_int(const char * container, u8 * read_count);
 // ---------- Line package system ----------------
 
 #define LINESTYLE_STROKE 0
+#define LINESTYLE_COLLECTION 1
 
 struct SimpleLine { u16 x1, y1, x2, y2; };
 struct FullLine {

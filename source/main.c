@@ -1048,7 +1048,7 @@ char *load_drawing(char *data_container, char *final_filename, metacontainer * m
   }
 
   sprintf(temp_msg, "Found %zu saves:", (size_t)dircount);
-  s32 sel = easy_menu(temp_msg, all_files, MAINMENU_TOP, FILELOAD_MENUCOUNT, 0,
+  s32 sel = easy_menu(temp_msg, all_files, MAINMENU_TOP, MAX_MENULIST, 0,
                       KEY_START | KEY_B);
 
   if (sel < 0)
@@ -1227,17 +1227,19 @@ void run_options_menu(struct SystemState *sys) {
     sprintf(menu,
             "Color Picker: %s\nOnion layers: %d\nOnion darkness: "
             "%.1f\nSlow pen friction: %.2f\nPower saving: %s\n"
+            "Date stamp: %s\n"
             "Control Scheme: %s\nReset to defaults\nExit\n",
             colpickers[sys->colors.mode], 
             sys->onion_count, sys->onion_blendstart,
             1 - sys->slow_avg, sys->power_saver ? "on" : "off",
+            sys->do_datestamp ? "on" : "off",
             controlschemes[sys->control_scheme]);
     for (int x = strlen(menu); x >= 0; x--) {
       if (menu[x] == '\n')
         menu[x] = 0;
     }
     menuopt =
-        easy_menu("Options", menu, MAINMENU_TOP, 0, menuopt, KEY_B | KEY_START);
+        easy_menu("Options", menu, MAINMENU_TOP, MAX_MENULIST, menuopt, KEY_B | KEY_START);
     switch (menuopt) {
     case 0: // color picker mode
       settings_changed = true;
@@ -1268,11 +1270,15 @@ void run_options_menu(struct SystemState *sys) {
       sys->power_saver = !sys->power_saver;
       osSetSpeedupEnable(!sys->power_saver);
       break;
-    case 5: // control scheme
+    case 5: // date stamp
+      settings_changed = true;
+      sys->do_datestamp = !sys->do_datestamp;
+      break;
+    case 6: // control scheme
       settings_changed = true;
       sys->control_scheme = (sys->control_scheme + 1) % CONTROLSCHEME_COUNT;
       break;
-    case 6: // defaults
+    case 7: // defaults
       settings_changed = true;
       set_default_settings(sys);
       break;
