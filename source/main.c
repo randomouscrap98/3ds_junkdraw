@@ -1,6 +1,7 @@
 #include "3ds/os.h"
 #include "3ds/result.h"
 #include "3ds/services/apt.h"
+#include "metadata.h"
 #include "settings.h"
 #include <3ds.h>
 
@@ -97,6 +98,7 @@ u32 _MAXDRAWLINES = MAX_FRAMELINES; //N3DS_MAXDRAWLINES;
 
 #define PSX1BLEN 30
 #define MAX_FILE_DATA (MAX_DRAW_DATA + CUR_FHEADER_LEN)
+#define MAX_META_DATA 200000
 
 #define TOOL_PENCIL 0
 #define TOOL_ERASER 1
@@ -871,10 +873,10 @@ void print_data(char *data, char *dataptr, char *saveptr) {
   float percent = 100.0 * (float)datasize / MAX_DRAW_DATA;
 
   char numbers[51];
-  sprintf(numbers, "%ld %ld  %s(%05.2f%%)", unsaved, datasize, active_x1b,
+  sprintf(numbers, "%zu %zu  %s(%05.2f%%)", (size_t)unsaved, (size_t)datasize, active_x1b,
           percent);
   printf("\x1b[28;1H%s%s%*s", status_x1b, numbers,
-         PRINTDATA_WIDTH - (strlen(numbers) - strlen(active_x1b)), "");
+         (int)(PRINTDATA_WIDTH - (strlen(numbers) - strlen(active_x1b))), "");
 }
 
 void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color,
@@ -963,6 +965,11 @@ void get_rawfile_location(char *savename, char *container) {
   strcpy(container + strlen(container), "raw");
 }
 
+void get_metafile_location(char *savename, char *container) {
+  get_save_location(savename, container);
+  strcpy(container + strlen(container), "meta");
+}
+
 int save_drawing(char *filename, char *data) {
   char savefolder[MAX_FILEPATH];
   char fullpath[MAX_FILEPATH];
@@ -1024,7 +1031,7 @@ char *load_drawing(char *data_container, char *final_filename) {
     goto END;
   }
 
-  sprintf(temp_msg, "Found %ld saves:", dircount);
+  sprintf(temp_msg, "Found %zu saves:", (size_t)dircount);
   s32 sel = easy_menu(temp_msg, all_files, MAINMENU_TOP, FILELOAD_MENUCOUNT, 0,
                       KEY_START | KEY_B);
 
@@ -1041,6 +1048,10 @@ char *load_drawing(char *data_container, char *final_filename) {
   get_rawfile_location(final_filename, fullpath);
   result = read_file(fullpath, data_container, MAX_FILE_DATA);
   PRINTCLEAR();
+  if(!result) {
+    PRINTERR("Error loading file!");
+    goto END;
+  }
   if(strncmp(data_container, MAGICSTRING, 8) != 0) {
     // Try to convert file
     PRINTINFO("Converting to version 01...");
@@ -1077,7 +1088,7 @@ int export_page(struct ScreenState *scrst, page_num page, char *data,
   aptSetSleepAllowed(false);
   int ret = 0;
 
-  PRINTINFO("Exporting page %d: building...", page);
+  PRINTINFO("Exporting page %d: building...", page + 1);
 
   if (mkdir_p(SCREENSHOTS_BASE)) {
     PRINTERR("Couldn't create screenshots folder: %s", SCREENSHOTS_BASE);
@@ -1088,16 +1099,16 @@ int export_page(struct ScreenState *scrst, page_num page, char *data,
   //char savepath[MAX_FILEPATH];
   time_t now = time(NULL);
   sprintf(last_savepath, "%s%s_%d_%jd.png", SCREENSHOTS_BASE,
-          strlen(basename) ? basename : "new", page, now);
+          strlen(basename) ? basename : "new", page + 1, now);
 
   u32 *exported = export_page_raw(scrst, page, data, data_end);
   if (exported == NULL) {
-    PRINTERR("Couldn't export page %d (unknown error)", page);
+    PRINTERR("Couldn't export page %d (unknown error)", page + 1);
     ret = 1;
     goto EXPORTPAGEEND;
   }
 
-  PRINTINFO("Exporting page %d: converting to png...", page);
+  PRINTINFO("Exporting page %d: converting to png...", page + 1);
 
   if (write_citropng(exported, scrst->layer_width, scrst->layer_height,
                      last_savepath) == 0) {
@@ -1623,11 +1634,13 @@ int main(int argc, char **argv) {
   char *draw_data_end; // NOTE: this is exclusive: it points one past the end.
                        // draw_data_end - draw_data = length
   char *saved_last;
+  metacontainer meta;
 
   // Draw pointers for us and all our onion friends
   char *draw_pointers[1 + MAXONION];
 
-  if (!save_filename || !data_container || !stroke_data) {
+  if (!save_filename || !data_container || !stroke_data || 
+      metacontainer_init(&meta, MAX_META_DATA)) {
     LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
   }
 
@@ -1968,6 +1981,7 @@ ENDMAINLOOP:;
   free(save_filename);
   free(data_container);
   free(stroke_data);
+  metacontainer_free(&meta);
 
   for (int i = 0; i < LAYER_COUNT; i++)
     delete_layer(layers[i]);

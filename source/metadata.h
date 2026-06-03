@@ -15,6 +15,7 @@ typedef struct {
 int get_iso_datetime(char * buf, u32 size);
 
 int metacontainer_init(metacontainer * mc, u32 size);
+void metacontainer_free(metacontainer * mc);
 // Add a basic key with date to the metacontainer, IF it will fit
 int metacontainer_addsimple(metacontainer * mc, const char * key);
 // Scan backwards, returning the pointer to the next metadata entry.

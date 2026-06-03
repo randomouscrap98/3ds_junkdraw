@@ -45,6 +45,10 @@ int metacontainer_init(metacontainer * mc, u32 size) {
   return 0;
 }
 
+void metacontainer_free(metacontainer * mc) {
+  free(mc->raw);
+}
+
 int metacontainer_addsimple(metacontainer * mc, const char * key) {
   char time[64];
   int result = get_iso_datetime(time, 64);
