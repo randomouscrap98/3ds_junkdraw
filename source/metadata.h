@@ -5,6 +5,7 @@
 
 #define METAKEY_LOAD "LOAD"
 #define METAKEY_SAVE "SAVE"
+#define METAKEY_NEW  "NEW"
 
 typedef struct {
   char * raw;

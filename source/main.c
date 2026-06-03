@@ -970,7 +970,7 @@ void get_metafile_location(char *savename, char *container) {
   strcpy(container + strlen(container), "meta");
 }
 
-int save_drawing(char *filename, char *data) {
+int save_drawing(char *filename, char *data, metacontainer * mc) {
   char savefolder[MAX_FILEPATH];
   char fullpath[MAX_FILEPATH];
   char temp_msg[MAX_FILEPATH];
@@ -995,13 +995,29 @@ int save_drawing(char *filename, char *data) {
       aptSetSleepAllowed(false);
       PRINTINFO("Saving file %s...", filename);
       int result = mkdir_p(savefolder);
-      if (!result)
-        result = write_file(fullpath, data);
+      if(result) {
+        LOGDBG("Can't create save directory!");
+        goto SAVEDRAWEND;
+      } 
+      result = write_file(fullpath, data);
+      if(result) {
+        LOGDBG("Can't create/write save file!");
+        goto SAVEDRAWEND;
+      } 
+      PRINTINFO("Saving meta %s...", filename);
+      metacontainer_addsimple(mc, METAKEY_SAVE);
+      get_metafile_location(filename, fullpath);
+      result = write_file(fullpath, mc->raw);
+      if(result) {
+        LOGDBG("Can't create meta file!");
+        goto SAVEDRAWEND;
+      } 
+      LOGDBG("Save complete: %s", filename);
+    SAVEDRAWEND:
       PRINTCLEAR();
       aptSetHomeAllowed(true);
       aptSetSleepAllowed(true);
       aptCheckHomePressRejected();
-      LOGDBG("Save complete: %s", filename);
       return result;
     }
   }
@@ -1009,7 +1025,7 @@ int save_drawing(char *filename, char *data) {
   return -1;
 }
 
-char *load_drawing(char *data_container, char *final_filename) {
+char *load_drawing(char *data_container, char *final_filename, metacontainer * mc) {
   char fullpath[MAX_FILEPATH];
   char temp_msg[MAX_FILEPATH]; // Find another constant for this I guess
   char *result = NULL;
@@ -1047,11 +1063,17 @@ char *load_drawing(char *data_container, char *final_filename) {
   aptSetSleepAllowed(false);
   get_rawfile_location(final_filename, fullpath);
   result = read_file(fullpath, data_container, MAX_FILE_DATA);
-  PRINTCLEAR();
   if(!result) {
-    PRINTERR("Error loading file!");
-    goto END;
+    LOGDBG("Error loading main file!");
+    goto LOADEND;
   }
+  get_metafile_location(final_filename, fullpath);
+  PRINTINFO("Loading meta %s...", final_filename)
+  if(!read_file(fullpath, mc->raw, MAX_META_DATA)) {
+    LOGDBG("Metadata file read error; skipping");
+    mc->raw[0] = 0;
+  }
+  metacontainer_addsimple(mc, METAKEY_LOAD);
   if(strncmp(data_container, MAGICSTRING, 8) != 0) {
     // Try to convert file
     PRINTINFO("Converting to version 01...");
@@ -1062,6 +1084,7 @@ char *load_drawing(char *data_container, char *final_filename) {
       LOGDBG("Converted file: v00->v01");
     }
   }
+LOADEND:
   // TODO: will need to check version here in the future (but we only have one so...)
   PRINTCLEAR();
   aptSetHomeAllowed(true);
@@ -1517,6 +1540,8 @@ u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u3
     draw_data = data_container + CUR_FHEADER_LEN;                              \
     draw_data_end = saved_last = draw_data;                                    \
     *draw_data = 0; /* Not strictly necessary */                               \
+    meta.raw[0] = 0;                                                           \
+    metacontainer_addsimple(&meta, METAKEY_NEW);                               \
     set_default_drawstate(&sys.draw_state);                                    \
     /*colorsystem_reset(&sys.colors);*/                                        \
     set_screenstate_defaults(&sys.screen_state);                               \
@@ -1599,6 +1624,7 @@ int main(int argc, char **argv) {
   bool palette_active = false;
   bool flush_layers = true;
   bool close_palette = false;
+  bool is_new_date = false;
 
   u32 current_frame = 0;
   u32 end_frame = 0;
@@ -1748,9 +1774,11 @@ int main(int argc, char **argv) {
       case MAINMENU_SAVE:
         tempc = *draw_data_end;
         *draw_data_end = 0;
-        if (save_drawing(save_filename, data_container) == 0) {
+        if (save_drawing(save_filename, data_container, &meta) == 0) {
           saved_last = draw_data_end;
           PRINT_DATAUSAGE(); // Should this be out in the main loop?
+        } else {
+          PRINTERR("SAVE FAILED!");
         }
         *draw_data_end = tempc;
         break;
@@ -1758,7 +1786,7 @@ int main(int argc, char **argv) {
         if (MAIN_UNSAVEDCHECK(
                 "Are you sure you want to load and lose changes?")) {
           MAIN_NEWDRAW();
-          draw_data_end = load_drawing(data_container, save_filename);
+          draw_data_end = load_drawing(data_container, save_filename, &meta);
 
           if (draw_data_end == NULL) {
             PRINTERR("LOAD FAILED!");
@@ -1768,6 +1796,10 @@ int main(int argc, char **argv) {
             // Find last USED page (that the user touched), set it.
             sys.draw_state.page =
                 last_used_page(draw_data, draw_data_end - draw_data);
+            is_new_date = metacontainer_lastloads_differentdate(&meta);
+            if(is_new_date) {
+              LOGDBG("Last load is a new date");
+            }
             PRINT_DATAUSAGE();
           }
         }
