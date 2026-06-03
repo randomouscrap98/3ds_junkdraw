@@ -4,6 +4,6 @@
 #include "draw.h"
 
 
-int push_digits(const char * digits, struct LinePackage *package, u16 x, u16 y);
+int push_digits(const char * digits, struct LinePackage *package, u16 x, u16 y, u8 scale);
 
 #endif

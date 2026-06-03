@@ -1,6 +1,7 @@
 #include "3ds/os.h"
 #include "3ds/result.h"
 #include "3ds/services/apt.h"
+#include "digits.h"
 #include "metadata.h"
 #include "settings.h"
 #include <3ds.h>
@@ -1217,6 +1218,7 @@ void run_options_menu(struct SystemState *sys) {
   char menu[256];
   char colpickers[][16] = {"Palette", "RGB", "Auto Palette"};
   char controlschemes[][16] = {"Default", "Toggle"};
+  char datesettings[][16] = {"off", "small", "large", "extra"};
   float newonionstart;
   s32 menuopt = 0;
   bool settings_changed = false;
@@ -1232,7 +1234,7 @@ void run_options_menu(struct SystemState *sys) {
             colpickers[sys->colors.mode], 
             sys->onion_count, sys->onion_blendstart,
             1 - sys->slow_avg, sys->power_saver ? "on" : "off",
-            sys->do_datestamp ? "on" : "off",
+            datesettings[sys->datestamp],
             controlschemes[sys->control_scheme]);
     for (int x = strlen(menu); x >= 0; x--) {
       if (menu[x] == '\n')
@@ -1272,7 +1274,7 @@ void run_options_menu(struct SystemState *sys) {
       break;
     case 5: // date stamp
       settings_changed = true;
-      sys->do_datestamp = !sys->do_datestamp;
+      sys->datestamp = (sys->datestamp + 1) % 4;
       break;
     case 6: // control scheme
       settings_changed = true;
@@ -1555,6 +1557,7 @@ u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u3
     save_filename[0] = '\0';                                                   \
     pending.line_count = 0;                                                    \
     current_frame = end_frame = 0;                                             \
+    is_new_date = true;                                                        \
     printf("\x1b[1;1H");                                                       \
     /*printf("--------------------- Start ----------------------");*/          \
     print_controls();                                                          \
@@ -1565,6 +1568,24 @@ u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u3
 #define MAIN_UNSAVEDCHECK(x)                                                   \
   (saved_last == draw_data_end ||                                              \
    easy_warn("WARN: UNSAVED DATA", x, MAINMENU_TOP))
+
+// An optimization (inside): if draw_pointer was already at the end, don't
+// need to RE-draw what we've already drawn, move it forward with
+// the mem write. Note: there are instances where we WILL be drawing
+// twice, but it's difficult to determine what has or has not been
+// drawn when the pointer isn't at the end.
+#define MAIN_WRITEPENDING(force) { \
+  char *cvl_end = convert_linepack_to_data(&pending, stroke_data, MAX_STROKE_DATA); \
+  if (cvl_end == NULL) { \
+    LOGDBG("ERR: Couldn't convert lines!\n"); \
+  } else { \
+    char *previous_end = draw_data_end; \
+    draw_data_end = write_to_datamem(stroke_data, cvl_end, sys.draw_state.page, draw_data, draw_data_end); \
+    if (!force && previous_end == draw_pointers[0]) draw_pointers[0] = draw_data_end; \
+    PRINT_DATAUSAGE(); \
+  } \
+  pending.line_count = 0; \
+}
 
 int main(int argc, char **argv) {
   gfxInitDefault();
@@ -1803,9 +1824,6 @@ int main(int argc, char **argv) {
             sys.draw_state.page =
                 last_used_page(draw_data, draw_data_end - draw_data);
             is_new_date = metacontainer_lastloads_differentdate(&meta);
-            if(is_new_date) {
-              LOGDBG("Last load is a new date");
-            }
             PRINT_DATAUSAGE();
           }
         }
@@ -1835,13 +1853,32 @@ int main(int argc, char **argv) {
       if (!palette_active) {
         reset_ringstack(&redostack);
         ringstack_push(&undostack, draw_data_end);
+        pending.color = sys.draw_state.current_tool->has_static_color
+          ? sys.draw_state.current_tool->static_color
+          : curcol;
+        pending.layer = sys.draw_state.layer;
+        // WARN: here is where we do date stamping! We reuse the pending
+        // buffer for our one-time write into datamem, then undo it
+        if(is_new_date && sys.datestamp) {
+          LOGDBG("Stamping date into canvas");
+          pending.width = 1;
+          pending.style = LINESTYLE_COLLECTION;
+          char _tempdate[16];
+          _tempdate[0] = 0;
+          is_new_date = false;
+          if(get_yyyymmdd(_tempdate)) {
+            LOGDBG("Couldn't get date for stamping!");
+          } else {
+            push_digits(_tempdate, &pending, 
+                        sys.screen_state.offset_x / sys.screen_state.zoom + 15, 
+                        sys.screen_state.offset_y / sys.screen_state.zoom + 5, sys.datestamp);
+            MAIN_WRITEPENDING(1);
+            ringstack_push(&undostack, draw_data_end);
+          }
+        }
+        pending.width = sys.draw_state.current_tool->width;
+        pending.style = sys.draw_state.current_tool->style;
       }
-      pending.color = sys.draw_state.current_tool->has_static_color
-                          ? sys.draw_state.current_tool->static_color
-                          : curcol;
-      pending.style = sys.draw_state.current_tool->style;
-      pending.width = sys.draw_state.current_tool->width;
-      pending.layer = sys.draw_state.layer;
     }
     if (kUp & KEY_TOUCH) {
       end_frame = current_frame;
@@ -1972,29 +2009,7 @@ int main(int argc, char **argv) {
 
     // TODO: Eventually, change this to put the data in different places?
     if (end_frame == current_frame && pending.line_count > 0) {
-      char *cvl_end =
-          convert_linepack_to_data(&pending, stroke_data, MAX_STROKE_DATA);
-
-      if (cvl_end == NULL) {
-        LOGDBG("ERR: Couldn't convert lines!\n");
-      } else {
-        char *previous_end = draw_data_end;
-        draw_data_end =
-            write_to_datamem(stroke_data, cvl_end, sys.draw_state.page,
-                             draw_data, draw_data_end);
-        // An optimization: if draw_pointer was already at the end, don't
-        // need to RE-draw what we've already drawn, move it forward with
-        // the mem write. Note: there are instances where we WILL be drawing
-        // twice, but it's difficult to determine what has or has not been
-        // drawn when the pointer isn't at the end.
-        if (previous_end == draw_pointers[0])
-          draw_pointers[0] = draw_data_end;
-
-        // TODO: need to do this in more places (like when you get lines)
-        PRINT_DATAUSAGE();
-      }
-
-      pending.line_count = 0;
+      MAIN_WRITEPENDING(0);
     }
 
     C2D_TargetClear(screen, sys.screen_state.screen_color);

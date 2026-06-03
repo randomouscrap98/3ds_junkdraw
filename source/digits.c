@@ -1,4 +1,5 @@
 #include "digits.h"
+#include "draw.h"
 
 #include <string.h>
 
@@ -79,7 +80,7 @@ static struct SimpleLine * _digits[] = {
 };
 
 // Push given string of digits as lines into linepackage.
-int push_digits(const char * digits, struct LinePackage *package, u16 x, u16 y) {
+int push_digits(const char * digits, struct LinePackage *package, u16 x, u16 y, u8 scale) {
   while(*digits) {
     int digit = (*digits) - '0';
     digits++;
@@ -93,15 +94,14 @@ int push_digits(const char * digits, struct LinePackage *package, u16 x, u16 y) 
     }
     // Copy all lines in, after modifying the x and y values
     for(int i = 0; i < linecount; i++) {
-      package->lines[package->line_count].x1 = x + _digits[digit]->x1;
-      package->lines[package->line_count].y1 = y + _digits[digit]->y1;
-      package->lines[package->line_count].x2 = x + _digits[digit]->x2;
-      package->lines[package->line_count].y2 = y + _digits[digit]->y2;
+      struct SimpleLine * dline = _digits[digit] + i;
+      package->lines[package->line_count].x1 = x + dline->x1 * scale;
+      package->lines[package->line_count].y1 = y + dline->y1 * scale;
+      package->lines[package->line_count].x2 = x + dline->x2 * scale;
+      package->lines[package->line_count].y2 = y + dline->y2 * scale;
       package->line_count++;
     }
-    //memcpy(package->lines + package->line_count, digits + digit, 
-     //      linecount * sizeof(struct SimpleLine));
-    x += 4; // move over
+    x += 4 * scale; // move over
   }
   return 0;
 }

@@ -20,7 +20,7 @@ struct LayerData {
 void create_layer(struct LayerData *result, Tex3DS_SubTexture subtex);
 void delete_layer(struct LayerData page);
 
-#define LINESTYLE_STROKE 0
+// #define LINESTYLE_STROKE 0
 
 // -------------- SCREEN --------------
 
@@ -105,7 +105,7 @@ struct SystemState {
   float onion_blendstart;
 
   bool power_saver;
-  bool do_datestamp;
+  u8 datestamp;
   u16 control_scheme;
 
   float slow_avg;

@@ -49,6 +49,10 @@ u32 varwidth_to_int(const char * container, u8 * read_count);
 
 // ---------- Line package system ----------------
 
+// WARN: THIS IS HOW DATA IS STORED **AND** HOW LINES ARE RENDERED! They 
+// are intermingled: a LINESTYLE_COLLECTION is still rendered the same as a stroke, just
+// stored differently, but there may be styles which are stored the same as a stroke but
+// rendered very differently. be careful... this system is bad
 #define LINESTYLE_STROKE 0
 #define LINESTYLE_COLLECTION 1
 
