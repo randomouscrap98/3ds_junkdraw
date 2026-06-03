@@ -68,7 +68,7 @@ char * metacontainer_scanback(metacontainer * mc, char * from) {
   if(from == mc->raw) {
     return NULL;
   }
-  from--; // Move back off the current location
+  from--; // Move back off the current location, should be at newline
   while(from != mc->raw) {
     from--; // move back immediately
     if(*from == '\n') {
@@ -79,6 +79,51 @@ char * metacontainer_scanback(metacontainer * mc, char * from) {
   return from;
 }
 
+char * metacontainer_scanback_key(metacontainer * mc, char * from, const char * key) {
+  int keylen = strlen(key);
+  while(1) {
+    from = metacontainer_scanback(mc, from);
+    if(from == NULL) {
+      return NULL;
+    } else if(strncmp(from, key, keylen) == 0) {
+      return from;
+    }
+  }
+}
+
+char * metacontainer_skip_key(metacontainer * mc, char * pos) {
+  if(pos == NULL) { //|| pos >= mc->raw + strlen(mc->raw)) {
+    return NULL;
+  }
+  char * result = strchr(pos, ' ');
+  if(result != NULL) {
+    while(*result == ' ') {
+      result++;
+    }
+  }
+  return result;
+}
+
 int metacontainer_lastloads_differentdate(metacontainer * mc) {
+  // Scan back one, get last date
+  char * lastload = metacontainer_scanback_key(mc, NULL, METAKEY_LOAD);
+  if(lastload == NULL) {
+    return 1; // Not even a single load
+  }
+  char * lastdate = metacontainer_skip_key(mc, lastload);
+  if(lastdate == NULL) {
+    return 1; // Not even a single load? Or date is broken?
+  }
+
+  char * penultload = metacontainer_scanback_key(mc, lastload, METAKEY_LOAD);
+  if(penultload == NULL) {
+    return 1; // Not a second load
+  }
+  char * penultdate = metacontainer_skip_key(mc, penultload);
+  if(penultdate == NULL) {
+    return 1; // Not even a single load? Or date is broken?
+  }
+
   // The amount of chars to check is 10: YYYY-MM-DD
+  return strncmp(lastdate, penultdate, 10);
 }

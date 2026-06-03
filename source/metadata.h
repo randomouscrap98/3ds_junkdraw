@@ -20,8 +20,15 @@ int metacontainer_addsimple(metacontainer * mc, const char * key);
 // Scan backwards, returning the pointer to the next metadata entry.
 // Pass NULL to scan from end
 char * metacontainer_scanback(metacontainer * mc, char * from);
+// Same as metacontainer_scanback but only returns when key is given.
+// Basically a rudimentary search
+char * metacontainer_scanback_key(metacontainer * mc, char * from, const char * key);
+// Given a pointer to a specific metadata, return the pointer
+// to the metadata past the key
+char * metacontainer_skip_key(metacontainer * mc, char * pos);
 // A very specific check: are the last two loads a different date. Returns
-// yes if there aren't enough loads to check
+// yes if there aren't enough loads to check. Add loads before calling this
+// function for maximum effect
 int metacontainer_lastloads_differentdate(metacontainer * mc);
 
 // Return a pointer to the actual metadata associated with the next meta of type given.
