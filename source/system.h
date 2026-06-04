@@ -106,6 +106,7 @@ struct SystemState {
 
   bool power_saver;
   u8 datestamp;
+  u8 datestamp_color;
   u16 control_scheme;
 
   float slow_avg;

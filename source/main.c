@@ -1219,6 +1219,7 @@ void run_options_menu(struct SystemState *sys) {
   char colpickers[][16] = {"Palette", "RGB", "Auto Palette"};
   char controlschemes[][16] = {"Default", "Toggle"};
   char datesettings[][16] = {"off", "small", "large", "extra"};
+  char datecolorsettings[][16] = {"pen", "black", "white"};
   float newonionstart;
   s32 menuopt = 0;
   bool settings_changed = false;
@@ -1229,12 +1230,13 @@ void run_options_menu(struct SystemState *sys) {
     sprintf(menu,
             "Color Picker: %s\nOnion layers: %d\nOnion darkness: "
             "%.1f\nSlow pen friction: %.2f\nPower saving: %s\n"
-            "Date stamp: %s\n"
+            "Date stamp: %s\nDate color: %s\n"
             "Control Scheme: %s\nReset to defaults\nExit\n",
             colpickers[sys->colors.mode], 
             sys->onion_count, sys->onion_blendstart,
             1 - sys->slow_avg, sys->power_saver ? "on" : "off",
             datesettings[sys->datestamp],
+            datecolorsettings[sys->datestamp_color],
             controlschemes[sys->control_scheme]);
     for (int x = strlen(menu); x >= 0; x--) {
       if (menu[x] == '\n')
@@ -1276,11 +1278,15 @@ void run_options_menu(struct SystemState *sys) {
       settings_changed = true;
       sys->datestamp = (sys->datestamp + 1) % 4;
       break;
-    case 6: // control scheme
+    case 6: // date color stamp
+      settings_changed = true;
+      sys->datestamp_color = (sys->datestamp_color + 1) % 3;
+      break;
+    case 7: // control scheme
       settings_changed = true;
       sys->control_scheme = (sys->control_scheme + 1) % CONTROLSCHEME_COUNT;
       break;
-    case 7: // defaults
+    case 8: // defaults
       settings_changed = true;
       set_default_settings(sys);
       break;
@@ -1853,9 +1859,8 @@ int main(int argc, char **argv) {
       if (!palette_active) {
         reset_ringstack(&redostack);
         ringstack_push(&undostack, draw_data_end);
-        pending.color = sys.draw_state.current_tool->has_static_color
-          ? sys.draw_state.current_tool->static_color
-          : curcol;
+        u16 pcolor = sys.draw_state.current_tool->has_static_color
+          ? sys.draw_state.current_tool->static_color : curcol;
         pending.layer = sys.draw_state.layer;
         // WARN: here is where we do date stamping! We reuse the pending
         // buffer for our one-time write into datamem, then undo it
@@ -1863,6 +1868,11 @@ int main(int argc, char **argv) {
           LOGDBG("Stamping date into canvas");
           pending.width = 1;
           pending.style = LINESTYLE_COLLECTION;
+          switch(sys.datestamp_color) {
+            case 1: pending.color = rgb_to_rgba16(0, 0, 0); break;
+            case 2: pending.color = rgb_to_rgba16(31,31,31); break;
+            default: pending.color = pcolor; break;
+          }
           char _tempdate[16];
           _tempdate[0] = 0;
           is_new_date = false;
@@ -1876,6 +1886,7 @@ int main(int argc, char **argv) {
             ringstack_push(&undostack, draw_data_end);
           }
         }
+        pending.color = pcolor;
         pending.width = sys.draw_state.current_tool->width;
         pending.style = sys.draw_state.current_tool->style;
       }

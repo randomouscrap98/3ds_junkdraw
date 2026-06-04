@@ -1,7 +1,7 @@
 #ifndef __HEADER_VERSION__
 #define __HEADER_VERSION__
 
-#define VERSION "0.5.1_p1"
+#define VERSION "0.5.1_p2"
 
 // General magic string (probably won't change)
 #define MAGICSTRING "JUNKDRAW"
