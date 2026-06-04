@@ -504,7 +504,7 @@ char *datamem_scanstroke(char *start, char *end, const u32 max_scan,
 
 // Copy the entire contents of given page to the given destination page. Returns the new end
 char * copy_page(char * start, char * end, const u16 sourcepage, const u16 destpage) {
-  char * stroke;
+  char * stroke = NULL;
   char * new_end = end;
   char * ptr = datamem_scanstroke(start, end, MAX_DRAW_DATA, sourcepage, &stroke);
   u32 numcopied = 0;
@@ -533,7 +533,7 @@ char * copy_page(char * start, char * end, const u16 sourcepage, const u16 destp
 
 // Swap the entire contents of the given two pages
 void swap_pages(char * start, char * end, const u16 sourcepage, const u16 destpage) {
-  char * stroke;
+  char * stroke = NULL;
   char * ptr;
   u32 numtouched = 0;
 
@@ -583,7 +583,7 @@ char * delete_page(char * start, char * end, const u16 page) {
   }
 
   // Linear scan looking for alignment char. If page matches, add length to 
-  while (scan < end) {
+  while (scan && scan < end) {
     // Peek page; if next is delete, do something special
     if(*scan == DRAWDATA_ALIGNMENT && chars_to_int(scan + 1, DRAWDATA_PAGEBYTES) == page) {
       char * next = memchr(scan + 1, DRAWDATA_ALIGNMENT, end - scan - 1);
