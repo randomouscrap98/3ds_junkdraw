@@ -1219,7 +1219,7 @@ void run_options_menu(struct SystemState *sys) {
   char colpickers[][16] = {"Palette", "RGB", "Auto Palette"};
   char controlschemes[][16] = {"Default", "Toggle"};
   char datesettings[][16] = {"off", "small", "large", "extra"};
-  char datecolorsettings[][16] = {"pen", "black", "white"};
+  char datecolorsettings[][16] = {"pen", "black", "white", "red"};
   float newonionstart;
   s32 menuopt = 0;
   bool settings_changed = false;
@@ -1280,7 +1280,7 @@ void run_options_menu(struct SystemState *sys) {
       break;
     case 6: // date color stamp
       settings_changed = true;
-      sys->datestamp_color = (sys->datestamp_color + 1) % 3;
+      sys->datestamp_color = (sys->datestamp_color + 1) % 4;
       break;
     case 7: // control scheme
       settings_changed = true;
@@ -1871,6 +1871,7 @@ int main(int argc, char **argv) {
           switch(sys.datestamp_color) {
             case 1: pending.color = rgb_to_rgba16(0, 0, 0); break;
             case 2: pending.color = rgb_to_rgba16(31,31,31); break;
+            case 3: pending.color = rgb_to_rgba16(31,0,0); break;
             default: pending.color = pcolor; break;
           }
           char _tempdate[16];
