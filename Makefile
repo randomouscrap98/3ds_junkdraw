@@ -1,7 +1,3 @@
-# NOTE: created many years ago with an old devkitpro (unknown version). The following 
-# changes have been made:
-# > 20240707 - replaced D_3DS with D__3DS__ as suggested (why??)
-
 #---------------------------------------------------------------------------------
 .SUFFIXES:
 #---------------------------------------------------------------------------------
@@ -37,30 +33,41 @@ include $(DEVKITARM)/3ds_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
-SOURCES		:=	source source/lib
+SOURCES		:=	source
 DATA		:=	data
 INCLUDES	:=	include
 GRAPHICS	:=	gfx
-#GFXBUILD	:=	$(BUILD)
 ROMFS		:=	romfs
 GFXBUILD	:=	$(ROMFS)/gfx
-
 APP_TITLE := Junk Draw
 APP_DESCRIPTION := Basic paginated drawing program
-# Draw basic art (with friends if you want)
 APP_AUTHOR := haloopdy
-# randomouscrap98
+
+#---------------------------------------------------------------------------------
+# CIA build settings
+#---------------------------------------------------------------------------------
+APP_VERSION_MAJOR	:=	0
+APP_VERSION_MINOR	:=	5
+APP_VERSION_MICRO	:=	1
+APP_VERSION_STRING	:=	$(APP_VERSION_MAJOR).$(APP_VERSION_MINOR).$(APP_VERSION_MICRO)
+PRODUCT_CODE	:=	CTR-HALJ
+UNIQUE_ID		:=	0xBBAF0
+
+BANNER_AUDIO	:=	meta/banner.wav
+BANNER_IMAGE	:=	meta/banner.png
+ICON			:=	meta/icon.png
+RSF_PATH		:=	meta/app.rsf
 
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
 ARCH	:=	-march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
 
-CFLAGS	:=	-g -Wall -Wno-char-subscripts -O2 -mword-relocations \
-			-fomit-frame-pointer -ffunction-sections \
+CFLAGS	:=	-g -Wall -O2 -mword-relocations \
+			-ffunction-sections \
 			$(ARCH)
 
-CFLAGS	+=	$(INCLUDE) -DARM11 -D__3DS__
+CFLAGS	+=	$(INCLUDE) -D__3DS__ -DAPP_VERSION_STRING=\"$(APP_VERSION_STRING)\"
 
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
 
@@ -157,17 +164,59 @@ ifneq ($(ROMFS),)
 	export _3DSXFLAGS += --romfs=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: all clean
+.PHONY: all clean cia 3dsx
 
 #---------------------------------------------------------------------------------
-all:
+# CIA tool configuration
+#---------------------------------------------------------------------------------
+MAKEROM			?=	makerom
+BANNERTOOL		?=	bannertool
+
+MAKEROM_ARGS	:=	-elf "$(OUTPUT).elf" -rsf "$(RSF_PATH)" \
+					-banner "$(BUILD)/banner.bnr" -icon "$(BUILD)/icon.icn" \
+					-DAPP_TITLE="$(APP_TITLE)" \
+					-DAPP_PRODUCT_CODE="$(PRODUCT_CODE)" \
+					-DAPP_UNIQUE_ID="$(UNIQUE_ID)"
+
+ifneq ($(strip $(ROMFS)),)
+	MAKEROM_ARGS	+=	-DAPP_ROMFS="$(ROMFS)"
+endif
+
+ifeq ($(suffix $(BANNER_IMAGE)),.cgfx)
+	BANNER_IMAGE_ARG := -ci
+else
+	BANNER_IMAGE_ARG := -i
+endif
+
+ifeq ($(suffix $(BANNER_AUDIO)),.cwav)
+	BANNER_AUDIO_ARG := -ca
+else
+	BANNER_AUDIO_ARG := -a
+endif
+
+#---------------------------------------------------------------------------------
+all: 3dsx
+
+#---------------------------------------------------------------------------------
+3dsx:
 	@mkdir -p $(BUILD) $(GFXBUILD)
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 #---------------------------------------------------------------------------------
+cia: 3dsx
+	@echo Building CIA...
+	@$(BANNERTOOL) makebanner $(BANNER_IMAGE_ARG) $(BANNER_IMAGE) \
+		$(BANNER_AUDIO_ARG) $(BANNER_AUDIO) -o $(BUILD)/banner.bnr
+	@$(BANNERTOOL) makesmdh -s "$(APP_TITLE)" -l "$(APP_TITLE)" \
+		-p "$(APP_AUTHOR)" -i $(APP_ICON) -o $(BUILD)/icon.icn
+	@$(MAKEROM) -f cia -o $(OUTPUT).cia -target t -exefslogo \
+		$(MAKEROM_ARGS) -major $(APP_VERSION_MAJOR) -minor $(APP_VERSION_MINOR) -micro $(APP_VERSION_MICRO)
+	@echo Built $(TARGET).cia
+
+#---------------------------------------------------------------------------------
 clean:
 	@echo clean ...
-	@rm -fr $(BUILD) $(TARGET).3dsx $(OUTPUT).smdh $(TARGET).elf
+	@rm -fr $(BUILD) $(TARGET).3dsx $(OUTPUT).smdh $(TARGET).elf $(TARGET).cia
 
 
 #---------------------------------------------------------------------------------
@@ -178,7 +227,7 @@ else
 #---------------------------------------------------------------------------------
 $(OUTPUT).3dsx	:	$(OUTPUT).elf $(_3DSXDEPS)
 
-$(OFILES_SOURCES) : $(HFILES)
+$(OFILES_SOURCES) : $(HFILES) $(TOPDIR)/Makefile
 
 $(OUTPUT).elf	:	$(OFILES)
 

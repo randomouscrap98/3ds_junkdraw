@@ -1,4 +1,4 @@
-# 3ds_junkdraw <img alt="icon" align="left" src="icon.png">
+# 3ds_junkdraw <img alt="icon" align="left" src="github/icon.png">
 
 An extremely simple drawing app for the 3DS. Focus is simplicity and ease of reimplementation.
 
@@ -11,7 +11,7 @@ Some design decisions are based around [bugs in citro2d](https://github.com/devk
 I'm sorry in advance.
 
 ## Controls
-<img width="250" align="right" src="screenshot1.png" alt="screenshot">
+<img width="250" align="right" src="github/screenshot1.png" alt="screenshot">
 
 * **START** : menu
 * **SELECT** : change layers
@@ -27,6 +27,25 @@ I'm sorry in advance.
 * **R+L+UP/DOWN** : REALLY change page (please don't do this)
 * **R+B/R+A** : Undo / Redo. Changing pages resets undo buffer
 
+### Toggle-mode controls (optional)
+* **A** : Change tool
+* **X** : Undo
+* **Y** : Redo
+* **B** : Primary/secondary color (only available in toggle-mode)
+
+## Features / limitations
+* Paginated drawing capable of storing hundreds of pages per file
+* 16 bit colors with no anti-aliasing or blending
+* 9 banks of 64 color palettes, or a 3-slider RGB color picker
+* 32 color history bank
+* 2 layers with 1-bit transparency only
+* Undo/redo (slowly)
+* Saving/loading to a simple, somewhat-editable ASCII format
+* PNG + GIF export
+* Download exports in a PC/phone browser without exiting app
+* Page editing (copy/swap/delete/etc)
+* Animation mode with looping + onion skin
+
 ## Debugging
 It's difficult to debug on the 3DS. As such, if you need to inspect the drawing data at a granular
 level, drawing specific ranges of strokes, you can do so using [debug.html](debug.html).
@@ -41,3 +60,11 @@ level, drawing specific ranges of strokes, you can do so using [debug.html](debu
 You can use this to "curate" specific ranges of strokes for export, or simply export entire pages for 
 whatever reason. Please note that this is a debug page first and foremost, and won't be updated with
 many ease of use features.
+
+## Building
+
+Some tools are missing from devkitpro:
+
+- https://github.com/Epicpkmn11/bannertool : download and put in `/opt/devkitpro/bin/bannertool`
+- https://github.com/3DSGuy/Project_CTR : download and put in `/opt/devkitpro/bin/makerom`
+

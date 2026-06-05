@@ -668,7 +668,7 @@ static bool istr__is_finished(ini__istream_t *in) {
 
 static void istr__skip_whitespace(ini__istream_t *in) {
   const char *end = in->start + in->len;
-  while (in->cur < end && isspace(*in->cur)) {
+  while (in->cur < end && isspace((int)*in->cur)) {
     ++in->cur;
   }
 }
@@ -700,14 +700,14 @@ static inistrv_t strv__trim(inistrv_t view) {
     return view;
   inistrv_t out = view;
   // trim left
-  for (size_t i = 0; i < view.len && isspace(view.buf[i]); ++i) {
+  for (size_t i = 0; i < view.len && isspace((int)view.buf[i]); ++i) {
     ++out.buf;
     --out.len;
   }
   if (strv__is_empty(out))
     return view;
   // trim right
-  for (long long i = view.len - 1; i >= 0 && isspace(view.buf[i]); --i) {
+  for (long long i = view.len - 1; i >= 0 && isspace((int)view.buf[i]); --i) {
     --out.len;
   }
   return out;

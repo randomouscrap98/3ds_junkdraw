@@ -4,6 +4,7 @@ clangd/
 *.elf
 *.lst
 *.smdh
+*.cia
 romfs/
 *.swp
 ignore/
