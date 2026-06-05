@@ -46,7 +46,28 @@ I'm sorry in advance.
 * Page editing (copy/swap/delete/etc)
 * Animation mode with looping + onion skin
 
+## Building
+
+Some tools are missing from devkitpro:
+
+- https://github.com/Epicpkmn11/bannertool : download and put in `/opt/devkitpro/bin/bannertool`
+- https://github.com/3DSGuy/Project_CTR : download and put in `/opt/devkitpro/bin/makerom`
+
+## Attribution
+- [devkitpro](https://devkitpro.org/) for the toolchain
+  - libctru
+  - citro3d
+- [bannertool](https://github.com/Epicpkmn11/bannertool) to make the banner
+- [makerom](https://github.com/3DSGuy/Project_CTR) not really using but it's required
+- [bell sound](https://opengameart.org/content/bell-arpeggio-24) cc0 but, it's the title music
+- [Magic Draw](https://github.com/natsuneco/magic-draw) for additional inspiration and info on creating CIA files
+
+Title art is my own
+
 ## Debugging
+
+**NOTE: The html debugger currently only works for saves made before 0.5!!**
+
 It's difficult to debug on the 3DS. As such, if you need to inspect the drawing data at a granular
 level, drawing specific ranges of strokes, you can do so using [debug.html](debug.html).
 
@@ -60,11 +81,4 @@ level, drawing specific ranges of strokes, you can do so using [debug.html](debu
 You can use this to "curate" specific ranges of strokes for export, or simply export entire pages for 
 whatever reason. Please note that this is a debug page first and foremost, and won't be updated with
 many ease of use features.
-
-## Building
-
-Some tools are missing from devkitpro:
-
-- https://github.com/Epicpkmn11/bannertool : download and put in `/opt/devkitpro/bin/bannertool`
-- https://github.com/3DSGuy/Project_CTR : download and put in `/opt/devkitpro/bin/makerom`
 
