@@ -133,14 +133,20 @@ struct ToolData default_tooldata[] = {
 void create_defaultsystemstate(struct SystemState *state) {
   colorsystem_init(&state->colors);
   state->colors.palette_size = DEFAULT_PALETTE_SPLIT;
+  state->anim_loop = 0;
   colorsystem_setcolors_default(&state->colors);
   colorsystem_reset(&state->colors);
   state->draw_state.tools = malloc(sizeof(default_tooldata));
 
+  // ALWAYS set default settings in case something doesn't load. We don't
+  // necessarily know if load_settings does everything on the tin
+  set_default_settings(state); // Just in case, load default settings
+
   PRINTINFO("Loading settings...");
   if (load_settings(state, SETTINGS_PATH) != 0) {
     LOGDBG("No settings.ini; using defaults");
-    set_default_settings(state); // Just in case, load default settings
+    // Just in case, load default settings again (shouldn't hurt?)
+    set_default_settings(state); 
   }
   PRINTCLEAR();
 }
