@@ -81,11 +81,9 @@ u32 __stacksize__ = 512 * 1024;
 // #define O3DS_C2DOBJLIMIT 8192
 // #define O3DS_C2DOBJLIMITSAFETY O3DS_C2DOBJLIMIT - 100
 // #define O3DS_MAXDRAWLINES 1000
-
 // #define N3DS_C2DOBJLIMIT (O3DS_C2DOBJLIMIT * 3)
 // #define N3DS_C2DOBJLIMITSAFETY (O3DS_C2DOBJLIMITSAFETY * 3)
 // #define N3DS_MAXDRAWLINES (O3DS_MAXDRAWLINES * 3 / 2)
-
 // #define N3DS_C2DOBJLIMIT (8192 * 3)
 // #define N3DS_C2DOBJLIMITSAFETY ((8192 - 100) * 3)
 // #define N3DS_MAXDRAWLINES (1000 * 3 / 2)
@@ -93,8 +91,6 @@ u32 __stacksize__ = 512 * 1024;
 #define MAX_FRAMELINES 1000 // Having trouble with this...
 
 // These can be overridden. But can't seem to figure out balance...
-u32 _OBJLIMIT = 8192; //N3DS_C2DOBJLIMIT;
-u32 _OBJSAFETY = 8192 - 100; //N3DS_C2DOBJLIMITSAFETY;
 u32 _MAXDRAWLINES = MAX_FRAMELINES; //N3DS_MAXDRAWLINES;
 
 #define PSX1BLEN 30
@@ -194,42 +190,89 @@ void set_cpadprofile_canvas(struct CpadProfile *profile) {
 
 // -- DRAWING UTILS --
 
-// Some (hopefully temporary) globals to overcome some unforeseen limits
-u32 _drw_cmd_cnt = 0;
+typedef struct {
+  char *container;
+  char *start;     // This goes to the start of actual drawing data, past file header
+  char *end;       // NOTE: this is exclusive: it points one past the end.
+  char *saved_last;
+  char *draw_pointers[1 + MAXONION];
+} DrawData;
 
-#define MY_FLUSH()                                                             \
-  {                                                                            \
-    C3D_FrameEnd(0);                                                           \
-    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);                                        \
-    _drw_cmd_cnt = 0;                                                          \
+void drawdata_init(DrawData * dd) {
+  dd->container = malloc(MAX_FILE_DATA * sizeof(char));
+  dd->start = dd->end = dd->saved_last = dd->container;
+}
+
+void drawdata_free(DrawData * dd) {
+  free(dd->container);
+}
+
+void drawdata_new(DrawData * dd) {
+  CUR_PUTFHEADER(dd->container);
+  dd->start = dd->container + CUR_FHEADER_LEN;
+  dd->end = dd->saved_last = dd->start;
+  *dd->start = 0; /* Not strictly necessary */
+}
+
+void drawdata_resetpointers(DrawData * dd) {
+  for (int __fli = 0; __fli < MAXONION + 1; __fli++) {
+    dd->draw_pointers[__fli] = dd->start;
   }
-#define MY_FLUSHCHECK()                                                        \
-  if (_drw_cmd_cnt > _OBJSAFETY) {                                             \
-    LOGTRACE("FLUSHING %ld DRAW CMDS PREMATURELY\n", _drw_cmd_cnt);            \
-    MY_FLUSH();                                                                \
+}
+
+
+typedef struct {
+  u32 draw_cmd_count;
+  u32 obj_limit;
+  u32 obj_safety;
+} CitroTracking;
+
+void citrotracking_init(CitroTracking * ct) {
+  ct->draw_cmd_count = 0;
+  // I tried many things to increase this limit but it seems pretty set...
+  ct->obj_limit = 8192;
+  ct->obj_safety = ct->obj_limit - 100;
+}
+
+static inline void citrotracking_flush(CitroTracking * ct, bool force) {
+  if(force || ct->draw_cmd_count > ct->obj_safety) {
+    LOGTRACE("FLUSHING %ld DRAW CMDS PREMATURELY\n", ct->draw_cmd_count); 
+    C3D_FrameEnd(0);
+    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+    ct->draw_cmd_count = 0;
   }
+}
 
-// These "_drawrect" globals apply to ALL rectangle functions
-struct ScreenState *_drawrect_scrst = NULL;
-int _msr_ofsx = 0, _msr_ofsy = 0;
+typedef struct {
+  struct ScreenState * screen;
+  CitroTracking ct;
+  int ofsx;
+  int ofsy;
+  u32 * export_buffer; // a buffer of pixels to fill potentially
+} SolidRectState;
 
-void MY_SOLIDRECT(float x, float y, u16 width, u32 color) {
-  if (x < 0 || y < 0 || x >= _drawrect_scrst->layer_width ||
-      y >= _drawrect_scrst->layer_height) {
+SolidRectState srs;
+
+void solidrectstate_init(SolidRectState * srs, struct ScreenState * screen) {
+  srs->ofsx = 0;
+  srs->ofsy = 0;
+  srs->screen = screen;
+  citrotracking_init(&srs->ct);
+}
+
+void citro_rect(float x, float y, u16 width, u32 color) {
+  if (x < 0 || y < 0 || x >= srs.screen->layer_width ||
+      y >= srs.screen->layer_height) {
 #ifdef DEBUG_IGNORERECT
     LOGDBG("IGNORING RECT AT (%f, %f)", x, y);
 #endif
     return;
   }
-  C2D_DrawRectSolid(x + _msr_ofsx + LAYER_EDGEBUF,
-                    y + _msr_ofsy + LAYER_EDGEBUF, 0.5, width, width, color);
-  _drw_cmd_cnt++;
-  MY_FLUSHCHECK();
+  C2D_DrawRectSolid(x + srs.ofsx + LAYER_EDGEBUF,
+                    y + srs.ofsy + LAYER_EDGEBUF, 0.5, width, width, color);
+  srs.ct.draw_cmd_count++;
+  citrotracking_flush(&srs.ct, false);
 }
-
-// This is a funny little system. Custom line drawing, passing the function,
-// idk. There are better ways, but I'm lazy
-u32 *_exp_layer_dt = NULL;
 
 void _exp_layer_dt_func(float x, float y, u16 width, u32 color) {
   // pre-calculating can save tons of time in the critical loop down there. We
@@ -242,18 +285,18 @@ void _exp_layer_dt_func(float x, float y, u16 width, u32 color) {
   u32 maxx = x + width;
   if (minx < 0)
     minx = 0;
-  if (maxx >= _drawrect_scrst->layer_width)
-    maxx = _drawrect_scrst->layer_width - 1;
+  if (maxx >= srs.screen->layer_width)
+    maxx = srs.screen->layer_width - 1;
   u32 miny = y;
   u32 maxy = y + width;
   if (miny < 0)
     miny = 0;
-  if (maxy >= _drawrect_scrst->layer_height)
-    maxy = _drawrect_scrst->layer_height - 1;
+  if (maxy >= srs.screen->layer_height)
+    maxy = srs.screen->layer_height - 1;
 
-  for (u32 yi = miny; yi < maxy; yi++) //= _drawrect_scrst->layer_width)
+  for (u32 yi = miny; yi < maxy; yi++)
     for (u32 xi = minx; xi < maxx; xi++)
-      _exp_layer_dt[yi * _drawrect_scrst->layer_width + xi] = color;
+      srs.export_buffer[yi * srs.screen->layer_width + xi] = color;
 }
 
 // Draw the scrollbars on the sides of the screen for the given screen
@@ -406,7 +449,7 @@ void draw_from_buffer(struct LineRingBuffer *scandata, struct LayerData *layers,
 
       // NOTE: It's up to you to set _msr_ofsx + _msr_ofsy appropriately before
       // calling "draw_from_buffer"
-      pixaligned_linefunc(lines[li], MY_SOLIDRECT);
+      pixaligned_linefunc(lines[li], citro_rect);
     }
   }
 }
@@ -555,7 +598,7 @@ u32 *export_page_raw(struct ScreenState *scrst, page_num page, char *data,
       continue;
 
     convert_data_to_linepack(&package, stroke_start, current_data);
-    _exp_layer_dt = layerdata[package.layer];
+    srs.export_buffer = layerdata[package.layer];
 
     // At this point, we draw the whole stroke
     pixaligned_linepackfunc(&package, 0, package.line_count,
@@ -870,17 +913,17 @@ void get_printmods(char *status_x1b, char *active_x1b, char *statusbg_x1b,
     sprintf(activebg_x1b, "\x1b[%dm\x1b[30m", 10 + STATUS_ACTIVECOLOR);
 }
 
-void print_data(char *data, char *dataptr, char *saveptr) {
+void print_data(DrawData * dd) {
   char status_x1b[PSX1BLEN];
   char active_x1b[PSX1BLEN];
   get_printmods(status_x1b, active_x1b, NULL, NULL);
 
-  u32 datasize = dataptr - data;
-  u32 unsaved = dataptr - saveptr;
+  u32 datasize = dd->end - dd->start;
+  long unsaved = dd->end - dd->saved_last;
   float percent = 100.0 * (float)datasize / MAX_DRAW_DATA;
 
   char numbers[51];
-  sprintf(numbers, "%zu %zu  %s(%05.2f%%)", (size_t)unsaved, (size_t)datasize, active_x1b,
+  sprintf(numbers, "%ld %zu  %s(%05.2f%%)", unsaved, (size_t)datasize, active_x1b,
           percent);
   printf("\x1b[28;1H%s%s%*s", status_x1b, numbers,
          (int)(PRINTDATA_WIDTH - (strlen(numbers) - strlen(active_x1b))), "");
@@ -1157,7 +1200,7 @@ EXPORTPAGEEND:;
 
 // ---------------- MENUS ---------------------
 
-bool run_edit_menu(struct SystemState *sys, char * draw_data, char ** draw_end) {
+bool run_edit_menu(struct SystemState *sys, DrawData * dd) {
   char menu[256];
   s32 menuopt = 0;
   static u16 source_page = 0;
@@ -1189,28 +1232,28 @@ bool run_edit_menu(struct SystemState *sys, char * draw_data, char ** draw_end) 
     case 1:
       if(easy_warn("WARN: PASTE OVER PAGE", 
                    "This action cannot be undone!!\n\n Really paste page here?", MAINMENU_TOP)) {
-        *draw_end = copy_page(draw_data, *draw_end, source_page, dest_page);
+        dd->end = copy_page(dd->start, dd->end, source_page, dest_page);
         return true;
       }
       break;
     case 2:
       if(easy_warn("WARN: SWAP PAGES", 
                    "This action cannot be undone!!\n\n Really swap pages?", MAINMENU_TOP)) {
-        swap_pages(draw_data, *draw_end, source_page, dest_page);
+        swap_pages(dd->start, dd->end, source_page, dest_page);
         return true;
       }
       break;
     case 3:
       if(easy_warn("WARN: MOVE PAGE", 
                    "This action cannot be undone!!\n\n Really move page?", MAINMENU_TOP)) {
-        move_page(draw_data, *draw_end, source_page, dest_page);
+        move_page(dd->start, dd->end, source_page, dest_page);
         return true;
       }
       break;
     case 4:
       if(easy_warn("WARN: DELETE PAGE", 
                    "This action CANNOT BE UNDONE!!\n\n Really DELETE current page?", MAINMENU_TOP)) {
-        *draw_end = delete_page(draw_data, *draw_end, dest_page);
+        dd->end = delete_page(dd->start, dd->end, dest_page);
         return true;
       }
       break;
@@ -1357,8 +1400,7 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage) {
   }
 }
 
-void run_export_menu(struct SystemState *sys, char *draw_data, char *draw_data_end,
-                  char *filename) {
+void run_export_menu(struct SystemState *sys, DrawData * dd, char *filename) {
   char menu[256];
   s32 menuopt = 0;
   static struct GifSettings settings;
@@ -1386,11 +1428,11 @@ void run_export_menu(struct SystemState *sys, char *draw_data, char *draw_data_e
                         KEY_B | KEY_START);
     switch (menuopt) {
     case 0:
-      export_page(&sys->screen_state, sys->draw_state.page, draw_data,
-                  draw_data_end, filename);
+      export_page(&sys->screen_state, sys->draw_state.page, dd->start,
+                  dd->end, filename);
       return;
     case 1:
-      export_gif(&sys->screen_state, &settings, draw_data, draw_data_end,
+      export_gif(&sys->screen_state, &settings, dd->start, dd->end,
                  filename, sys->anim_loop ? sys->anim_loop - 1 : 0);
       return;
     case 2:
@@ -1408,9 +1450,6 @@ void run_export_menu(struct SystemState *sys, char *draw_data, char *draw_data_e
       if (settings.csecsperframe > 200)
         settings.csecsperframe -= 200;
       break;
-    // case 2: // shortcut to fix animation size
-    //   inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
-    //   break;
     default:
       return;
     }
@@ -1516,16 +1555,37 @@ u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u3
   return ctrl;
 }
 
+typedef struct {
+  bool touching;
+  bool palette_active;
+  bool flush_layers;
+  bool close_palette;
+  bool is_new_date;
+  bool reference_shown;
+
+  u32 current_frame;
+  u32 end_frame;
+  s8 last_zoom_power;
+} SessionState;
+
+void sessionstate_init(SessionState * ss) {
+  ss->touching = false;
+  ss->palette_active = false;
+  ss->flush_layers = true;
+  ss->close_palette = false;
+  ss->is_new_date = false;
+  ss->reference_shown = false;
+  ss->current_frame = 0;
+  ss->end_frame = 0;
+  ss->last_zoom_power = 0;
+}
 
 // --------------------- MAIN -------------------------------
 
-#define UTILS_CLAMP(x, mn, mx) (x <= mn ? mn : x >= mx ? mx : x)
 #define FLUSH_LAYERS()                                                         \
-  for (int __fli = 0; __fli < MAXONION + 1; __fli++) {                         \
-    draw_pointers[__fli] = draw_data;                                          \
-  }                                                                            \
+  drawdata_resetpointers(&dd);    \
   reset_lineringbuffer(&scandata);                                             \
-  flush_layers = true;
+  sstate.flush_layers = true;
 
 // Some macros used ONLY for main (think lambdas)
 #define MAIN_UPDOWN(x, dopage)                                                 \
@@ -1536,50 +1596,40 @@ u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u3
         sys.draw_state.page = (sys.draw_state.page + diff + sys.anim_loop) %   \
                                sys.anim_loop;                                  \
       } else {                                                                 \
-        sys.draw_state.page = UTILS_CLAMP(                                     \
+        sys.draw_state.page = DCV_CLAMP(                                     \
             sys.draw_state.page + diff, 0, MAX_PAGE);                          \
       }                                                                        \
       reset_ringstack(&undostack);                                             \
       reset_ringstack(&redostack);                                             \
       FLUSH_LAYERS();                                                          \
     } else {                                                                   \
-      sys.draw_state.zoom_power = UTILS_CLAMP(sys.draw_state.zoom_power + x,   \
+      sys.draw_state.zoom_power = DCV_CLAMP(sys.draw_state.zoom_power + x,   \
                                               MIN_ZOOMPOWER, MAX_ZOOMPOWER);   \
     }                                                                          \
   }
-
-#define PRINT_DATAUSAGE() print_data(draw_data, draw_data_end, saved_last);
 
 #define MAIN_NEWDRAW()                                                         \
   {                                                                            \
     reset_ringstack(&undostack);                                               \
     reset_ringstack(&redostack);                                               \
-    /* Do this in here JUST IN CASE we support multiple formats */             \
-    /* WARN: CAN'T USE 0 AS PADDING CHAR!!! */                                 \
-    CUR_PUTFHEADER(data_container);                                            \
-    draw_data = data_container + CUR_FHEADER_LEN;                              \
-    draw_data_end = saved_last = draw_data;                                    \
-    *draw_data = 0; /* Not strictly necessary */                               \
+    drawdata_new(&dd);                                                         \
     meta.raw[0] = 0;                                                           \
     metacontainer_addsimple(&meta, METAKEY_NEW);                               \
     set_default_drawstate(&sys.draw_state);                                    \
-    /*colorsystem_reset(&sys.colors);*/                                        \
     set_screenstate_defaults(&sys.screen_state);                               \
     FLUSH_LAYERS();                                                            \
     save_filename[0] = '\0';                                                   \
     pending.line_count = 0;                                                    \
-    current_frame = end_frame = 0;                                             \
-    is_new_date = true;                                                        \
+    sstate.current_frame = sstate.end_frame = 0;                               \
+    sstate.is_new_date = true;                                                 \
     printf("\x1b[1;1H");                                                       \
-    /*printf("--------------------- Start ----------------------");*/          \
     print_controls();                                                          \
     print_framing();                                                           \
-    PRINT_DATAUSAGE();                                                         \
+    print_data(&dd);                                                           \
   }
 
 #define MAIN_UNSAVEDCHECK(x)                                                   \
-  (saved_last == draw_data_end ||                                              \
-   easy_warn("WARN: UNSAVED DATA", x, MAINMENU_TOP))
+  (dd.saved_last == dd.end || easy_warn("WARN: UNSAVED DATA", x, MAINMENU_TOP))
 
 // An optimization (inside): if draw_pointer was already at the end, don't
 // need to RE-draw what we've already drawn, move it forward with
@@ -1591,10 +1641,10 @@ u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u3
   if (cvl_end == NULL) { \
     LOGDBG("ERR: Couldn't convert lines!\n"); \
   } else { \
-    char *previous_end = draw_data_end; \
-    draw_data_end = write_to_datamem(stroke_data, cvl_end, sys.draw_state.page, draw_data, draw_data_end); \
-    if (!force && previous_end == draw_pointers[0]) draw_pointers[0] = draw_data_end; \
-    PRINT_DATAUSAGE(); \
+    char *previous_end = dd.end; \
+    dd.end = write_to_datamem(stroke_data, cvl_end, sys.draw_state.page, dd.start, dd.end); \
+    if (!force && previous_end == dd.draw_pointers[0]) dd.draw_pointers[0] = dd.end; \
+    print_data(&dd); \
   } \
   pending.line_count = 0; \
 }
@@ -1619,11 +1669,13 @@ int main(int argc, char **argv) {
     //}
   } 
 
+  solidrectstate_init(&srs, NULL);
+
   C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
-  C2D_Init(_OBJLIMIT);
+  C2D_Init(srs.ct.obj_limit);
   C2D_Prepare();
 
-  consoleInit(GFX_TOP, NULL);
+  PrintConsole * console_ptr = consoleInit(GFX_TOP, NULL);
   C3D_RenderTarget *screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
   LOGTRACE("INITIALIZED");
@@ -1642,7 +1694,7 @@ int main(int argc, char **argv) {
   set_cpadprofile_canvas(&sys.cpad);
 
   // Very silly global so rect drawing functions know screen dimensions and such
-  _drawrect_scrst = &sys.screen_state;
+  srs.screen = &sys.screen_state;
 
   LOGTRACE("SET SCREENSTATE/CANVAS");
 
@@ -1659,15 +1711,9 @@ int main(int argc, char **argv) {
 
   LOGTRACE("CREATED LAYERS");
 
-  bool touching = false;
-  bool palette_active = false;
-  bool flush_layers = true;
-  bool close_palette = false;
-  bool is_new_date = false;
+  SessionState sstate;
+  sessionstate_init(&sstate);
 
-  u32 current_frame = 0;
-  u32 end_frame = 0;
-  s8 last_zoom_power = 0;
   char tempc; // Used for anything, very short life
 
   struct LinePackage pending;
@@ -1692,19 +1738,15 @@ int main(int argc, char **argv) {
     LOGDBG("ERR: COULD NOT INIT UNDOBUFFER");
   }
 
-  char *save_filename = malloc(MAX_FILENAME * sizeof(char));
-  char *data_container = malloc(MAX_FILE_DATA * sizeof(char));
+  char save_filename[MAX_FILENAME];
+
   char *stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
-  char *draw_data;     // This goes to the start of actual drawing data, past file header
-  char *draw_data_end; // NOTE: this is exclusive: it points one past the end.
-                       // draw_data_end - draw_data = length
-  char *saved_last;
+
+  DrawData dd;
   metacontainer meta;
+  drawdata_init(&dd);
 
-  // Draw pointers for us and all our onion friends
-  char *draw_pointers[1 + MAXONION];
-
-  if (!save_filename || !data_container || !stroke_data || 
+  if (!dd.container || !stroke_data || 
       metacontainer_init(&meta, MAX_META_DATA)) {
     LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
   }
@@ -1732,9 +1774,9 @@ int main(int argc, char **argv) {
 
     // Respond to user input
     if (control & CTRL_PALETTE) {
-      palette_active = !palette_active;
-      if (palette_active) { // Only calculate the last cols on button press
-        fill_colorhistory(&sys.colors, draw_data, draw_data_end,
+      sstate.palette_active = !sstate.palette_active;
+      if (sstate.palette_active) { // Only calculate the last cols on button press
+        fill_colorhistory(&sys.colors, dd.start, dd.end,
                           sys.draw_state.page);
       }
     }
@@ -1760,10 +1802,10 @@ int main(int argc, char **argv) {
     if (control & CTRL_REDO) {
       char *redo = ringstack_pop(&redostack);
       if (redo != NULL) {
-        ringstack_push(&undostack, draw_data_end);
-        draw_data_end = redo;
+        ringstack_push(&undostack, dd.end);
+        dd.end = redo;
         FLUSH_LAYERS();
-        PRINT_DATAUSAGE();
+        print_data(&dd);
       } else {
         LOGDBG("ERR: No redos in buffer!\n");
       }
@@ -1771,10 +1813,10 @@ int main(int argc, char **argv) {
     if (control & CTRL_UNDO) {
       char *undo = ringstack_pop(&undostack);
       if (undo != NULL) {
-        ringstack_push(&redostack, draw_data_end);
-        draw_data_end = undo;
+        ringstack_push(&redostack, dd.end);
+        dd.end = undo;
         FLUSH_LAYERS();
-        PRINT_DATAUSAGE();
+        print_data(&dd);
       } else {
         LOGDBG("ERR: No undos in buffer!\n");
       }
@@ -1788,7 +1830,7 @@ int main(int argc, char **argv) {
     if (control & CTRL_SLOWPEN) {
       set_drawstate_tool(&sys.draw_state, TOOL_SLOW);
     }
-    if ((control & CTRL_NEXTPALETTE) && palette_active) {
+    if ((control & CTRL_NEXTPALETTE) && sstate.palette_active) {
       colorsystem_nextpalette(&sys.colors, 1);
     }
     if (control & CTRL_LAYER) {
@@ -1798,12 +1840,12 @@ int main(int argc, char **argv) {
       switch (easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, 0,
                         KEY_B | KEY_START)) {
       case MAINMENU_EDIT:
-        if(run_edit_menu(&sys, draw_data, &draw_data_end)) {
+        if(run_edit_menu(&sys, &dd)) {
           // Full reset on these big edits...
           reset_ringstack(&undostack);
           reset_ringstack(&redostack);
           FLUSH_LAYERS();
-          PRINT_DATAUSAGE();
+          print_data(&dd);
         }
         break;
       case MAINMENU_NEW:
@@ -1811,37 +1853,37 @@ int main(int argc, char **argv) {
           MAIN_NEWDRAW();
         break;
       case MAINMENU_SAVE:
-        tempc = *draw_data_end;
-        *draw_data_end = 0;
-        if (save_drawing(save_filename, data_container, &meta) == 0) {
-          saved_last = draw_data_end;
-          PRINT_DATAUSAGE(); // Should this be out in the main loop?
+        tempc = *dd.end;
+        *dd.end = 0;
+        if (save_drawing(save_filename, dd.container, &meta) == 0) {
+          dd.saved_last = dd.end;
+          print_data(&dd);
         } else {
           PRINTERR("SAVE FAILED!");
         }
-        *draw_data_end = tempc;
+        *dd.end = tempc;
         break;
       case MAINMENU_LOAD:
         if (MAIN_UNSAVEDCHECK(
                 "Are you sure you want to load and lose changes?")) {
           MAIN_NEWDRAW();
-          draw_data_end = load_drawing(data_container, save_filename, &meta);
+          dd.end = load_drawing(dd.container, save_filename, &meta);
 
-          if (draw_data_end == NULL) {
+          if (dd.end == NULL) {
             PRINTERR("LOAD FAILED!");
             MAIN_NEWDRAW();
           } else {
-            saved_last = draw_data_end;
+            dd.saved_last = dd.end;
             // Find last USED page (that the user touched), set it.
             sys.draw_state.page =
-                last_used_page(draw_data, draw_data_end - draw_data);
-            is_new_date = metacontainer_lastloads_differentdate(&meta);
-            PRINT_DATAUSAGE();
+                last_used_page(dd.start, dd.end - dd.start);
+            sstate.is_new_date = metacontainer_lastloads_differentdate(&meta);
+            print_data(&dd);
           }
         }
         break;
       case MAINMENU_EXPORT:
-        run_export_menu(&sys, draw_data, draw_data_end, save_filename);
+        run_export_menu(&sys, &dd, save_filename);
         break;
       case MAINMENU_OPTIONS:
         // Run options system
@@ -1850,27 +1892,35 @@ int main(int argc, char **argv) {
         break;
       case MAINMENU_RUNTIMEOPTIONS:
         // Run runtime options system (settings here not saved)
-        run_runtime_options_menu(&sys, last_total_page(draw_data, draw_data_end));
+        run_runtime_options_menu(&sys, last_total_page(dd.start, dd.end));
         FLUSH_LAYERS(); // Why not...
         break;
       case MAINMENU_EXIT:
         if (MAIN_UNSAVEDCHECK("Really quit?"))
           goto ENDMAINLOOP;
         break;
+      // default:;
+      //   u16 tw, th;
+      //   u8 * tbuf = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, &tw, &th);
+      //   for(u32 i = 0; i < tw * th; i+=3) {
+      //     tbuf[i] = i & 255;
+      //     tbuf[i + 1] = (i >> 8) & 255;
+      //     tbuf[i + 2] = (i >> 16) & 255;
+      //   }
       }
     }
 
     u16 curcol = colorsystem_getcolor(&sys.colors);
     if (kDown & KEY_TOUCH) {
-      if (!palette_active) {
+      if (!sstate.palette_active) {
         reset_ringstack(&redostack);
-        ringstack_push(&undostack, draw_data_end);
+        ringstack_push(&undostack, dd.end);
         u16 pcolor = sys.draw_state.current_tool->has_static_color
           ? sys.draw_state.current_tool->static_color : curcol;
         pending.layer = sys.draw_state.layer;
         // WARN: here is where we do date stamping! We reuse the pending
         // buffer for our one-time write into datamem, then undo it
-        if(is_new_date && sys.datestamp) {
+        if(sstate.is_new_date && sys.datestamp) {
           LOGDBG("Stamping date into canvas");
           pending.width = 1;
           pending.style = LINESTYLE_COLLECTION;
@@ -1882,7 +1932,7 @@ int main(int argc, char **argv) {
           }
           char _tempdate[16];
           _tempdate[0] = 0;
-          is_new_date = false;
+          sstate.is_new_date = false;
           if(get_yyyymmdd(_tempdate)) {
             LOGDBG("Couldn't get date for stamping!");
           } else {
@@ -1890,7 +1940,7 @@ int main(int argc, char **argv) {
                         sys.screen_state.offset_x / sys.screen_state.zoom + 15, 
                         sys.screen_state.offset_y / sys.screen_state.zoom + 5, sys.datestamp);
             MAIN_WRITEPENDING(1);
-            ringstack_push(&undostack, draw_data_end);
+            ringstack_push(&undostack, dd.end);
           }
         }
         pending.color = pcolor;
@@ -1899,28 +1949,28 @@ int main(int argc, char **argv) {
       }
     }
     if (kUp & KEY_TOUCH) {
-      end_frame = current_frame;
+      sstate.end_frame = sstate.current_frame;
       // Something of a hack: might get rid of it later.
       // This makes the palette disappear on selection (if desired)
-      if (close_palette) {
-        close_palette = false;
-        palette_active = false;
+      if (sstate.close_palette) {
+        sstate.close_palette = false;
+        sstate.palette_active = false;
       }
     }
 
     // Update zoom separately, since the update is always the same
-    if (sys.draw_state.zoom_power != last_zoom_power)
+    if (sys.draw_state.zoom_power != sstate.last_zoom_power)
       set_screenstate_zoom(&sys.screen_state,
                            pow(2, sys.draw_state.zoom_power));
 
-    if (kRepeat & ~(KEY_TOUCH) || !current_frame || (kUp & KEY_TOUCH)) {
+    if (kRepeat & ~(KEY_TOUCH) || !sstate.current_frame || (kUp & KEY_TOUCH)) {
       print_status(sys.draw_state.current_tool->width, sys.draw_state.layer,
                    sys.draw_state.zoom_power,
                    sys.draw_state.current_tool - sys.draw_state.tools, curcol,
                    sys.draw_state.page, undostack.size);
     }
 
-    touching = (kHeld & KEY_TOUCH) > 0;
+    sstate.touching = (kHeld & KEY_TOUCH) > 0;
 
     set_screenstate_offset(
         &sys.screen_state,
@@ -1935,32 +1985,31 @@ int main(int argc, char **argv) {
                    GPU_ZERO);
 
     // Apparently (not sure), all clearing should be done within our main loop?
-    if (flush_layers) {
+    if (sstate.flush_layers) {
       for (int i = 0; i < LAYER_COUNT; i++)
         C2D_TargetClear(layers[i].target, layer_color);
-      flush_layers = false;
+      sstate.flush_layers = false;
     }
     // Ignore first frame touches
-    else if (touching) {
-      if (palette_active) {
+    else if (sstate.touching) {
+      if (sstate.palette_active) {
         int action = update_colorpicker(&sys.colors, &current_touch);
         if (action == 2 ||
             (action == 1 && sys.colors.mode == COLORSYSMODE_PALETTE))
-          close_palette = true;
+          sstate.close_palette = true;
       } else {
         // Keep this outside the if statement below so it can be used for
         // background drawing too (draw commands from other people)
         C2D_SceneBegin(layers[sys.draw_state.layer].target);
 
         if (pending.line_count < MAX_STROKE_LINES) {
-          onion_offset(&sys.draw_state, 0, &_msr_ofsx,
-                       &_msr_ofsy); // This works for 0 (returns 0,0)
-          // This is for a stroke, do different things if we have different
-          // tools!
+          // This works for 0 (returns 0,0)
+          onion_offset(&sys.draw_state, 0, &srs.ofsx, &srs.ofsy); 
+          // This is for a stroke, do different things if we have different tools!
           add_point_to_stroke(&pending, &current_touch, &sys);
           // Draw ONLY the current line
           pixaligned_linepackfunc(&pending, pending.line_count - 1,
-                                  pending.line_count, MY_SOLIDRECT);
+                                  pending.line_count, citro_rect);
         }
       }
     }
@@ -1971,8 +2020,8 @@ int main(int argc, char **argv) {
     // Find the place to stop looking for the appropriate draw pointer to work
     // on. This has complicated rules
     for (dp_ofs = 0; dp_ofs <= oend; dp_ofs++) {
-      onion_offset(&sys.draw_state, -dp_ofs, &_msr_ofsx,
-                   &_msr_ofsy); // This works for 0 (returns 0,0)
+      // This works for 0 (returns 0,0)
+      onion_offset(&sys.draw_state, -dp_ofs, &srs.ofsx, &srs.ofsy); 
       if (dp_ofs == oend) // Don't bother with any logic below, this is the last slot.
         break;
       if (sys.draw_state.mode == DRAWMODE_ANIMATION ||
@@ -1982,8 +2031,8 @@ int main(int argc, char **argv) {
         // animation for onion_count = 0. So, if we're not done scanning this
         // data, obviously continue this. But if it's complete AND the next
         // HASN'T STARTED AND there's draw data left, this is where to break.
-        if ((draw_pointers[dp_ofs] != draw_data_end) ||
-            ((draw_pointers[dp_ofs + 1] == draw_data) &&
+        if ((dd.draw_pointers[dp_ofs] != dd.end) ||
+            ((dd.draw_pointers[dp_ofs + 1] == dd.start) &&
              lineringbuffer_size(&scandata)))
           break;
       } else {
@@ -2000,8 +2049,8 @@ int main(int argc, char **argv) {
     }
     //TickCounter timer;
     //osTickCounterStart(&timer);
-    draw_pointers[dp_ofs] = scan_lines(
-      &scandata, draw_pointers[dp_ofs], draw_data_end, drawpage);
+    dd.draw_pointers[dp_ofs] = scan_lines(
+      &scandata, dd.draw_pointers[dp_ofs], dd.end, drawpage);
     // osTickCounterUpdate(&timer);
     // bool saydraw = lineringbuffer_size(&scandata) > 0;
     // if(saydraw) { 
@@ -2015,18 +2064,18 @@ int main(int argc, char **argv) {
     // }
 
     C2D_Flush();
-    _drw_cmd_cnt = 0;
+    srs.ct.draw_cmd_count = 0;
 
     // -- OTHER DRAW SECTION --
     C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA,
                    GPU_ONE_MINUS_SRC_ALPHA, GPU_SRC_ALPHA,
                    GPU_ONE_MINUS_SRC_ALPHA);
 
-    if (!(current_frame % 30))
-      print_time(current_frame % 60);
+    if (!(sstate.current_frame % 30))
+      print_time(sstate.current_frame % 60);
 
     // TODO: Eventually, change this to put the data in different places?
-    if (end_frame == current_frame && pending.line_count > 0) {
+    if (sstate.end_frame == sstate.current_frame && pending.line_count > 0) {
       MAIN_WRITEPENDING(0);
     }
 
@@ -2035,12 +2084,12 @@ int main(int argc, char **argv) {
 
     draw_layers(layers, LAYER_COUNT, &sys);
     draw_scrollbars(&sys.screen_state);
-    draw_colorpicker(&sys.colors, !palette_active);
+    draw_colorpicker(&sys.colors, !sstate.palette_active);
 
     C3D_FrameEnd(0);
 
-    last_zoom_power = sys.draw_state.zoom_power;
-    current_frame++;
+    sstate.last_zoom_power = sys.draw_state.zoom_power;
+    sstate.current_frame++;
   }
 ENDMAINLOOP:;
 
@@ -2049,8 +2098,7 @@ ENDMAINLOOP:;
   free_ringstack(&undostack);
   free_ringstack(&redostack);
   free_linepackage(&pending);
-  free(save_filename);
-  free(data_container);
+  drawdata_free(&dd);
   free(stroke_data);
   metacontainer_free(&meta);
 
