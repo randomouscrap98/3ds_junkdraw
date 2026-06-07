@@ -52,11 +52,6 @@
 #define MAX_ALLFILENAMES 65535
 #define MAX_REFERENCES 100
 
-// Networking
-#define SOC_ALIGN 0x1000
-#define SOC_BUFFERSIZE 0x100000
-#define SOC_MAXCLIENTS 1
-
 // Drawing system
 #define MIN_ZOOMPOWER -2
 #define MAX_ZOOMPOWER 4
