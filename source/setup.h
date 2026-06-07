@@ -50,6 +50,7 @@
 #define MAX_FILEPATH 256
 #define MAX_TEMPSTRING 2048
 #define MAX_ALLFILENAMES 65535
+#define MAX_REFERENCES 100
 
 // Networking
 #define SOC_ALIGN 0x1000
@@ -100,7 +101,14 @@
 #define DEBUG_PRINT_MINROW 21
 #define DEBUG_PRINT_ROWS 5
 
+//extern bool * setup_disable_logging;
+
+bool setup_disable_logging();
+
 static inline void logbase(u8 color, const char * fmt, va_list args) {
+  if(setup_disable_logging()) {
+    return;
+  }
   static u8 _db_prnt_row = 0;
   static u8 _db_prnt_num = 0;
   printf("\x1b[%d;1H%50s", _db_prnt_row + DEBUG_PRINT_MINROW, "");

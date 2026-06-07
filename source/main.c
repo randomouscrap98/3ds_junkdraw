@@ -188,6 +188,41 @@ void set_cpadprofile_canvas(struct CpadProfile *profile) {
   profile->mod_general = 1;
 }
 
+typedef struct {
+  bool touching;
+  bool palette_active;
+  bool flush_layers;
+  bool close_palette;
+  bool is_new_date;
+
+  u32 current_frame;
+  u32 end_frame;
+  s8 last_zoom_power;
+  s8 reference_image;
+  s8 reference_total;
+} SessionState;
+
+void sessionstate_init(SessionState * ss) {
+  ss->touching = false;
+  ss->palette_active = false;
+  ss->flush_layers = true;
+  ss->close_palette = false;
+  ss->is_new_date = false;
+  ss->current_frame = 0;
+  ss->end_frame = 0;
+  ss->last_zoom_power = 0;
+  ss->reference_image = -1;
+  ss->reference_total = 0;
+}
+
+bool sessionstate_showreference(SessionState * ss) {
+  return ss->reference_image >= 0 && ss->reference_image < ss->reference_total;
+}
+
+// Global because of cross-cutting logging concerns. Ugh need to
+// rewrite everything
+SessionState sstate;
+
 // -- DRAWING UTILS --
 
 typedef struct {
@@ -884,7 +919,14 @@ SERVEEND:
 
 // -- MENU/PRINT STUFF --
 
+bool setup_disable_logging() {
+  return sessionstate_showreference(&sstate);
+}
+
 void print_controls() {
+  if(setup_disable_logging()) {
+    return;
+  }
   printf("\x1b[0m");
   printf("     L - color picker        R - general modifier\n");
   printf("LFT/RT - line width     UP/DWN - zoom (+R - page)\n");
@@ -895,6 +937,9 @@ void print_controls() {
 }
 
 void print_framing() {
+  if(setup_disable_logging()) {
+    return;
+  }
   printf("\x1b[0m");
   printf("\x1b[29;1H--------------------------------------------------");
   printf("\x1b[28;43H%7s", VERSION);
@@ -914,6 +959,9 @@ void get_printmods(char *status_x1b, char *active_x1b, char *statusbg_x1b,
 }
 
 void print_data(DrawData * dd) {
+  if(setup_disable_logging()) {
+    return;
+  }
   char status_x1b[PSX1BLEN];
   char active_x1b[PSX1BLEN];
   get_printmods(status_x1b, active_x1b, NULL, NULL);
@@ -1352,7 +1400,7 @@ void run_options_menu(struct SystemState *sys) {
   }
 }
 
-void run_runtime_options_menu(struct SystemState *sys, int lastpage) {
+void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionState * ss) {
   char menu[256];
   char visibility[][3] = {"", "b", "t", "bt"};
   char modes[][16] = {"Normal", "Animation", "Small Animation"};
@@ -1361,19 +1409,31 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage) {
     // Recreate menu every time, since we have dynamic values. To make life
     // easier, we just sprintf everything into the array with newlines, then
     // replace newlines with 0
+    char numtemp[16] = "XX";
+    if(ss->reference_image >= 0) {
+      itoa(ss->reference_image + 1, numtemp, 10);
+    }
+    if(strlen(numtemp) == 1) {
+      numtemp[1] = numtemp[0];
+      numtemp[0] = '0';
+      numtemp[2] = 0;
+    }
     sprintf(menu,
             "Draw Mode: %s\nLayer visibility: %s\n"
             "Page Loop+: %d\nPage Loop-: %d\n"
-            "Page Loop Clear\nPage Loop Last Pg\nExit\n",
+            "Page Loop Clear\nPage Loop Last Pg\n"
+            "Reference Image: %s/%02d\nClear References\nReceive References\n"
+            "Exit\n",
             modes[sys->draw_state.mode], 
             visibility[sys->screen_state.layer_visibility],
-            sys->anim_loop, sys->anim_loop);
+            sys->anim_loop, sys->anim_loop, numtemp, //ss->reference_image,
+            ss->reference_total);
     for (int x = strlen(menu); x >= 0; x--) {
       if (menu[x] == '\n')
         menu[x] = 0;
     }
     menuopt =
-        easy_menu("Runtime Options", menu, MAINMENU_TOP, 0, menuopt, KEY_B | KEY_START);
+        easy_menu("Runtime Options", menu, MAINMENU_TOP, MAX_MENULIST, menuopt, KEY_B | KEY_START);
     switch (menuopt) {
     case 0:
       inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
@@ -1393,6 +1453,16 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage) {
       break;
     case 5: // anim loop 0
       sys->anim_loop = lastpage + 1;
+      break;
+    case 6:
+      ss->reference_image++;
+      if(ss->reference_image >= ss->reference_total) {
+          ss->reference_image = -1;
+      }
+      break;
+    case 7:
+      ss->reference_total = 0;
+      ss->reference_image = -1;
       break;
     default:
       return;
@@ -1555,32 +1625,32 @@ u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u3
   return ctrl;
 }
 
-typedef struct {
-  bool touching;
-  bool palette_active;
-  bool flush_layers;
-  bool close_palette;
-  bool is_new_date;
-  bool reference_shown;
-
-  u32 current_frame;
-  u32 end_frame;
-  s8 last_zoom_power;
-} SessionState;
-
-void sessionstate_init(SessionState * ss) {
-  ss->touching = false;
-  ss->palette_active = false;
-  ss->flush_layers = true;
-  ss->close_palette = false;
-  ss->is_new_date = false;
-  ss->reference_shown = false;
-  ss->current_frame = 0;
-  ss->end_frame = 0;
-  ss->last_zoom_power = 0;
-}
-
 // --------------------- MAIN -------------------------------
+
+void refresh_console(DrawData * dd, SessionState * ss) {
+  static bool last_ref_shown = false;
+  bool show_reference = sessionstate_showreference(ss);
+  // Only clear the whole console if we're "switching modes" since the last console refresh
+  if(last_ref_shown != show_reference) {
+    printf("\x1b[2J");
+    last_ref_shown = show_reference;
+  }
+  // If we have a reference, draw that
+  if(show_reference) {
+    u16 tw, th;
+    u8 * tbuf = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, &tw, &th);
+    for(u32 i = 0; i < tw * th; i+=3) {
+      tbuf[i] = i & 255;
+      tbuf[i + 1] = (i >> 8) & 255;
+      tbuf[i + 2] = (i >> 16) & 255;
+    }
+  } else {
+    printf("\x1b[1;1H");
+    print_controls();
+    print_framing();
+    print_data(dd);
+  }
+}
 
 #define FLUSH_LAYERS()                                                         \
   drawdata_resetpointers(&dd);    \
@@ -1622,10 +1692,7 @@ void sessionstate_init(SessionState * ss) {
     pending.line_count = 0;                                                    \
     sstate.current_frame = sstate.end_frame = 0;                               \
     sstate.is_new_date = true;                                                 \
-    printf("\x1b[1;1H");                                                       \
-    print_controls();                                                          \
-    print_framing();                                                           \
-    print_data(&dd);                                                           \
+    refresh_console(&dd, &sstate); \
   }
 
 #define MAIN_UNSAVEDCHECK(x)                                                   \
@@ -1675,7 +1742,8 @@ int main(int argc, char **argv) {
   C2D_Init(srs.ct.obj_limit);
   C2D_Prepare();
 
-  PrintConsole * console_ptr = consoleInit(GFX_TOP, NULL);
+  //PrintConsole * console_ptr = 
+  consoleInit(GFX_TOP, NULL);
   C3D_RenderTarget *screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
   LOGTRACE("INITIALIZED");
@@ -1711,7 +1779,7 @@ int main(int argc, char **argv) {
 
   LOGTRACE("CREATED LAYERS");
 
-  SessionState sstate;
+  //SessionState sstate;
   sessionstate_init(&sstate);
 
   char tempc; // Used for anything, very short life
@@ -1892,22 +1960,17 @@ int main(int argc, char **argv) {
         break;
       case MAINMENU_RUNTIMEOPTIONS:
         // Run runtime options system (settings here not saved)
-        run_runtime_options_menu(&sys, last_total_page(dd.start, dd.end));
+        run_runtime_options_menu(&sys, last_total_page(dd.start, dd.end), &sstate);
         FLUSH_LAYERS(); // Why not...
         break;
       case MAINMENU_EXIT:
         if (MAIN_UNSAVEDCHECK("Really quit?"))
           goto ENDMAINLOOP;
         break;
-      // default:;
-      //   u16 tw, th;
-      //   u8 * tbuf = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, &tw, &th);
-      //   for(u32 i = 0; i < tw * th; i+=3) {
-      //     tbuf[i] = i & 255;
-      //     tbuf[i + 1] = (i >> 8) & 255;
-      //     tbuf[i + 2] = (i >> 16) & 255;
-      //   }
+      default:;
+        sstate.reference_total = (sstate.reference_total + 1) % MAX_REFERENCES; //reference_shown = true;
       }
+      refresh_console(&dd, &sstate);
     }
 
     u16 curcol = colorsystem_getcolor(&sys.colors);
