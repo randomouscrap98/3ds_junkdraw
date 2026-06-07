@@ -192,10 +192,14 @@ CLEANUP:
 
 const char * webserver_send_client_file(WebServer * ws, const char * fpath, FILE * f) {
   char temp[4096];
+  char contenttype[16] = "image";
   const char * extension = webserver_get_extension(fpath);
   const char * filename = webserver_get_filename(fpath);
-  sprintf(temp, "%sContent-type: image/%s\r\nContent-Disposition: inline; "
-          "filename=\"%s\"\r\n\r\n", HTTPOK(), extension, filename);
+  if(strcmp(extension, "html") == 0) {
+    strcpy(contenttype,"text");
+  }
+  sprintf(temp, "%sContent-type: %s/%s\r\nContent-Disposition: inline; "
+          "filename=\"%s\"\r\n\r\n", HTTPOK(), contenttype, extension, filename);
   if(webserver_send_client(ws, temp, strlen(temp))) {
     goto CLEANUP;
   }

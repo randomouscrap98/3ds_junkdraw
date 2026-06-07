@@ -11,6 +11,7 @@
 
 #define FOLDER_BASE "/3ds/junkdraw/"
 #define SAVE_BASE FOLDER_BASE "saves/"
+#define REFERENCES_BASE FOLDER_BASE "references/"
 #define SCREENSHOTS_BASE FOLDER_BASE "screenshots/"
 #define SETTINGS_PATH FOLDER_BASE "settings.ini"
 

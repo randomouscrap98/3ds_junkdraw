@@ -733,7 +733,6 @@ void serveFileHttp() {
 
   aptSetHomeAllowed(false);
 
-  // Extension is everything past last dot
   WebServer ws;
   webserver_init(&ws);
   const char * err = webserver_begin(&ws);
@@ -786,6 +785,103 @@ SERVEEND:
   webserver_end(&ws);
   PRINTCLEAR();
   aptSetHomeAllowed(true);
+}
+
+static bool _romfsInitialized = false;
+
+int setupRomFs() {
+  if(_romfsInitialized) return 0;
+  Result rc = romfsInit();
+  if(rc) {
+    LOGDBG("Can't load romfs: %08lX", rc);
+    return -1;
+  } else {
+    LOGDBG("Romfs initialized");
+    _romfsInitialized = true;
+    return 0;
+  }
+}
+
+void exitRomfs() {
+  if(_romfsInitialized) {
+    romfsExit();
+  }
+}
+
+int receiveReferenceHttp(SessionState * ss) {
+  PRINTCLEAR();
+
+  int result = mkdir_p(REFERENCES_BASE);
+  if(result) {
+    PRINTERR("Can't create references directory!");
+    return -1;
+  } 
+
+  setupRomFs();
+
+  const char * fpath = "romfs:/uploadreference.html";
+  FILE *loadfile = fopen(fpath, "rb");
+  if (loadfile == NULL) {
+    PRINTERR("Couldn't open html file: %s", fpath);
+    return -1; // No need to cleanup, haven't done anything yet
+  }
+
+  aptSetHomeAllowed(false);
+
+  WebServer ws;
+  webserver_init(&ws);
+  const char * err = webserver_begin(&ws);
+  if(err) {
+    PRINTERR(err);
+    goto SERVEEND;
+  }
+
+  PRINTINFO("BROWSER: http://%s/\n\n Press any key to stop", webserver_address(&ws));
+
+  while (aptMainLoop()) {
+    hidScanInput();
+
+    bool received = false;
+    err = webserver_recv_client(&ws, &received);
+    if(err) {
+      PRINTERR(err);
+      goto SERVEEND;
+    }
+
+    if(received) {
+      err = webserver_send_client_file(&ws, fpath, loadfile);
+      if(err) {
+        PRINTERR(err);
+        goto SERVEEND;
+      }
+      webserver_close_client(&ws);
+		}
+
+    if (aptCheckHomePressRejected()) {
+      LOGDBG("HOME REJECTED");
+    }
+
+    if(hidKeysDownRepeat()) {
+      break;
+    }
+
+    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+    // Draw here?
+    // draw_easy_menu(&state);
+    C3D_FrameEnd(0);
+  }
+
+  PRINTINFO("SHUTTING DOWN...");
+  err = NULL;
+
+SERVEEND:
+  if(loadfile) {
+    fclose(loadfile);
+  }
+  webserver_end(&ws);
+  PRINTCLEAR();
+  aptSetHomeAllowed(true);
+  return err != NULL;
 }
 
 // -- MENU/PRINT STUFF --
@@ -927,6 +1023,11 @@ void inc_drawstate_mode(struct ScreenState *scrst, struct DrawState *drwst) {
 void get_save_location(char *savename, char *container) {
   container[0] = 0;
   sprintf(container, "%s%s/", SAVE_BASE, savename);
+}
+
+void get_next_reference_location(SessionState * ss, char *container) {
+  container[0] = 0;
+  sprintf(container, "%s%02d", REFERENCES_BASE, ss->reference_total);
 }
 
 void get_rawfile_location(char *savename, char *container) {
@@ -1335,6 +1436,18 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
       ss->reference_total = 0;
       ss->reference_image = -1;
       break;
+    case 8:;
+      int old_total = ss->reference_total;
+      if(receiveReferenceHttp(ss)) {
+        return;
+      } else {
+        // If user uploaded refs, immediately put them at the start
+        // of the new reference block
+        if(ss->reference_total != old_total) {
+          ss->reference_image = old_total;
+        }
+        break;
+      }
     default:
       return;
     }
@@ -2043,6 +2156,7 @@ ENDMAINLOOP:;
 
   C2D_Fini();
   C3D_Fini();
+  exitRomfs();
   gfxExit();
   return 0;
 }
