@@ -2,7 +2,6 @@
 #include "log.h"
 
 #include <string.h>
-#include <stdio.h>
 
 #include <fcntl.h>
 #include <malloc.h>
@@ -26,8 +25,8 @@ void webserve_initsocbuf() {
   }
 }
 
-char * webserver_get_byend(char * fname, char last) {
-  char * extension = fname + strlen(fname);
+const char * webserver_get_byend(const char * fname, char last) {
+  const char * extension = fname + strlen(fname);
   while(--extension != fname) {
     if(*extension == last) {
       extension++;
@@ -37,11 +36,11 @@ char * webserver_get_byend(char * fname, char last) {
   return extension;
 }
 
-char * webserver_get_filename(char * fname) {
+const char * webserver_get_filename(const char * fname) {
   return webserver_get_byend(fname, '/');
 }
 
-char * webserver_get_extension(char * fname) {
+const char * webserver_get_extension(const char * fname) {
   return webserver_get_byend(fname, '.');
 }
 
@@ -186,6 +185,41 @@ CLEANUP:
 
 const char * webserver_send_client(WebServer * ws, const char * data, size_t len) {
   _SOCKCHECK(send(ws->csock, data, len, 0), "send");
+  return NULL;
+CLEANUP:
+  return webserve_error;
+}
+
+const char * webserver_send_client_file(WebServer * ws, const char * fpath, FILE * f) {
+  char temp[4096];
+  const char * extension = webserver_get_extension(fpath);
+  const char * filename = webserver_get_filename(fpath);
+  sprintf(temp, "%sContent-type: image/%s\r\nContent-Disposition: inline; "
+          "filename=\"%s\"\r\n\r\n", HTTPOK(), extension, filename);
+  if(webserver_send_client(ws, temp, strlen(temp))) {
+    goto CLEANUP;
+  }
+
+  // Now read from the given file into a small buffer and send it over and over.
+  if(fseek(f, 0, SEEK_SET)) {
+    _WEBERR("Failed to seek to start: %s", fpath);
+    goto CLEANUP;
+  }
+  while (1) {
+    unsigned long count = fread(temp, 1, sizeof(temp) - 2, f);
+    if(count) {
+      if(webserver_send_client(ws, temp, count)) {
+        goto CLEANUP;
+      }
+    }
+    if(count != sizeof(temp) - 2) {
+      if (!feof(f)) {
+        _WEBERR("Failed to read file %s", fpath);
+        goto CLEANUP;
+      }
+      break;
+    } 
+  }
   return NULL;
 CLEANUP:
   return webserve_error;

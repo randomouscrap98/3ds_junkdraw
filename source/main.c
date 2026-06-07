@@ -731,24 +731,18 @@ void serveFileHttp() {
     return; // No need to cleanup, haven't done anything yet
   }
 
+  aptSetHomeAllowed(false);
+
   // Extension is everything past last dot
-  char * extension = webserver_get_extension(last_savepath);
-  char * filename = webserver_get_filename(last_savepath);
   WebServer ws;
   webserver_init(&ws);
   const char * err = webserver_begin(&ws);
-  char temp[4096];
-
   if(err) {
     PRINTERR(err);
     goto SERVEEND;
   }
 
   PRINTINFO("BROWSER: http://%s/\n\n Press any key to stop", webserver_address(&ws));
-  //PRINTINFO("FILE: %s\n BROWSER: http://%s/\n\n Press any key to stop", 
-            //filename, inet_ntoa(server.sin_addr));
-
-  aptSetHomeAllowed(false);
 
   while (aptMainLoop()) {
     hidScanInput();
@@ -761,37 +755,11 @@ void serveFileHttp() {
     }
 
     if(received) {
-      sprintf(temp, "%sContent-type: image/%s\r\nContent-Disposition: attachment; "
-              "filename\"=%s\"\r\n\r\n", HTTPOK(), extension, filename);
-      err = webserver_send_client(&ws, temp, strlen(temp));
+      err = webserver_send_client_file(&ws, last_savepath, loadfile);
       if(err) {
         PRINTERR(err);
         goto SERVEEND;
       }
-
-      // Now read from the given file into a small buffer and send it over and over.
-      if(fseek(loadfile, 0, SEEK_SET)) {
-        PRINTERR("Failed to seek to start: %s", last_savepath);
-        goto SERVEEND;
-      }
-      while (1) {
-        unsigned long count = fread(temp, 1, sizeof(temp) - 2, loadfile);
-        if(count) {
-          err = webserver_send_client(&ws, temp, count);
-          if(err) {
-            PRINTERR(err);
-            goto SERVEEND;
-          }
-        }
-        if(count != sizeof(temp) - 2) {
-          if (!feof(loadfile)) {
-            PRINTERR("Failed to read file %s", last_savepath);
-            goto SERVEEND;
-          }
-          break;
-        } 
-      }
-
       webserver_close_client(&ws);
 		}
 
@@ -810,15 +778,14 @@ void serveFileHttp() {
   }
 
   PRINTINFO("SHUTTING DOWN...");
-  PRINTCLEAR();
-
-  aptSetHomeAllowed(true);
 
 SERVEEND:
   if(loadfile) {
     fclose(loadfile);
   }
   webserver_end(&ws);
+  PRINTCLEAR();
+  aptSetHomeAllowed(true);
 }
 
 // -- MENU/PRINT STUFF --

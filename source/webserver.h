@@ -2,6 +2,7 @@
 #define __HEADER_WEBSERVER__
 
 #include <3ds.h>
+#include <stdio.h>
 
 // Networking
 #define SOC_ALIGN 0x1000
@@ -23,8 +24,8 @@ typedef struct {
   // u32 client_len; // length of address?
 } WebServer;
 
-char * webserver_get_extension(char * fname);
-char * webserver_get_filename(char * fname);
+//char * webserver_get_extension(char * fname);
+//char * webserver_get_filename(char * fname);
 
 void webserver_init(WebServer * ws);
 const char * webserver_address(WebServer * ws); 
@@ -32,6 +33,7 @@ const char * webserver_begin(WebServer * ws);
 void webserver_end(WebServer * ws);
 const char * webserver_recv_client(WebServer * ws, bool * received);
 const char * webserver_send_client(WebServer * ws, const char * data, size_t len);
+const char * webserver_send_client_file(WebServer * ws, const char * fpath, FILE * f);
 void webserver_close_client(WebServer * ws);
 
 #endif
