@@ -186,6 +186,7 @@ typedef struct {
   bool flush_layers;
   bool close_palette;
   bool is_new_date;
+  bool is_menu_open;
 
   u32 current_frame;
   u32 end_frame;
@@ -200,6 +201,7 @@ void sessionstate_init(SessionState * ss) {
   ss->flush_layers = true;
   ss->close_palette = false;
   ss->is_new_date = false;
+  ss->is_menu_open = false;
   ss->current_frame = 0;
   ss->end_frame = 0;
   ss->last_zoom_power = 0;
@@ -849,11 +851,30 @@ int receiveReferenceHttp(SessionState * ss) {
     }
 
     if(received) {
-      err = webserver_send_client_file(&ws, fpath, loadfile);
+      // We need to see if the user sent GET or POST
+      char request[16];
+      char path[256];
+      err = webserver_client_parse_request(&ws, request, path, 256);
       if(err) {
         PRINTERR(err);
         goto SERVEEND;
       }
+      if(strcmp(request, "GET") == 0 && strcmp(path, "/") == 0) {
+        // GET is always the webpage (very simple, no routing)
+        err = webserver_send_client_file(&ws, fpath, loadfile);
+        if(err) {
+          PRINTERR(err);
+          goto SERVEEND;
+        }
+      } else if(strcmp(request, "POST") == 0) {
+        LOGDBG("USER SENT %zu BYTES", ws.recv_length);
+        // POST is always the content
+      } else {
+        LOGDBG("Ignoring unknown %s %s", request, path);
+        strcpy(path, HTTPNOTFOUND());
+        err = webserver_send_client(&ws, path, strlen(path));
+      }
+
       webserver_close_client(&ws);
 		}
 
@@ -871,6 +892,7 @@ int receiveReferenceHttp(SessionState * ss) {
     C3D_FrameEnd(0);
   }
 
+  PRINTCLEAR();
   PRINTINFO("SHUTTING DOWN...");
   err = NULL;
 
@@ -879,7 +901,6 @@ SERVEEND:
     fclose(loadfile);
   }
   webserver_end(&ws);
-  PRINTCLEAR();
   aptSetHomeAllowed(true);
   return err != NULL;
 }
@@ -887,7 +908,8 @@ SERVEEND:
 // -- MENU/PRINT STUFF --
 
 bool setup_disable_logging() {
-  return sessionstate_showreference(&sstate);
+  // Only disable logging if a reference is shown and the menu is not open
+  return /*!sstate.is_menu_open &&*/ sessionstate_showreference(&sstate);
 }
 
 void print_controls() {
@@ -1889,6 +1911,7 @@ int main(int argc, char **argv) {
       sys.draw_state.layer = (sys.draw_state.layer + 1) % LAYER_COUNT;
     }
     if (control & CTRL_MENU) {
+      sstate.is_menu_open = true;
       switch (easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, 0,
                         KEY_B | KEY_START)) {
       case MAINMENU_EDIT:
@@ -1954,6 +1977,7 @@ int main(int argc, char **argv) {
       default:;
         sstate.reference_total = (sstate.reference_total + 1) % MAX_REFERENCES; //reference_shown = true;
       }
+      sstate.is_menu_open = false;
       refresh_console(&dd, &sstate);
     }
 

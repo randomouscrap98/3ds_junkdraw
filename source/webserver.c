@@ -2,6 +2,8 @@
 #include "log.h"
 
 #include <string.h>
+#include <ctype.h>
+#include <stdlib.h>
 
 #include <fcntl.h>
 #include <malloc.h>
@@ -12,7 +14,6 @@
 #include <arpa/inet.h>
 
 static u32 *SOC_buffer = NULL;
-// static char http_200[] = HTTPRETURN("200", "OK");
 
 static char webserve_error[1024];
 
@@ -82,7 +83,8 @@ const char * webserver_begin(WebServer * ws) {
     goto CLEANUP;
   }
 
-  ws->recv_buf = malloc(sizeof(char) * RECV_BUF_MAX);
+  ws->recv_buf = malloc(sizeof(u8) * RECV_BUF_MAX);
+  ws->recv_length = 0;
 
   if(!ws->recv_buf) {
     _WEBERR("Can't allocate recv buffer");
@@ -101,7 +103,6 @@ const char * webserver_begin(WebServer * ws) {
   }
   ws->socInitialized = true;
 
-  // ws->client_len = sizeof(ws->client);
 	ws->ssock = socket (AF_INET, SOCK_STREAM, IPPROTO_IP);
 	if (ws->ssock < 0) {
     _WEBERR("socket: %d %s", errno, strerror(errno));
@@ -170,11 +171,49 @@ const char * webserver_recv_client(WebServer * ws, bool * received) {
     // set client socket to blocking to simplify sending data back
     _SOCKBLOCK(ws->csock, 1);
     LOGDBG("Connecting port %d from %s\n", ws->client.sin_port, inet_ntoa(ws->client.sin_addr));
-    // This might be slow?
-    memset (ws->recv_buf, 0, RECV_BUF_MAX);
 
-    int ret = recv (ws->csock, ws->recv_buf, RECV_BUF_MAX - 2, 0);
-    LOGDBG("RECV: %d bytes", ret);
+    ws->recv_length = 0;
+    ssize_t this_read = 0;
+    size_t contentLength = 0;
+    u8 * bodyStart = NULL;
+
+    while(true) {
+      this_read = 
+           recv(ws->csock, ws->recv_buf + ws->recv_length, RECV_BUF_MAX - 2 - ws->recv_length, 0);
+      if(this_read <= 0) {
+        break;
+      }
+      ws->recv_length += this_read;
+      ws->recv_buf[ws->recv_length] = 0;
+      if(bodyStart == NULL) { // Haven't found the body
+        // This is slow but whatever
+        webserver_client_get_body_ref(ws, &bodyStart);
+        if(bodyStart) {
+          // We have a body now, let's see if we have a content length. If so, keep reading, otherwse quit
+          char headerval[128];
+          if(webserver_client_get_header(ws, "Content-Length", headerval, 128)) {
+            goto CLEANUP;
+          }
+          if(strlen(headerval) == 0) {
+            break; // No content length? fine...?
+          } else {
+            contentLength = atol(headerval);
+            LOGDBG("FOUND: %zu (%s)", contentLength, headerval);
+          }
+        } 
+      } else {
+        if((ws->recv_buf + ws->recv_length) - bodyStart >= contentLength) {
+          break;
+        }
+      }
+    }
+
+    if(this_read < 0) {
+      _WEBERR("recv: %d %s\n", errno, strerror(errno));
+      goto CLEANUP;
+    }
+
+    LOGDBG("RECV: %d bytes", ws->recv_length);
     *received = true;
   }
 
@@ -226,6 +265,94 @@ const char * webserver_send_client_file(WebServer * ws, const char * fpath, FILE
   }
   return NULL;
 CLEANUP:
+  return webserve_error;
+}
+
+const char * webserver_client_parse_request(WebServer * ws, char * method, char * path, size_t max_path) {
+  method[0] = 0;
+  int i = 0;
+  while(i < ws->recv_length && ws->recv_buf[i] != ' ') {
+    method[i] = toupper(ws->recv_buf[i]);
+    method[++i] = 0;
+    if(i > 8) {
+      _WEBERR("Ill-formed request!");
+      return webserve_error;
+    }
+  }
+  // Now that we have the method, copy the entire path out (skipping spaces)
+  while(i < ws->recv_length && ws->recv_buf[i] == ' ') {
+    i++;
+  }
+  int si = i;
+  while(i < ws->recv_length && ws->recv_buf[i] != ' ' && (i - si) < max_path - 1) {
+    path[i - si] = ws->recv_buf[i];
+    path[++i - si] = 0;
+  }
+  if(i == si) {
+    _WEBERR("Ill-formed request!");
+    return webserve_error;
+  }
+  return NULL;
+}
+
+void webserver_client_get_body_ref(WebServer * ws, u8 ** out) {
+  //char * b = (char *)(ws->recv_buf + (ws->recv_length - 4));
+  //LOGDBG("LAST: %d %d %d %d", b[0], b[1], b[2], b[3]);
+  char * found = strstr((char *)ws->recv_buf, "\r\n\r\n");
+  //*out = strnstr((char *)ws->recv_buf, "\r\n\r\n", ws->recv_length);
+  if(found) *out = (u8 *)(found + 4); // skip the characters and get right to the body
+}
+
+const char * webserver_client_get_header(WebServer * ws, const char * header, char * out, size_t max_out) {
+  char lowhead[128];
+  char nexthead[128];
+  int headlen = strlen(header);
+  if(!headlen || max_out == 0) {
+    _WEBERR("No header passed to check?");
+    return webserve_error;
+  }
+  lowhead[headlen] = 0;
+  for(int i = 0; i < headlen; i++) {
+    lowhead[i] = tolower(header[i]);
+  }
+  // Now start at the beginning, scan through until we get an empty header, look
+  // for the lowercase variant of this header
+  char * this = strstr((char *)ws->recv_buf, "\r\n");
+  if(this) {
+    this += 2;
+  } else {
+    _WEBERR("No headers beyond request line??");
+    return webserve_error;
+  }
+  char * next;
+  while((next = strnstr(this, "\r\n", RECV_BUF_MAX - (this - (char *)ws->recv_buf)))) {
+    int i = 0;
+    nexthead[0] = 0;
+    while(this[i] != ':' && (this + i) != next && i < 127) {
+      nexthead[i] = tolower(this[i]);
+      nexthead[++i] = 0;
+    }
+    if(strlen(nexthead) == 0) {
+      // This is safe; just return 0
+      LOGDBG("Header not found: %s", header);
+      out[0] = 0;
+      return NULL;
+    }
+    if(strcmp(nexthead, lowhead) == 0) {
+      // Copy the value in
+      this += i;
+      while(*this == ' ' || *this == ':') this++;
+      i = 0;
+      while((this + i) != next && i < max_out - 1) {
+        out[i] = this[i];
+        i++;
+      }
+      out[i] = 0;
+      return NULL;
+    }
+    this = next + 2;
+  }
+  _WEBERR("Header doesn't end?");
   return webserve_error;
 }
 
