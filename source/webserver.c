@@ -187,7 +187,8 @@ const char * webserver_recv_client(WebServer * ws, bool * received) {
       ws->recv_buf[ws->recv_length] = 0;
       if(bodyStart == NULL) { // Haven't found the body
         // This is slow but whatever
-        webserver_client_get_body_ref(ws, &bodyStart);
+        size_t bodylen;
+        webserver_client_get_body_ref(ws, &bodyStart, &bodylen);
         if(bodyStart) {
           // We have a body now, let's see if we have a content length. If so, keep reading, otherwse quit
           char headerval[128];
@@ -198,7 +199,7 @@ const char * webserver_recv_client(WebServer * ws, bool * received) {
             break; // No content length? fine...?
           } else {
             contentLength = atol(headerval);
-            LOGDBG("FOUND: %zu (%s)", contentLength, headerval);
+            //LOGDBG("FOUND: %zu (%s)", contentLength, headerval);
           }
         } 
       } else {
@@ -295,12 +296,18 @@ const char * webserver_client_parse_request(WebServer * ws, char * method, char 
   return NULL;
 }
 
-void webserver_client_get_body_ref(WebServer * ws, u8 ** out) {
+void webserver_client_get_body_ref(WebServer * ws, u8 ** out, size_t *outlen) {
   //char * b = (char *)(ws->recv_buf + (ws->recv_length - 4));
   //LOGDBG("LAST: %d %d %d %d", b[0], b[1], b[2], b[3]);
   char * found = strstr((char *)ws->recv_buf, "\r\n\r\n");
   //*out = strnstr((char *)ws->recv_buf, "\r\n\r\n", ws->recv_length);
-  if(found) *out = (u8 *)(found + 4); // skip the characters and get right to the body
+  if(found) {
+    *out = (u8 *)(found + 4); // skip the characters and get right to the body
+    *outlen = ws->recv_length - (*out - ws->recv_buf);
+  } else {
+    *out = NULL;
+    *outlen = 0;
+  }
 }
 
 const char * webserver_client_get_header(WebServer * ws, const char * header, char * out, size_t max_out) {

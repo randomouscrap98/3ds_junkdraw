@@ -485,6 +485,31 @@ void draw_from_buffer(struct LineRingBuffer *scandata, struct LayerData *layers,
 
 // -------- Data helpers ------------
 
+void get_save_location(char *savename, char *container) {
+  container[0] = 0;
+  sprintf(container, "%s%s/", SAVE_BASE, savename);
+}
+
+void get_next_reference_location(SessionState * ss, char *container) {
+  container[0] = 0;
+  sprintf(container, "%s%02d", REFERENCES_BASE, ss->reference_total);
+}
+
+void get_reference_location(SessionState * ss, char *container) {
+  container[0] = 0;
+  sprintf(container, "%s%02d", REFERENCES_BASE, ss->reference_image);
+}
+
+void get_rawfile_location(char *savename, char *container) {
+  get_save_location(savename, container);
+  strcpy(container + strlen(container), "raw");
+}
+
+void get_metafile_location(char *savename, char *container) {
+  get_save_location(savename, container);
+  strcpy(container + strlen(container), "meta");
+}
+
 struct SimpleLine *add_point_to_stroke(struct LinePackage *pending,
                                        const touchPosition *pos,
                                        struct SystemState *sys) {
@@ -838,6 +863,8 @@ int receiveReferenceHttp(SessionState * ss) {
     goto SERVEEND;
   }
 
+  char path[MAX_FILEPATH];
+
   PRINTINFO("BROWSER: http://%s/\n\n Press any key to stop", webserver_address(&ws));
 
   while (aptMainLoop()) {
@@ -853,8 +880,7 @@ int receiveReferenceHttp(SessionState * ss) {
     if(received) {
       // We need to see if the user sent GET or POST
       char request[16];
-      char path[256];
-      err = webserver_client_parse_request(&ws, request, path, 256);
+      err = webserver_client_parse_request(&ws, request, path, MAX_FILEPATH);
       if(err) {
         PRINTERR(err);
         goto SERVEEND;
@@ -867,12 +893,50 @@ int receiveReferenceHttp(SessionState * ss) {
           goto SERVEEND;
         }
       } else if(strcmp(request, "POST") == 0) {
-        LOGDBG("USER SENT %zu BYTES", ws.recv_length);
-        // POST is always the content
+        if(ss->reference_total >= MAX_REFERENCES) {
+          strcpy(path, HTTPRETURN("400", "TOO MANY REFERENCES"));
+          webserver_send_client(&ws, path, strlen(path));
+          err = path; // Just so there's SOMETHING to invoke error (path has our http status code)
+          PRINTERR("Too many references! Clear them out!");
+          goto SERVEEND;
+        }
+        else {
+          // POST is always the content
+          strcpy(path, HTTPOK());
+          err = webserver_send_client(&ws, path, strlen(path));
+          if(err) {
+            PRINTERR(err);
+            goto SERVEEND;
+          }
+          // Now let's write it to disk? Do it while the client is waiting...
+          get_next_reference_location(ss, path);
+          FILE * rf = fopen(path, "wb");
+          if (rf == NULL) {
+            err = path;
+            PRINTERR("Couldn't open reference file: %s", path);
+            goto SERVEEND;
+          }
+          u8 * body;
+          size_t bodylen;
+          webserver_client_get_body_ref(&ws, &body, &bodylen);
+          size_t written = fwrite(body, 1, bodylen, rf);
+          fclose(rf);
+          if(written != bodylen) {
+            err = path;
+            PRINTERR("Couldn't write reference file: %s", path);
+            goto SERVEEND;
+          }
+          ss->reference_total++;
+          LOGDBG("Wrote reference: %s", path);
+        }
       } else {
         LOGDBG("Ignoring unknown %s %s", request, path);
         strcpy(path, HTTPNOTFOUND());
         err = webserver_send_client(&ws, path, strlen(path));
+        if(err) {
+          PRINTERR(err);
+          goto SERVEEND;
+        }
       }
 
       webserver_close_client(&ws);
@@ -1041,26 +1105,6 @@ void inc_drawstate_mode(struct ScreenState *scrst, struct DrawState *drwst) {
 }
 
 // -- FILESYSTEM --
-
-void get_save_location(char *savename, char *container) {
-  container[0] = 0;
-  sprintf(container, "%s%s/", SAVE_BASE, savename);
-}
-
-void get_next_reference_location(SessionState * ss, char *container) {
-  container[0] = 0;
-  sprintf(container, "%s%02d", REFERENCES_BASE, ss->reference_total);
-}
-
-void get_rawfile_location(char *savename, char *container) {
-  get_save_location(savename, container);
-  strcpy(container + strlen(container), "raw");
-}
-
-void get_metafile_location(char *savename, char *container) {
-  get_save_location(savename, container);
-  strcpy(container + strlen(container), "meta");
-}
 
 int save_drawing(char *filename, char *data, metacontainer * mc) {
   char savefolder[MAX_FILEPATH];
@@ -1643,13 +1687,42 @@ void refresh_console(DrawData * dd, SessionState * ss) {
   }
   // If we have a reference, draw that
   if(show_reference) {
+    char path[MAX_FILEPATH];
+    get_reference_location(ss, path);
     u16 tw, th;
     u8 * tbuf = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, &tw, &th);
-    for(u32 i = 0; i < tw * th; i+=3) {
-      tbuf[i] = i & 255;
-      tbuf[i + 1] = (i >> 8) & 255;
-      tbuf[i + 2] = (i >> 16) & 255;
+    // Now, we read the file: first 4 bytes are the width (in portrait mode) and height.
+    // then we dump it to the screen
+    FILE * rf = fopen(path, "rb");
+    if(!rf){
+      PRINTERR("Can't open reference image %s", path);
+      return;
     }
+    u8 dims[4];
+    if(fread(dims, 1, 4, rf) != 4) {
+      PRINTERR("Can't read reference dimensions");
+      fclose(rf);
+      return;
+    }
+    u16 rw = dims[0] + (dims[1] << 8);
+    u16 rh = dims[2] + (dims[3] << 8);
+    // Now we just read the file directly into the framebuffer. yeah! yeah...
+    u32 tbufi = 24; // skip the status line
+    for(u16 i = 0; i < rh; i++) {
+      if(fread(tbuf + tbufi, 1, rw * 3, rf) != rw * 3) {
+        PRINTERR("Can't read image row %d", i);
+        fclose(rf);
+        return;
+      }
+      tbufi += 240 * 3;
+    }
+    fclose(rf);
+    
+    // for(u32 i = 0; i < tw * th; i+=3) {
+    //   tbuf[i] = i & 255;
+    //   tbuf[i + 1] = (i >> 8) & 255;
+    //   tbuf[i + 2] = (i >> 16) & 255;
+    // }
   } else {
     printf("\x1b[1;1H");
     print_controls();
@@ -1974,8 +2047,8 @@ int main(int argc, char **argv) {
         if (MAIN_UNSAVEDCHECK("Really quit?"))
           goto ENDMAINLOOP;
         break;
-      default:;
-        sstate.reference_total = (sstate.reference_total + 1) % MAX_REFERENCES; //reference_shown = true;
+      // default:;
+      //   sstate.reference_total = (sstate.reference_total + 1) % MAX_REFERENCES; //reference_shown = true;
       }
       sstate.is_menu_open = false;
       refresh_console(&dd, &sstate);

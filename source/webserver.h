@@ -38,7 +38,7 @@ const char * webserver_send_client_file(WebServer * ws, const char * fpath, FILE
 void webserver_close_client(WebServer * ws);
 //const char * webserver_client_get_method(WebServer * ws, char * out, char * path, size_t max_path);
 const char * webserver_client_parse_request(WebServer * ws, char * method, char * path, size_t max_path);
-void webserver_client_get_body_ref(WebServer * ws, u8 ** out);
+void webserver_client_get_body_ref(WebServer * ws, u8 ** out, size_t * outlen);
 const char * webserver_client_get_header(WebServer * ws, const char * header, char * out, size_t max_out);
 
 #endif

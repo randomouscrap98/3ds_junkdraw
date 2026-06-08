@@ -5,6 +5,5 @@ clangd/
 *.lst
 *.smdh
 *.cia
-romfs/
 *.swp
 ignore/
