@@ -495,9 +495,13 @@ void get_next_reference_location(SessionState * ss, char *container) {
   sprintf(container, "%s%02d", REFERENCES_BASE, ss->reference_total + 1);
 }
 
-void get_reference_location(SessionState * ss, char *container) {
+void get_reference_location_raw(int refnum, char *container) {
   container[0] = 0;
-  sprintf(container, "%s%02d", REFERENCES_BASE, ss->reference_image);
+  sprintf(container, "%s%02d", REFERENCES_BASE, refnum);
+}
+
+void get_reference_location(SessionState * ss, char *container) {
+  get_reference_location_raw(ss->reference_image, container);
 }
 
 void get_rawfile_location(char *savename, char *container) {
@@ -1451,6 +1455,7 @@ void run_options_menu(struct SystemState *sys) {
 }
 
 void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionState * ss) {
+  char filepath[MAX_FILEPATH];
   char menu[256];
   char visibility[][3] = {"", "b", "t", "bt"};
   char modes[][16] = {"Normal", "Animation", "Small Animation"};
@@ -1473,6 +1478,7 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
             "Page Loop+: %d\nPage Loop-: %d\n"
             "Page Loop Clear\nPage Loop Last Pg\n"
             "Reference Image: %s/%02d\nClear References\nReceive References\n"
+            "Rescan Local References\n"
             "Exit\n",
             modes[sys->draw_state.mode], 
             visibility[sys->screen_state.layer_visibility],
@@ -1523,6 +1529,14 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
         }
         break;
       }
+    case 9:; // rescan local
+      PRINTINFO("Scanning for old references...");
+      for(ss->reference_total = 0; ss->reference_total < MAX_REFERENCES;
+            ss->reference_total++) {
+          get_reference_location_raw(ss->reference_total + 1, filepath);
+          if(!file_exists(filepath)) break;
+      }
+      break;
     default:
       return;
     }
