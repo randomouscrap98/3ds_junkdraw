@@ -55,6 +55,9 @@
                     canvas.width = targetW;
                     canvas.height = targetH;
 
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+
                     // 3. Rotate and Draw
                     // Move origin to center, rotate 90 deg clockwise, draw image centered
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -67,18 +70,25 @@
 
                     // 4. Extract RGBA pixels and convert to raw B8G8R8
                     const imgData = ctx.getImageData(0, 0, targetW, targetH).data;
-                    const bgrBuffer = new Uint8Array(4 + targetW * targetH * 3);
-                    
-                    // Put the width/height first (little endian)
-                    bgrBuffer[0] = targetW & 255;
-                    bgrBuffer[1] = (targetW >> 8) & 255;
-                    bgrBuffer[2] = targetH & 255;
-                    bgrBuffer[3] = (targetH >> 8) & 255;
-                    let bgrIndex = 4;
+                    // Create a 16-bit array instead of an 8-bit array
+                    const rgb565Buffer = new Uint16Array(targetW * targetH + 2);
+                    rgb565Buffer[0] = targetW;
+                    rgb565Buffer[1] = targetH;
+
+                    let rgb565Index = 2;
                     for (let j = 0; j < imgData.length; j += 4) {
-                        bgrBuffer[bgrIndex++] = imgData[j + 2]; // B
-                        bgrBuffer[bgrIndex++] = imgData[j + 1]; // G
-                        bgrBuffer[bgrIndex++] = imgData[j];     // R
+                      const r = imgData[j];     // 0-255
+                      const g = imgData[j + 1]; // 0-255
+                      const b = imgData[j + 2]; // 0-255
+
+                      // 1. Scale down from 8-bit to 5-bit or 6-bit
+                      // 2. Shift the bits into their correct positions
+                      // 3. Combine them using bitwise OR (|)
+                      const r5 = (r >> 3) << 11; // High 5 bits shifted left by 11
+                      const g6 = (g >> 2) << 5;  // High 6 bits shifted left by 5
+                      const b5 = (b >> 3);       // High 5 bits staying at the bottom
+
+                      rgb565Buffer[rgb565Index++] = r5 | g6 | b5;
                     }
 
                     // 5. POST raw binary data via Fetch
@@ -86,7 +96,7 @@
                     const response = await fetch(window.location.href, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/octet-stream' },
-                        body: bgrBuffer
+                        body: rgb565Buffer
                     });
 
                     if (!response.ok) throw new Error(`Server responded with ${response.status}`);

@@ -1687,6 +1687,8 @@ void refresh_console(DrawData * dd, SessionState * ss) {
   }
   // If we have a reference, draw that
   if(show_reference) {
+    // Actually, for now, also clear if showing a reference. It's just better...
+    printf("\x1b[2J");
     char path[MAX_FILEPATH];
     get_reference_location(ss, path);
     u16 tw, th;
@@ -1704,25 +1706,21 @@ void refresh_console(DrawData * dd, SessionState * ss) {
       fclose(rf);
       return;
     }
-    u16 rw = dims[0] + (dims[1] << 8);
-    u16 rh = dims[2] + (dims[3] << 8);
+    u16 rw = dims[0] + ((u16)dims[1] << 8);
+    u16 rh = dims[2] + ((u16)dims[3] << 8);
+    u16 wofs = (232 - rw) / 2;
+    u16 hofs = (400 - rh) / 2;
     // Now we just read the file directly into the framebuffer. yeah! yeah...
-    u32 tbufi = 24; // skip the status line
+    u32 tbufi = 16 + (wofs * 2) + (hofs * 2 * 240); // skip the status line + start at ofs
     for(u16 i = 0; i < rh; i++) {
-      if(fread(tbuf + tbufi, 1, rw * 3, rf) != rw * 3) {
+      if(fread(tbuf + tbufi, 2, rw, rf) != rw) {
         PRINTERR("Can't read image row %d", i);
         fclose(rf);
         return;
       }
-      tbufi += 240 * 3;
+      tbufi += 240 * 2;
     }
     fclose(rf);
-    
-    // for(u32 i = 0; i < tw * th; i+=3) {
-    //   tbuf[i] = i & 255;
-    //   tbuf[i + 1] = (i >> 8) & 255;
-    //   tbuf[i + 2] = (i >> 16) & 255;
-    // }
   } else {
     printf("\x1b[1;1H");
     print_controls();
