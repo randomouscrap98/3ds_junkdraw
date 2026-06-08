@@ -1,129 +1,175 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <title>3DS Raw Image Uploader</title>
-    <style>
-        body { font-family: sans-serif; margin: 20px; }
-        #status { margin-top: 15px; font-weight: bold; }
-    </style>
-</head>
+<meta charset="UTF-8">
+<title>3DS Raw Image Uploader</title>
+<style>
+    body { font-family: sans-serif; margin: 20px; }
+    h2 { 
+      margin: 0.2em;
+      text-align: center;
+    }
+    #status { margin-top: 15px; font-weight: bold; }
+    #main {
+      max-width: 30em;
+      width: 80vw;
+      padding: 1em;
+      margin: 2em auto;
+      background: #f3f3f3;
+      color: #222;
+      border-radius: 1em;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75em;
+      align-items: center;
+    }
+    #main > * {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    #main button, #main input {
+      border: none;
+      padding: 0.5em;
+      font-size: 1em;
+      border-radius: 0.5em;
+      transition: filter 0.2s ease-in;
+      margin: 0;
+    }
+    button.submit {
+      background: #00b6ff;
+      color: white;
+    }
+    button.submit:hover {
+      filter: brightness(1.1);
+    }
+    #main input {
+      background: white;
+    }
+    #status {
+      background: #f9f9f9;
+      padding: 0.5em;
+      border-radius: 0.5em;
+      margin: 0;
+    }
+</style>
+
+
 <body>
 
-    <h2>3DS Raw Image Uploader</h2>
-    <input type="file" id="fileInput" multiple accept="image/*">
-    <button onclick="processAndUpload()">Upload Images</button>
-    
-    <div id="status"></div>
+<div id="main">
+  <h2>Junkdraw Reference Uploader</h2>
+  <input type="file" id="fileInput" multiple accept="image/*">
+  <button class="submit" onclick="processAndUpload()">Upload Images</button>
+  <div id="status"></div>
+</div>
 
-    <script>
-        async function processAndUpload() {
-            const fileInput = document.getElementById('fileInput');
-            const statusDiv = document.getElementById('status');
-            const files = fileInput.files;
+<script>
+    async function processAndUpload() {
+        const fileInput = document.getElementById('fileInput');
+        const statusDiv = document.getElementById('status');
+        const files = fileInput.files;
 
-            if (files.length === 0) {
-                statusDiv.innerText = "Please select at least one file.";
-                return;
-            }
+        if (files.length === 0) {
+            statusDiv.innerText = "Please select at least one file.";
+            return;
+        }
 
-            // Create an offscreen canvas for processing
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
+        // Create an offscreen canvas for processing
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
 
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                statusDiv.innerText = `Processing [${i + 1}/${files.length}]: ${file.name}...`;
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            statusDiv.innerText = `Processing [${i + 1}/${files.length}]: ${file.name}...`;
 
-                try {
-                    // 1. Load image into an Image object
-                    const img = await loadImage(file);
+            try {
+                // 1. Load image into an Image object
+                const img = await loadImage(file);
 
-                    // 2. Calculate aspect-ratio-preserved bounding box dimensions
-                    // Note: Since we rotate 90 deg, we calculate the fit based on the *rotated* dimensions.
-                    // Max target: Width = 400, Height = 232
-                    let targetW = img.height;
-                    let targetH = img.width;
-                    const maxW = 232; // width IN PORTRAIT
-                    const maxH = 400; // height IN PORTRAIT
+                // 2. Calculate aspect-ratio-preserved bounding box dimensions
+                // Note: Since we rotate 90 deg, we calculate the fit based on the *rotated* dimensions.
+                // Max target: Width = 400, Height = 232
+                let targetW = img.height;
+                let targetH = img.width;
+                const maxW = 232; // width IN PORTRAIT
+                const maxH = 400; // height IN PORTRAIT
 
-                    const ratio = Math.min(maxW / targetW, maxH / targetH);
-                    targetW = Math.round(targetW * ratio);
-                    targetH = Math.round(targetH * ratio);
+                const ratio = Math.min(maxW / targetW, maxH / targetH);
+                targetW = Math.round(targetW * ratio);
+                targetH = Math.round(targetH * ratio);
 
-                    // Canvas dimensions match the final output size
-                    canvas.width = targetW;
-                    canvas.height = targetH;
+                // Canvas dimensions match the final output size
+                canvas.width = targetW;
+                canvas.height = targetH;
 
-                    ctx.imageSmoothingEnabled = true;
-                    ctx.imageSmoothingQuality = 'high';
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
 
-                    // 3. Rotate and Draw
-                    // Move origin to center, rotate 90 deg clockwise, draw image centered
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.translate(canvas.width / 2, canvas.height / 2);
-                    ctx.rotate(90 * Math.PI / 180);
-                    
-                    // Note: when drawing rotated, width and height source/dest are swapped 
-                    // relative to the canvas final width/height
-                    ctx.drawImage(img, -targetH / 2, -targetW / 2, targetH, targetW);
+                // 3. Rotate and Draw
+                // Move origin to center, rotate 90 deg clockwise, draw image centered
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.rotate(90 * Math.PI / 180);
+                
+                // Note: when drawing rotated, width and height source/dest are swapped 
+                // relative to the canvas final width/height
+                ctx.drawImage(img, -targetH / 2, -targetW / 2, targetH, targetW);
 
-                    // 4. Extract RGBA pixels and convert to raw B8G8R8
-                    const imgData = ctx.getImageData(0, 0, targetW, targetH).data;
-                    // Create a 16-bit array instead of an 8-bit array
-                    const rgb565Buffer = new Uint16Array(targetW * targetH + 2);
-                    rgb565Buffer[0] = targetW;
-                    rgb565Buffer[1] = targetH;
+                // 4. Extract RGBA pixels and convert to raw B8G8R8
+                const imgData = ctx.getImageData(0, 0, targetW, targetH).data;
+                // Create a 16-bit array instead of an 8-bit array
+                const rgb565Buffer = new Uint16Array(targetW * targetH + 2);
+                rgb565Buffer[0] = targetW;
+                rgb565Buffer[1] = targetH;
 
-                    let rgb565Index = 2;
-                    for (let j = 0; j < imgData.length; j += 4) {
-                      const r = imgData[j];     // 0-255
-                      const g = imgData[j + 1]; // 0-255
-                      const b = imgData[j + 2]; // 0-255
+                let rgb565Index = 2;
+                for (let j = 0; j < imgData.length; j += 4) {
+                  const r = imgData[j];     // 0-255
+                  const g = imgData[j + 1]; // 0-255
+                  const b = imgData[j + 2]; // 0-255
 
-                      // 1. Scale down from 8-bit to 5-bit or 6-bit
-                      // 2. Shift the bits into their correct positions
-                      // 3. Combine them using bitwise OR (|)
-                      const r5 = (r >> 3) << 11; // High 5 bits shifted left by 11
-                      const g6 = (g >> 2) << 5;  // High 6 bits shifted left by 5
-                      const b5 = (b >> 3);       // High 5 bits staying at the bottom
+                  // 1. Scale down from 8-bit to 5-bit or 6-bit
+                  // 2. Shift the bits into their correct positions
+                  // 3. Combine them using bitwise OR (|)
+                  const r5 = (r >> 3) << 11; // High 5 bits shifted left by 11
+                  const g6 = (g >> 2) << 5;  // High 6 bits shifted left by 5
+                  const b5 = (b >> 3);       // High 5 bits staying at the bottom
 
-                      rgb565Buffer[rgb565Index++] = r5 | g6 | b5;
-                    }
-
-                    // 5. POST raw binary data via Fetch
-                    statusDiv.innerText = `Uploading [${i + 1}/${files.length}]: ${file.name}...`;
-                    const response = await fetch(window.location.href, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/octet-stream' },
-                        body: rgb565Buffer
-                    });
-
-                    if (!response.ok) throw new Error(`Server responded with ${response.status}`);
-
-                } catch (error) {
-                    statusDiv.innerText = `Error processing ${file.name}: ${error.message}`;
-                    return; 
+                  rgb565Buffer[rgb565Index++] = r5 | g6 | b5;
                 }
+
+                // 5. POST raw binary data via Fetch
+                statusDiv.innerText = `Uploading [${i + 1}/${files.length}]: ${file.name}...`;
+                const response = await fetch(window.location.href, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/octet-stream' },
+                    body: rgb565Buffer
+                });
+
+                if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+
+            } catch (error) {
+                statusDiv.innerText = `Error processing ${file.name}: ${error.message}`;
+                return; 
             }
-
-            statusDiv.innerText = "All uploads completed successfully!";
         }
 
-        // Helper to load file into Image element asynchronously
-        function loadImage(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => resolve(img);
-                    img.onerror = reject;
-                    img.src = e.target.result;
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-    </script>
-</body>
-</html>
+        statusDiv.innerText = "All uploads completed successfully!";
+    }
+
+    // Helper to load file into Image element asynchronously
+    function loadImage(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+</script>
