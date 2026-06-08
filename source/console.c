@@ -142,6 +142,8 @@ const char *get_menu_item(const char *menu_items, u32 length, u32 item) {
   return NULL;
 }
 
+static bool _easy_menu_force_red = false;
+
 // Menu items must be packed together, separated by \0. Last item needs two \0
 // after. CONTROL WILL BE GIVEN FULLY TO THIS MENU UNTIL IT FINISHES!
 s32 easy_menu(const char *title, const char *menu_items, u8 top, u8 display,
@@ -154,7 +156,7 @@ s32 easy_menu(const char *title, const char *menu_items, u8 top, u8 display,
       display; // Just for now; but this will severely limit the menus!
   state.cancel_buttons = exit_buttons;
   state.accept_buttons = KEY_A;
-  state.home_rejected = false;
+  state.home_rejected = _easy_menu_force_red; //false;
 
   initialize_easy_menu_state(&state);
   clear_easy_menu(&state);
@@ -192,6 +194,12 @@ bool easy_confirm(const char *title, u8 top) {
 
 void easy_ok(const char *title, u8 top) {
   easy_menu(title, "OK\0", top, 0, 0, KEY_B);
+}
+
+void easy_err_confirm(const char *title, u8 top) {
+  _easy_menu_force_red = true;
+  easy_menu(title, "OK\0", top, 0, 0, KEY_B);
+  _easy_menu_force_red = false;
 }
 
 // Set up the menu to be a warning (still yes/no confirmation though)

@@ -51,6 +51,7 @@ const char *get_menu_item(const char *menu_items, u32 length, u32 item);
 s32 easy_menu(const char *title, const char *menu_items, u8 top, u8 display,
               u32 index, u32 exit_btns);
 void easy_ok(const char *title, u8 top);
+void easy_err_confirm(const char *title, u8 top);
 bool easy_confirm(const char *title, u8 top);
 bool easy_warn(const char *warn, const char *title, u8 top);
 

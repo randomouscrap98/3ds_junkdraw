@@ -56,7 +56,7 @@ u32 __stacksize__ = 512 * 1024;
 
 #define PRINTCLEAR()                                                           \
   {                                                                            \
-    printf_flush("\x1b[%d;2H%-150s", MAINMENU_TOP, "");                        \
+    printf_flush("\x1b[%d;2H%-250s", MAINMENU_TOP, "");                        \
   }
 
 #define PRINTGENERAL(x, col, ...)                                              \
@@ -205,12 +205,12 @@ void sessionstate_init(SessionState * ss) {
   ss->current_frame = 0;
   ss->end_frame = 0;
   ss->last_zoom_power = 0;
-  ss->reference_image = -1;
+  ss->reference_image = 0;
   ss->reference_total = 0;
 }
 
 bool sessionstate_showreference(SessionState * ss) {
-  return ss->reference_image >= 0 && ss->reference_image < ss->reference_total;
+  return ss->reference_image > 0 && ss->reference_image <= ss->reference_total;
 }
 
 // Global because of cross-cutting logging concerns. Ugh need to
@@ -492,7 +492,7 @@ void get_save_location(char *savename, char *container) {
 
 void get_next_reference_location(SessionState * ss, char *container) {
   container[0] = 0;
-  sprintf(container, "%s%02d", REFERENCES_BASE, ss->reference_total);
+  sprintf(container, "%s%02d", REFERENCES_BASE, ss->reference_total + 1);
 }
 
 void get_reference_location(SessionState * ss, char *container) {
@@ -835,6 +835,12 @@ void exitRomfs() {
   }
 }
 
+#define _RRHBROWSEINFO() PRINTINFO( \
+  "BROWSER: http://%s/\n\n" \
+  " %02d/%02d Reference slots used\n\n" \
+  " Press any key to stop", \
+  webserver_address(&ws), ss->reference_total, MAX_REFERENCES)
+
 int receiveReferenceHttp(SessionState * ss) {
   PRINTCLEAR();
 
@@ -865,7 +871,7 @@ int receiveReferenceHttp(SessionState * ss) {
 
   char path[MAX_FILEPATH];
 
-  PRINTINFO("BROWSER: http://%s/\n\n Press any key to stop", webserver_address(&ws));
+  _RRHBROWSEINFO();
 
   while (aptMainLoop()) {
     hidScanInput();
@@ -894,21 +900,19 @@ int receiveReferenceHttp(SessionState * ss) {
         }
       } else if(strcmp(request, "POST") == 0) {
         if(ss->reference_total >= MAX_REFERENCES) {
-          strcpy(path, HTTPRETURN("400", "TOO MANY REFERENCES"));
+          strcpy(path, HTTPRETURN("400", "TOO MANY REFERENCES")"\r\n");
           webserver_send_client(&ws, path, strlen(path));
-          err = path; // Just so there's SOMETHING to invoke error (path has our http status code)
-          PRINTERR("Too many references! Clear them out!");
+          // This error, we must force in the user's face, but not count it
+          // as a failure of the server (let them change the clear)
+          err = NULL;
+          easy_err_confirm("Too many references! Clear them out!", MAINMENU_TOP);
           goto SERVEEND;
         }
         else {
           // POST is always the content
-          strcpy(path, HTTPOK());
-          err = webserver_send_client(&ws, path, strlen(path));
-          if(err) {
-            PRINTERR(err);
-            goto SERVEEND;
-          }
           // Now let's write it to disk? Do it while the client is waiting...
+          PRINTCLEAR();
+          PRINTINFO("Writing reference %02d... Please wait", ss->reference_total + 1);
           get_next_reference_location(ss, path);
           FILE * rf = fopen(path, "wb");
           if (rf == NULL) {
@@ -926,12 +930,20 @@ int receiveReferenceHttp(SessionState * ss) {
             PRINTERR("Couldn't write reference file: %s", path);
             goto SERVEEND;
           }
+          // NOW respond
+          strcpy(path, HTTPOK()"\r\n");
+          err = webserver_send_client(&ws, path, strlen(path));
+          if(err) {
+            PRINTERR(err);
+            goto SERVEEND;
+          }
           ss->reference_total++;
           LOGDBG("Wrote reference: %s", path);
+          _RRHBROWSEINFO();
         }
       } else {
         LOGDBG("Ignoring unknown %s %s", request, path);
-        strcpy(path, HTTPNOTFOUND());
+        strcpy(path, HTTPNOTFOUND()"\r\n");
         err = webserver_send_client(&ws, path, strlen(path));
         if(err) {
           PRINTERR(err);
@@ -1448,8 +1460,8 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
     // easier, we just sprintf everything into the array with newlines, then
     // replace newlines with 0
     char numtemp[16] = "XX";
-    if(ss->reference_image >= 0) {
-      itoa(ss->reference_image + 1, numtemp, 10);
+    if(ss->reference_image > 0) {
+      itoa(ss->reference_image, numtemp, 10);
     }
     if(strlen(numtemp) == 1) {
       numtemp[1] = numtemp[0];
@@ -1464,7 +1476,7 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
             "Exit\n",
             modes[sys->draw_state.mode], 
             visibility[sys->screen_state.layer_visibility],
-            sys->anim_loop, sys->anim_loop, numtemp, //ss->reference_image,
+            sys->anim_loop, sys->anim_loop, numtemp,
             ss->reference_total);
     for (int x = strlen(menu); x >= 0; x--) {
       if (menu[x] == '\n')
@@ -1493,14 +1505,11 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
       sys->anim_loop = lastpage + 1;
       break;
     case 6:
-      ss->reference_image++;
-      if(ss->reference_image >= ss->reference_total) {
-          ss->reference_image = -1;
-      }
+      ss->reference_image = (ss->reference_image + 1) % (ss->reference_total + 1);
       break;
     case 7:
       ss->reference_total = 0;
-      ss->reference_image = -1;
+      ss->reference_image = 0;
       break;
     case 8:;
       int old_total = ss->reference_total;
@@ -1510,7 +1519,7 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
         // If user uploaded refs, immediately put them at the start
         // of the new reference block
         if(ss->reference_total != old_total) {
-          ss->reference_image = old_total;
+          ss->reference_image = old_total + 1;
         }
         break;
       }

@@ -51,7 +51,7 @@
 #define MAX_FILEPATH 256
 #define MAX_TEMPSTRING 2048
 #define MAX_ALLFILENAMES 65535
-#define MAX_REFERENCES 100
+#define MAX_REFERENCES 99
 
 // Drawing system
 #define MIN_ZOOMPOWER -2
