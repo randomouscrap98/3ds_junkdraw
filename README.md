@@ -26,6 +26,7 @@ I'm sorry in advance.
 * **R+UP/DOWN** : change page (can have hundreds)
 * **R+L+UP/DOWN** : REALLY change page (please don't do this)
 * **R+B/R+A** : Undo / Redo. Changing pages resets undo buffer
+* **R+START+UP/DOWN** : Sift through references
 
 ### Toggle-mode controls (optional)
 * **A** : Change tool

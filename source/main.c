@@ -1,6 +1,7 @@
 #include "3ds/os.h"
 #include "3ds/result.h"
 #include "3ds/services/apt.h"
+#include "3ds/services/hid.h"
 #include "digits.h"
 #include "metadata.h"
 #include "settings.h"
@@ -209,6 +210,10 @@ void sessionstate_init(SessionState * ss) {
 
 bool sessionstate_showreference(SessionState * ss) {
   return ss->reference_image > 0 && ss->reference_image <= ss->reference_total;
+}
+
+void sessionstate_increference(SessionState * ss, int mod) {
+  ss->reference_image = (ss->reference_image + mod + (ss->reference_total + 1)) % (ss->reference_total + 1);
 }
 
 // Global because of cross-cutting logging concerns. Ugh need to
@@ -1509,7 +1514,7 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
       sys->anim_loop = lastpage + 1;
       break;
     case 6:
-      ss->reference_image = (ss->reference_image + 1) % (ss->reference_total + 1);
+      sessionstate_increference(ss, 1);
       break;
     case 7:
       ss->reference_total = 0;
@@ -1613,6 +1618,8 @@ void run_export_menu(struct SystemState *sys, DrawData * dd, char *filename) {
 #define CTRL_NEXTPALETTE (1 << 14)
 #define CTRL_LAYER    (1 << 15)
 #define CTRL_PREVCOLOR (1 << 16)
+#define CTRL_NEXTREF  (1 << 17)
+#define CTRL_PREVREF  (1 << 18)
 
 // Return a constant representing the action the user took 
 u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u32 kHeld) {
@@ -1666,14 +1673,22 @@ u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u3
   }
   if (kRepeat & KEY_DUP) {
     if (kHeld & (KEY_R | KEY_ZR)) {
-      ctrl |= CTRL_PAGEUP;
+      if (kHeld & KEY_START) {
+        ctrl |= CTRL_NEXTREF;
+      } else {
+        ctrl |= CTRL_PAGEUP;
+      }
     } else {
       ctrl |= CTRL_ZOOMIN;
     }
   }
   if (kRepeat & KEY_DDOWN) {
     if (kHeld & (KEY_R | KEY_ZR)) {
-      ctrl |= CTRL_PAGEDOWN;
+      if (kHeld & KEY_START) {
+        ctrl |= CTRL_PREVREF;
+      } else {
+        ctrl |= CTRL_PAGEDOWN;
+      }
     } else {
       ctrl |= CTRL_ZOOMOUT;
     }
@@ -1691,7 +1706,9 @@ u32 get_controls(struct SystemState * state, u32 kDown, u32 kUp, u32 kRepeat, u3
     ctrl |= CTRL_LAYER;
   }
   if (kDown & KEY_START) {
-    ctrl |= CTRL_MENU;
+    if(!(kHeld & (KEY_R | KEY_ZR))) {
+      ctrl |= CTRL_MENU;
+    }
   }
   return ctrl;
 }
@@ -2007,6 +2024,15 @@ int main(int argc, char **argv) {
     }
     if (control & CTRL_LAYER) {
       sys.draw_state.layer = (sys.draw_state.layer + 1) % LAYER_COUNT;
+    }
+    if (sstate.reference_total > 0) {
+      int mod = 0;
+      if (control & CTRL_NEXTREF) { mod = 1; }
+      else if (control & CTRL_PREVREF) { mod = -1; }
+      if(mod) {
+        sessionstate_increference(&sstate, mod);
+        refresh_console(&dd, &sstate);
+      }
     }
     if (control & CTRL_MENU) {
       sstate.is_menu_open = true;
