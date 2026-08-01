@@ -1265,6 +1265,7 @@ int export_page(struct ScreenState *scrst, page_num page, char *data,
   aptSetHomeAllowed(false);
   aptSetSleepAllowed(false);
   int ret = 0;
+  u32 * exported = NULL;
 
   PRINTINFO("Exporting page %d: building...", page + 1);
 
@@ -1279,7 +1280,7 @@ int export_page(struct ScreenState *scrst, page_num page, char *data,
   sprintf(last_savepath, "%s%s_%d_%jd.png", SCREENSHOTS_BASE,
           strlen(basename) ? basename : "new", page + 1, now);
 
-  u32 *exported = export_page_raw(scrst, page, data, data_end);
+  exported = export_page_raw(scrst, page, data, data_end);
   if (exported == NULL) {
     PRINTERR("Couldn't export page %d (unknown error)", page + 1);
     ret = 1;
@@ -1297,6 +1298,9 @@ int export_page(struct ScreenState *scrst, page_num page, char *data,
     goto EXPORTPAGEEND;
   }
 EXPORTPAGEEND:;
+  if(exported) {
+    free(exported);
+  }
   aptSetHomeAllowed(true);
   aptSetSleepAllowed(true);
   aptCheckHomePressRejected();
