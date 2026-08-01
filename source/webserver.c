@@ -178,14 +178,18 @@ const char * webserver_recv_client(WebServer * ws, bool * received) {
 
     ws->recv_length = 0;
     ssize_t this_read = 0;
+    ssize_t max_recv = 0;
     size_t contentLength = 0;
     u8 * bodyStart = NULL;
 
     while(true) { 
 
-      this_read = recv(
-        ws->csock, ws->recv_buf + ws->recv_length, 
-        RECV_BUF_MAX - 2 - ws->recv_length, 0);
+      max_recv = RECV_BUF_MAX - 2 - ws->recv_length;
+      if(max_recv <= 0) {
+        _WEBERR("recv: TOO MUCH DATA!\n");
+        goto CLEANUP;
+      }
+      this_read = recv(ws->csock, ws->recv_buf + ws->recv_length, max_recv, 0);
       if(this_read <= 0) {
         _WEBERR("recv: %d %s\n", errno, strerror(errno));
         goto CLEANUP;
