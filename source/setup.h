@@ -45,6 +45,10 @@
 
 #define MAX_MENULIST 12
 
+// Remember, it's rotated because it's raw screen data
+#define REF_MAXWIDTH 232
+#define REF_MAXHEIGHT 400
+
 // Filesys
 #define MAX_FILENAME 64
 #define MAX_FILENAMESHOW 5

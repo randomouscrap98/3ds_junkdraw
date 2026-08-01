@@ -1729,8 +1729,14 @@ void refresh_console(DrawData * dd, SessionState * ss) {
     }
     u16 rw = dims[0] + ((u16)dims[1] << 8);
     u16 rh = dims[2] + ((u16)dims[3] << 8);
-    u16 wofs = (232 - rw) / 2;
-    u16 hofs = (400 - rh) / 2;
+    // For now, let's just keep it safe rather than do something fancy
+    if(rw > REF_MAXWIDTH || rh > REF_MAXHEIGHT) {
+      PRINTERR("Dimensions too large!");
+      fclose(rf);
+      return;
+    }
+    u16 wofs = (REF_MAXWIDTH - rw) / 2;
+    u16 hofs = (REF_MAXHEIGHT - rh) / 2;
     // Now we just read the file directly into the framebuffer. yeah! yeah...
     u32 tbufi = 16 + (wofs * 2) + (hofs * 2 * 240); // skip the status line + start at ofs
     for(u16 i = 0; i < rh; i++) {
