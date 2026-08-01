@@ -54,17 +54,15 @@ u32 __stacksize__ = 512 * 1024;
 //   DrawLine unless a DrawRect (or perhaps other) call is performed.
 //    THIS IS FIXED IN A LATER REVISION
 
-#define PRINTCLEAR()                                                           \
-  {                                                                            \
-    printf_flush("\x1b[%d;2H%-250s", MAINMENU_TOP, "");                        \
-  }
+#define PRINTCLEAR() {                                                       \
+  printf_flush("\x1b[%d;2H%-250s", MAINMENU_TOP, "");                        \
+}
 
-#define PRINTGENERAL(x, col, ...)                                              \
-  {                                                                            \
-    printf_flush("\x1b[%d;1H%-150s\x1b[%d;2H\x1b[%dm", MAINMENU_TOP, "",       \
-                 MAINMENU_TOP, col);                                           \
-    printf_flush(x, ##__VA_ARGS__);                                            \
-  }
+#define PRINTGENERAL(x, col, ...) {                                          \
+  printf_flush("\x1b[%d;1H%-150s\x1b[%d;2H\x1b[%dm", MAINMENU_TOP, "",       \
+               MAINMENU_TOP, col);                                           \
+  printf_flush(x, ##__VA_ARGS__);                                            \
+}
 
 #define PRINTERR(x, ...) PRINTGENERAL(x, 31, ##__VA_ARGS__)
 #define PRINTWARN(x, ...) PRINTGENERAL(x, 33, ##__VA_ARGS__)

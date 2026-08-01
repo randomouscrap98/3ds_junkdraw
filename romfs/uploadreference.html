@@ -10,7 +10,6 @@
       margin: 0.2em;
       text-align: center;
     }
-    #status { margin-top: 15px; font-weight: bold; }
     #main {
       max-width: 30em;
       width: 80vw;
@@ -51,6 +50,11 @@
       padding: 0.5em;
       border-radius: 0.5em;
       margin: 0;
+      margin-top: 15px; 
+      font-weight: bold; 
+      overflow: hidden;
+      word-wrap: break-word;
+      color: #444;
     }
 </style>
 
@@ -61,7 +65,7 @@
   <h2>Junkdraw Reference Uploader</h2>
   <input type="file" id="fileInput" multiple accept="image/*">
   <button class="submit" onclick="processAndUpload()">Send to 3DS</button>
-  <div id="status"></div>
+  <div id="status">Ready</div>
 </div>
 
 <script>
