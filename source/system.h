@@ -8,23 +8,12 @@
 #include <citro3d.h>
 
 // ---------- LAYERS -----------
-#define LAYER_FORMAT GPU_RGBA5551
-
-struct LayerData {
-  Tex3DS_SubTexture subtex; // Simple structures
-  C3D_Tex texture;
-  C2D_Image image;
-  C3D_RenderTarget *target; // Actual data?
-};
-
-void create_layer(struct LayerData *result, Tex3DS_SubTexture subtex);
-void delete_layer(struct LayerData page);
 
 // #define LINESTYLE_STROKE 0
 
 // -------------- SCREEN --------------
 
-#define MAXONION 3
+// #define MAXONION 3
 // #define DEFAULT_ONIONCOUNT 3
 // #define DEFAULT_ONIONBLENDSTART 0.3
 // #define DEFAULT_ONIONBLENDEND 0.05

@@ -39,6 +39,7 @@ u32 __stacksize__ = 512 * 1024;
 #include "render_palette.h"
 #include "settings.h"
 #include "undo.h"
+#include "layer.h"
 
 #include "log.h"
 #include "setup.h"
@@ -97,11 +98,8 @@ u32 _MAXDRAWLINES = MAX_FRAMELINES; //N3DS_MAXDRAWLINES;
 
 #define CONTROLSCHEME_COUNT 2
 
-// Glitch in citro2d (or so we assume) prevents us from writing into the first 8
-// pixels in the texture. As such, we simply shift the texture over by this
-// amount when drawing. HOWEVER: for extra safety, we just avoid double
-#define LAYER_EDGEERROR 8
-#define LAYER_EDGEBUF LAYER_EDGEERROR * 2
+//#define LAYER_EDGEERROR 8
+//#define LAYER_EDGEBUF LAYER_EDGEERROR * 2
 
 typedef u16 page_num;
 typedef u8 layer_num;
@@ -149,7 +147,7 @@ void set_screenstate_defaults(struct ScreenState *state) {
   state->screen_color = SCREEN_COLOR;
   state->bg_color = CANVAS_BG_COLOR;
 
-  state->layer_visibility = (1 << LAYER_COUNT) - 1; // All visible
+  // state->layer_visibility = (1 << LAYER_COUNT) - 1; // All visible
 }
 
 void set_default_drawstate(struct DrawState *state) {
@@ -252,49 +250,11 @@ void drawdata_resetpointers(DrawData * dd) {
   }
 }
 
-
-typedef struct {
-  u32 draw_cmd_count;
-  u32 obj_limit;
-  u32 obj_safety;
-} CitroTracking;
-
-void citrotracking_init(CitroTracking * ct) {
-  ct->draw_cmd_count = 0;
-  // I tried many things to increase this limit but it seems pretty set...
-  ct->obj_limit = 8192;
-  ct->obj_safety = ct->obj_limit - 100;
-}
-
-static inline void citrotracking_flush(CitroTracking * ct, bool force) {
-  if(force || ct->draw_cmd_count > ct->obj_safety) {
-    LOGTRACE("FLUSHING %ld DRAW CMDS PREMATURELY\n", ct->draw_cmd_count); 
-    C3D_FrameEnd(0);
-    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-    ct->draw_cmd_count = 0;
-  }
-}
-
-typedef struct {
-  struct ScreenState * screen;
-  CitroTracking ct;
-  int ofsx;
-  int ofsy;
-  u32 * export_buffer; // a buffer of pixels to fill potentially
-} SolidRectState;
-
 SolidRectState srs;
 
-void solidrectstate_init(SolidRectState * srs, struct ScreenState * screen) {
-  srs->ofsx = 0;
-  srs->ofsy = 0;
-  srs->screen = screen;
-  citrotracking_init(&srs->ct);
-}
-
 void citro_rect(float x, float y, u16 width, u32 color) {
-  if (x < 0 || y < 0 || x >= srs.screen->layer_width ||
-      y >= srs.screen->layer_height) {
+  if (x < 0 || y < 0 || x >= srs.layer_info.layer_width ||
+      y >= srs.layer_info.layer_height) {
 #ifdef DEBUG_IGNORERECT
     LOGDBG("IGNORING RECT AT (%f, %f)", x, y);
 #endif
@@ -317,18 +277,18 @@ void _exp_layer_dt_func(float x, float y, u16 width, u32 color) {
   u32 maxx = x + width;
   if (minx < 0)
     minx = 0;
-  if (maxx >= srs.screen->layer_width)
-    maxx = srs.screen->layer_width - 1;
+  if (maxx >= srs.layer_info.layer_width)
+    maxx = srs.layer_info.layer_width - 1;
   u32 miny = y;
   u32 maxy = y + width;
   if (miny < 0)
     miny = 0;
-  if (maxy >= srs.screen->layer_height)
-    maxy = srs.screen->layer_height - 1;
+  if (maxy >= srs.layer_info.layer_height)
+    maxy = srs.layer_info.layer_height - 1;
 
   for (u32 yi = miny; yi < maxy; yi++)
     for (u32 xi = minx; xi < maxx; xi++)
-      srs.export_buffer[yi * srs.screen->layer_width + xi] = color;
+      srs.export_buffer[yi * srs.layer_info.layer_width + xi] = color;
 }
 
 // Draw the scrollbars on the sides of the screen for the given screen
@@ -379,7 +339,7 @@ void onion_offset(const struct DrawState *dstate, int ofs, int *x, int *y) {
   *y = (region >> 1) * (LAYER_WIDTH >> dstate->mode);
 }
 
-void draw_layers(const struct LayerData *layers, layer_num layer_count,
+void draw_layers(const LayerData *layers, layer_num layer_count,
                  const struct SystemState *sys) {
   C2D_DrawRectSolid(-sys->screen_state.offset_x, -sys->screen_state.offset_y,
                     0.5f,
@@ -404,7 +364,7 @@ void draw_layers(const struct LayerData *layers, layer_num layer_count,
       int x, y;
       onion_offset(&sys->draw_state, o, &x, &y);
       for (layer_num i = 0; i < layer_count; i++) {
-        if (sys->screen_state.layer_visibility & (1 << i)) {
+        //if (sys->screen_state.layer_visibility & (1 << i)) {
           C2D_DrawImageAt(layers[i].image,
                           -sys->screen_state.offset_x -
                               (LAYER_EDGEBUF + x) * sys->screen_state.zoom,
@@ -412,19 +372,19 @@ void draw_layers(const struct LayerData *layers, layer_num layer_count,
                               (LAYER_EDGEBUF + y) * sys->screen_state.zoom,
                           0.5f, &tint, sys->screen_state.zoom,
                           sys->screen_state.zoom);
-        }
+        //}
       }
     }
   }
 
   for (layer_num i = 0; i < layer_count; i++) {
-    if (sys->screen_state.layer_visibility & (1 << i)) {
+    //if (sys->screen_state.layer_visibility & (1 << i)) {
       C2D_DrawImageAt(
           layers[i].image,
           -sys->screen_state.offset_x - LAYER_EDGEBUF * sys->screen_state.zoom,
           -sys->screen_state.offset_y - LAYER_EDGEBUF * sys->screen_state.zoom,
           0.5f, NULL, sys->screen_state.zoom, sys->screen_state.zoom);
-    }
+    //}
   }
 
   float canvas_x = sys->screen_state.layer_width * sys->screen_state.zoom -
@@ -444,7 +404,7 @@ void draw_layers(const struct LayerData *layers, layer_num layer_count,
 // Draw as much as possible from the given ring buffer, with as little context
 // switching as possible. WARN: MAKES A LOT OF ASSUMPTIONS IN ORDER TO PREVENT
 // COSTLY MALLOCS PER FRAME
-void draw_from_buffer(struct LineRingBuffer *scandata, struct LayerData *layers,
+void draw_from_buffer(struct LineRingBuffer *scandata, LayerData *layers,
                       struct ScreenState *scrst) {
   u16 lineCount = 0;
   struct FullLine *lines[MAX_FRAMELINES]; // The largest available
@@ -465,9 +425,9 @@ void draw_from_buffer(struct LineRingBuffer *scandata, struct LayerData *layers,
 
   for (u8 i = 0; i < LAYER_COUNT; i++) {
     // Skip expensive drawing for layers that aren't visible
-    if ((scrst->layer_visibility & (1 << i)) == 0) {
-      continue;
-    }
+    // if ((scrst->layer_visibility & (1 << i)) == 0) {
+    //   continue;
+    // }
 
     // Don't want to call this too often, so do as much as possible PER
     // layer instead of jumping around
@@ -1062,13 +1022,11 @@ void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color,
 
   printf("\x1b[30;1H%sW:%s%02d%s L:", status_x1b, active_x1b, width,
          status_x1b);
-  char layernames[] =
-      LAYER_CHARS; // apparently layer 1 is the top, but we display it backwards
-                   // (layer 1 is first, then 0)
-  for (s8 i = LAYER_COUNT - 1; i >= 0;
-       i--) // NOTE: the second input is an optional character to display on
-            // current layer
-  {
+  // apparently layer 1 is the top, but we display it backwards
+  // (layer 1 is first, then 0)
+  char layernames[] = LAYER_CHARS; 
+  for (s8 i = LAYER_COUNT - 1; i >= 0; i--) {
+    // NOTE: the second input is an optional character to display on current layer
     printf("%s%c", i == layer ? activebg_x1b : statusbg_x1b,
            i == layer ? layernames[i] : ' ');
   }
@@ -1488,7 +1446,7 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
             "Rescan Local References\n"
             "Exit\n",
             modes[sys->draw_state.mode], 
-            visibility[sys->screen_state.layer_visibility],
+            "ALL", //visibility[sys->screen_state.layer_visibility],
             sys->anim_loop, sys->anim_loop, numtemp,
             ss->reference_total);
     for (int x = strlen(menu); x >= 0; x--) {
@@ -1502,8 +1460,8 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
       inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
       break;
     case 1: // layer visibility
-      sys->screen_state.layer_visibility =
-          (sys->screen_state.layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
+      //sys->screen_state.layer_visibility =
+      //    (sys->screen_state.layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
       break;
     case 2: // anim loop up
       sys->anim_loop++;
@@ -1777,6 +1735,16 @@ void refresh_console(DrawData * dd, SessionState * ss) {
   }
 }
 
+void recreate_layers(LayerData * layers, MaxLayerInfo layer_info, int free_count) {
+  for (int i = 0; i < free_count; i++) {
+    layer_free(layers + i);
+  }
+  for (int i = 0; i < layer_info.max_layers; i++) {
+    layer_create_wh(layers + i, layer_info.texture_width, layer_info.texture_height);
+  }
+  LOGTRACE("CREATED LAYERS");
+}
+
 #define FLUSH_LAYERS()                                                         \
   drawdata_resetpointers(&dd);    \
   reset_lineringbuffer(&scandata);                                             \
@@ -1861,7 +1829,8 @@ int main(int argc, char **argv) {
     //}
   } 
 
-  solidrectstate_init(&srs, NULL);
+  MaxLayerInfo layer_info = query_layer_maximums(0);
+  solidrectstate_init(&srs, layer_info);
 
   C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
   C2D_Init(srs.ct.obj_limit);
@@ -1886,23 +1855,13 @@ int main(int argc, char **argv) {
   set_screenstate_defaults(&sys.screen_state);
   set_cpadprofile_canvas(&sys.cpad);
 
-  // Very silly global so rect drawing functions know screen dimensions and such
-  srs.screen = &sys.screen_state;
-
   LOGTRACE("SET SCREENSTATE/CANVAS");
 
   // weird byte order? 16 bits of color are at top
   const u32 layer_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
 
-  const Tex3DS_SubTexture subtex = {TEXTURE_WIDTH, TEXTURE_HEIGHT, 0.0f,
-                                    1.0f,          1.0f,           0.0f};
-
-  struct LayerData layers[LAYER_COUNT];
-
-  for (int i = 0; i < LAYER_COUNT; i++)
-    create_layer(layers + i, subtex);
-
-  LOGTRACE("CREATED LAYERS");
+  LayerData layers[MAXLAYERS * MAXONION];
+  recreate_layers(layers, layer_info, 0);
 
   //SessionState sstate;
   sessionstate_init(&sstate);
@@ -2301,8 +2260,8 @@ ENDMAINLOOP:;
   free(stroke_data);
   metacontainer_free(&meta);
 
-  for (int i = 0; i < LAYER_COUNT; i++)
-    delete_layer(layers[i]);
+  for (int i = 0; i < layer_info.max_layers; i++)
+    layer_free(layers + i);
 
   C3D_RenderTargetDelete(screen);
 
