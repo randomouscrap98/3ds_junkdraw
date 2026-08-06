@@ -179,13 +179,14 @@ void set_cpadprofile_canvas(struct CpadProfile *profile) {
 typedef struct {
   bool touching;
   bool palette_active;
-  bool flush_layers;
+  //bool flush_layers;
   bool close_palette;
   bool is_new_date;
   bool is_menu_open;
 
   u32 current_frame;
   u32 end_frame;
+  u32 clear_color;
   s8 last_zoom_power;
   s8 reference_image;
   s8 reference_total;
@@ -194,7 +195,7 @@ typedef struct {
 void sessionstate_init(SessionState * ss) {
   ss->touching = false;
   ss->palette_active = false;
-  ss->flush_layers = true;
+  //ss->flush_layers = true;
   ss->close_palette = false;
   ss->is_new_date = false;
   ss->is_menu_open = false;
@@ -203,6 +204,7 @@ void sessionstate_init(SessionState * ss) {
   ss->last_zoom_power = 0;
   ss->reference_image = 0;
   ss->reference_total = 0;
+  ss->clear_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
 }
 
 bool sessionstate_showreference(SessionState * ss) {
@@ -1793,9 +1795,8 @@ void reset_layerpackwindow(LayerPackWindow * layer_window, struct ScreenState * 
   } else { \
     char *previous_end = dd.end; \
     dd.end = write_to_datamem(stroke_data, cvl_end, sys.draw_state.page, dd.start, dd.end); \
-    if (!force && previous_end == layer_window.slots[layer_window.window_head].scanner.current) { \
-      layer_window.slots[layer_window.window_head].scanner.current = dd.end; \
-    } \
+    LayerPackItem * winslot = layerpackwindow_at(&layer_window, 0); \
+    if (!force && previous_end == winslot->scanner.current) { winslot->scanner.current = dd.end; } \
     print_data(&dd); \
   } \
   pending.line_count = 0; \
@@ -1840,15 +1841,10 @@ int main(int argc, char **argv) {
   set_default_drawstate(&sys.draw_state);
   set_screenstate_defaults(&sys.screen_state);
   set_cpadprofile_canvas(&sys.cpad);
+  sessionstate_init(&sstate);
   srs.layer_info = &sys.screen_state.layer_info;
 
-  LOGTRACE("SET SCREENSTATE/CANVAS");
-
-  // weird byte order? 16 bits of color are at top
-  //const u32 layer_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
-
-  //SessionState sstate;
-  sessionstate_init(&sstate);
+  LOGTRACE("SETUP STATE");
 
   char tempc; // Used for anything, very short life
 
@@ -1857,15 +1853,6 @@ int main(int argc, char **argv) {
   if (!pending.lines) {
     LOGDBG("ERR: Couldn't allocate stroke lines");
   }
-
-  // struct LineRingBuffer scandata;
-  // init_lineringbuffer(&scandata, _MAXDRAWLINES);
-  // if (!scandata.lines) {
-  //   LOGDBG("ERR: COULD NOT INIT LINERINGBUFFER");
-  // }
-  // if (!scandata.pending.lines) {
-  //   LOGDBG("ERR: COULD NOT INIT LRB PENDING");
-  // }
 
   struct RingStack undostack, redostack;
   init_ringstack(&undostack, MAX_UNDO);
@@ -1882,7 +1869,7 @@ int main(int argc, char **argv) {
   metacontainer meta;
   drawdata_init(&dd);
 
-  if (!dd.container || /*!stroke_data ||*/ metacontainer_init(&meta, MAX_META_DATA)) {
+  if (!dd.container || !stroke_data || metacontainer_init(&meta, MAX_META_DATA)) {
     LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
   }
 
@@ -2134,21 +2121,36 @@ int main(int argc, char **argv) {
         cpad_translate(&sys.cpad, pos.dx, sys.screen_state.offset_x),
         cpad_translate(&sys.cpad, -pos.dy, sys.screen_state.offset_y));
 
+    // =======================================
     // Render the scene
+    // =======================================
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
     // -- LAYER DRAW SECTION --
     C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE,
                    GPU_ZERO);
 
-    // Apparently (not sure), all clearing should be done within our main loop?
-    if (sstate.flush_layers) {
-      for (int i = 0; i < LAYER_COUNT; i++)
-        C2D_TargetClear(layers[i].target, layer_color);
-      sstate.flush_layers = false;
+    // Clear + fix all broken scanners in the layer system
+    int draw_layers = get_systemstate_max_onionlayers(&sys) + 1;
+    for(int li = 0; li < draw_layers; li++) {
+      LayerPackItem * winslot = layerpackwindow_at(&layer_window, -li);
+      u16 realpage = get_systemstate_onion_offset(&sys, -li);
+      if(winslot->scanner.page != realpage) {
+        linescanner_reset(&winslot->scanner);
+        winslot->scanner.page = realpage;
+        for (int lii = 0; lii < winslot->layer_count; lii++)
+          C2D_TargetClear(winslot->layers[lii].target, sstate.clear_color);
+      }
+      // And also fill up on drawing?
     }
+    // Apparently (not sure), all clearing should be done within our main loop?
+    // if (sstate.flush_layers) {
+    //   for (int i = 0; i < LAYER_COUNT; i++)
+    //     C2D_TargetClear(layers[i].target, layer_color);
+    //   sstate.flush_layers = false;
+    // } else if // TODO! THIS WAS ELSE IF
     // Ignore first frame touches
-    else if (sstate.touching) {
+    if (sstate.touching) {
       if (sstate.palette_active) {
         int action = update_colorpicker(&sys.colors, &current_touch);
         if (action == 2 ||
@@ -2157,7 +2159,7 @@ int main(int argc, char **argv) {
       } else {
         // Keep this outside the if statement below so it can be used for
         // background drawing too (draw commands from other people)
-        C2D_SceneBegin(layers[sys.draw_state.layer].target);
+        C2D_SceneBegin(layerpackwindow_at(&layer_window, 0)->layers[sys.draw_state.layer].target);
 
         if (pending.line_count < MAX_STROKE_LINES) {
           // This works for 0 (returns 0,0)
@@ -2171,43 +2173,44 @@ int main(int argc, char **argv) {
       }
     }
 
-    int oend = get_systemstate_max_onionlayers(&sys);
-    int dp_ofs = 0;
+    // And now, we scan backwards through
+    // int oend = get_systemstate_max_onionlayers(&sys);
+    // int dp_ofs = 0;
 
-    // Find the place to stop looking for the appropriate draw pointer to work
-    // on. This has complicated rules
-    for (dp_ofs = 0; dp_ofs <= oend; dp_ofs++) {
-      // This works for 0 (returns 0,0)
-      onion_offset(&sys.draw_state, -dp_ofs, &srs.ofsx, &srs.ofsy); 
-      if (dp_ofs == oend) // Don't bother with any logic below, this is the last slot.
-        break;
-      if (sys.draw_state.mode == DRAWMODE_ANIMATION ||
-          sys.draw_state.mode == DRAWMODE_ANIMATION2) {
-        // In animation mode, we want to fully complete the current "slot"
-        // before continuing to the next. This is functionally equivalent to no
-        // animation for onion_count = 0. So, if we're not done scanning this
-        // data, obviously continue this. But if it's complete AND the next
-        // HASN'T STARTED AND there's draw data left, this is where to break.
-        if ((dd.draw_pointers[dp_ofs] != dd.end) ||
-            ((dd.draw_pointers[dp_ofs + 1] == dd.start) &&
-             lineringbuffer_size(&scandata)))
-          break;
-      } else {
-        // This one is simple: if we're not in animation mode, stop immediately
-        break;
-      }
-    }
+    // // Find the place to stop looking for the appropriate draw pointer to work
+    // // on. This has complicated rules
+    // for (dp_ofs = 0; dp_ofs <= oend; dp_ofs++) {
+    //   // This works for 0 (returns 0,0)
+    //   onion_offset(&sys.draw_state, -dp_ofs, &srs.ofsx, &srs.ofsy); 
+    //   if (dp_ofs == oend) // Don't bother with any logic below, this is the last slot.
+    //     break;
+    //   if (sys.draw_state.mode == DRAWMODE_ANIMATION ||
+    //       sys.draw_state.mode == DRAWMODE_ANIMATION2) {
+    //     // In animation mode, we want to fully complete the current "slot"
+    //     // before continuing to the next. This is functionally equivalent to no
+    //     // animation for onion_count = 0. So, if we're not done scanning this
+    //     // data, obviously continue this. But if it's complete AND the next
+    //     // HASN'T STARTED AND there's draw data left, this is where to break.
+    //     if ((dd.draw_pointers[dp_ofs] != dd.end) ||
+    //         ((dd.draw_pointers[dp_ofs + 1] == dd.start) &&
+    //          lineringbuffer_size(&scandata)))
+    //       break;
+    //   } else {
+    //     // This one is simple: if we're not in animation mode, stop immediately
+    //     break;
+    //   }
+    // }
 
-    int drawpage = sys.draw_state.page - dp_ofs;
-    if(sys.anim_loop > 0 && sys.anim_loop > sys.draw_state.page) {
-      drawpage = (drawpage + sys.anim_loop) % sys.anim_loop;
-    } else {
-      drawpage = DCV_MAX(drawpage, 0);
-    }
-    //TickCounter timer;
-    //osTickCounterStart(&timer);
-    dd.draw_pointers[dp_ofs] = scan_lines(
-      &scandata, dd.draw_pointers[dp_ofs], dd.end, drawpage);
+    // int drawpage = sys.draw_state.page - dp_ofs;
+    // if(sys.anim_loop > 0 && sys.anim_loop > sys.draw_state.page) {
+    //   drawpage = (drawpage + sys.anim_loop) % sys.anim_loop;
+    // } else {
+    //   drawpage = DCV_MAX(drawpage, 0);
+    // }
+    // //TickCounter timer;
+    // //osTickCounterStart(&timer);
+    // dd.draw_pointers[dp_ofs] = scan_lines(
+    //   &scandata, dd.draw_pointers[dp_ofs], dd.end, drawpage);
     // osTickCounterUpdate(&timer);
     // bool saydraw = lineringbuffer_size(&scandata) > 0;
     // if(saydraw) { 
@@ -2259,8 +2262,8 @@ ENDMAINLOOP:;
   //free(stroke_data);
   metacontainer_free(&meta);
 
-  for (int i = 0; i < layer_info.max_layers; i++)
-    layer_free(layers + i);
+  // for (int i = 0; i < layer_info.max_layers; i++)
+  //   layer_free(layers + i);
 
   C3D_RenderTargetDelete(screen);
 

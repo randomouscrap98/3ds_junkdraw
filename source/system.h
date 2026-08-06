@@ -136,4 +136,15 @@ static inline int get_systemstate_max_onionlayers(const struct SystemState * sys
     return max_layers;
 }
 
+static inline s16 get_systemstate_onion_offset(const struct SystemState * sys, int offset) {
+  s16 realpage = sys->draw_state.page + offset;
+  if(sys->anim_loop > 0 && sys->anim_loop > sys->draw_state.page) {
+    realpage = (realpage + sys->anim_loop) % sys->anim_loop;
+  } else {
+    realpage = DCV_MAX(realpage, 0);
+  }
+  return realpage;
+}
+
+
 #endif

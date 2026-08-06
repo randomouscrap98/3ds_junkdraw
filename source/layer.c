@@ -99,6 +99,10 @@ void layerpackwindow_invalidate_head(LayerPackWindow * window) {
   window->slots[window->window_head].scanner.page = -1;
 }
 
+LayerPackItem * layerpackwindow_at(LayerPackWindow * window, int offset) {
+  return window->slots + ((window->window_head + offset + 100 * window->slot_count) % window->slot_count);
+}
+
 // void layerpackwindow_resetpointers(LayerPackWindow * window, char * pointer) {
 //   for(int i = 0; i < window->slots_count; i++) {
 //     window->slots[i].draw_pointer = pointer;
