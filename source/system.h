@@ -3,6 +3,7 @@
 
 #include "color.h"
 #include "input.h"
+#include "layer.h"
 #include <3ds.h>
 #include <citro2d.h>
 #include <citro3d.h>
@@ -24,9 +25,12 @@ struct ScreenState {
   float offset_y;
   float zoom;
 
-  u16 layer_width;
-  u16 layer_height;
-  u8 layer_visibility;
+  MaxLayerInfo layer_info;
+  u8 layer_count;
+  u8 resolution_id;
+  //u16 layer_width;
+  //u16 layer_height;
+  //u8 layer_visibility;
 
   // These are pretty standard, but included just in case..
   u16 screen_width;
@@ -54,18 +58,18 @@ struct ToolData {
   u16 static_color;
 };
 
-#define DRAWMODE_NORMAL 0
-#define DRAWMODE_ANIMATION 1
-#define DRAWMODE_ANIMATION2 2
-
-#define DRAWMODE_COUNT 3
+// #define DRAWMODE_NORMAL 0
+// #define DRAWMODE_ANIMATION 1
+// #define DRAWMODE_ANIMATION2 2
+// 
+// #define DRAWMODE_COUNT 3
 
 struct DrawState {
   s8 zoom_power;
   u16 page;
   u8 layer;
 
-  u8 mode;
+  // u8 mode;
 
   // The tool states; each tool can have its own modifiable state
   struct ToolData *tools;
@@ -108,8 +112,7 @@ struct SystemState {
   struct ColorSystem colors;
 };
 
-static inline void set_systemstate_onionstart(struct SystemState *sys,
-                                              float start) {
+static inline void set_systemstate_onionstart(struct SystemState *sys, float start) {
   // TODO: some magic numbers, what are they?
   sys->onion_blendstart = start;
   if (sys->onion_blendstart > 0.91)
@@ -122,6 +125,8 @@ static inline void set_systemstate_onionstart(struct SystemState *sys,
 // Calculate the maximum onionlayers we're going to show
 static inline int get_systemstate_max_onionlayers(const struct SystemState * sys) {
   int max_layers = sys->onion_count; // Assume it's the actual count
+  int max_actual = sys->screen_state.layer_info.max_layers - sys->screen_state.layer_count;
+  if(max_actual < max_layers) max_layers = max_actual;
   int cut = sys->anim_loop; // figure out if either anim_loop or the page cuts it
   if(cut == 0)
     cut = sys->draw_state.page;

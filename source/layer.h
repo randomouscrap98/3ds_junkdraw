@@ -1,6 +1,9 @@
 #ifndef __HEADER_3DSJUNKDRAW_LAYER__
 #define __HEADER_3DSJUNKDRAW_LAYER__
 
+#include "draw.h"
+#include "vector.h"
+
 #include <3ds.h>
 #include <citro2d.h>
 #include <citro3d.h>
@@ -15,16 +18,6 @@
 #define MAXLAYERS   8
 #define MAXONION    4
 
-typedef struct {
-  Tex3DS_SubTexture subtex; // Simple structures
-  C3D_Tex texture;
-  C2D_Image image;
-  C3D_RenderTarget *target; // Actual data?
-} LayerData;
-
-void layer_create(LayerData * layer, Tex3DS_SubTexture subtex);
-void layer_create_wh(LayerData * layer, int width, int height);
-void layer_free(LayerData * layer);
 
 typedef struct {
   int layer_width;
@@ -36,6 +29,52 @@ typedef struct {
 
 MaxLayerInfo query_layer_maximums(int resolution);
 
+
+typedef struct {
+  Tex3DS_SubTexture subtex; // Simple structures
+  C3D_Tex texture;
+  C2D_Image image;
+  C3D_RenderTarget *target; // Actual data?
+} LayerData;
+
+void layer_create(LayerData * layer, Tex3DS_SubTexture subtex);
+void layer_create_wh(LayerData * layer, int width, int height);
+void layer_free(LayerData * layer);
+
+typedef union {
+  u32 clear;
+  struct FullLine line;
+} LayerDrawCommand;
+
+VECTOR_DECLARE(LayerDrawCommand);
+
+// A collection of layers you can draw into. Should represent one "page".
+// The only use for this is to create a whole window of them
+typedef struct {
+  LayerData layers[MAXLAYERS]; // Wastes memory but whatever
+  int layer_count;
+  s16 page;
+  char * draw_pointer;
+  vector_LayerDrawCommand pending_commands;
+} LayerPack;
+
+void layerpack_init(LayerPack * lpack, MaxLayerInfo layer_info, int layer_count);
+void layerpack_schedule_clear(LayerPack * lpack, u32 clear_color);
+void layerpack_free(LayerPack * lpack);
+
+// A sliding window of layer packs, each of which can represent a page
+typedef struct {
+  LayerPack * slots;
+  int slots_count;
+  int window_head;
+} LayerPackWindow;
+
+int layerpackwindow_init(LayerPackWindow * window, MaxLayerInfo layer_info, int layer_count);
+void layerpackwindow_free(LayerPackWindow * window);
+void layerpackwindow_next(LayerPackWindow * window, int increment);
+void layerpackwindow_resetpointers(LayerPackWindow * window, char * pointer);
+void layerpackwindow_schedule_clear(LayerPackWindow * window, u32 clear_color);
+
 typedef struct {
   u32 draw_cmd_count;
   u32 obj_limit;
@@ -46,15 +85,20 @@ void citrotracking_init(CitroTracking * ct);
 u32 citrotracking_flush(CitroTracking * ct, bool force);
 
 typedef struct {
-  MaxLayerInfo layer_info;
+  MaxLayerInfo * layer_info;
   //struct ScreenState * screen;
   CitroTracking ct;
-  int ofsx;
-  int ofsy;
+  //int ofsx;
+  //int ofsy;
   u32 * export_buffer; // a buffer of pixels to fill potentially
 } SolidRectState;
 
-void solidrectstate_init(SolidRectState * srs, MaxLayerInfo layer_info);
+void solidrectstate_init(SolidRectState * srs);
 
+// `// The settings pulled from the save file
+// `typedef struct {
+// `  int layer_count;
+// `  int resolution_id;
+// `} LayerSettings;
 
 #endif

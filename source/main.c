@@ -140,13 +140,14 @@ void set_screenstate_defaults(struct ScreenState *state) {
   state->offset_x = 0;
   state->offset_y = 0;
   state->zoom = 1;
-  state->layer_width = LAYER_WIDTH;
-  state->layer_height = LAYER_HEIGHT;
+  state->layer_info = query_layer_maximums(0);
+  state->layer_count = 2; // ???
+  //state->layer_width = LAYER_WIDTH;
+  //state->layer_height = LAYER_HEIGHT;
   state->screen_width = 320; // These two should literally never change
   state->screen_height = 240;
   state->screen_color = SCREEN_COLOR;
   state->bg_color = CANVAS_BG_COLOR;
-
   // state->layer_visibility = (1 << LAYER_COUNT) - 1; // All visible
 }
 
@@ -154,7 +155,7 @@ void set_default_drawstate(struct DrawState *state) {
   state->zoom_power = 0;
   state->page = 0;
   state->layer = DEFAULT_START_LAYER;
-  state->mode = DRAWMODE_NORMAL;
+  // state->mode = DRAWMODE_NORMAL;
 
   memcpy(state->tools, default_tooldata, sizeof(default_tooldata));
   state->current_tool = state->tools + TOOL_PENCIL;
@@ -225,7 +226,7 @@ typedef struct {
   char *start;     // This goes to the start of actual drawing data, past file header
   char *end;       // NOTE: this is exclusive: it points one past the end.
   char *saved_last;
-  char *draw_pointers[1 + MAXONION];
+  //char *draw_pointers[1 + MAXONION];
 } DrawData;
 
 void drawdata_init(DrawData * dd) {
@@ -244,24 +245,25 @@ void drawdata_new(DrawData * dd) {
   *dd->start = 0; /* Not strictly necessary */
 }
 
-void drawdata_resetpointers(DrawData * dd) {
-  for (int __fli = 0; __fli < MAXONION + 1; __fli++) {
-    dd->draw_pointers[__fli] = dd->start;
-  }
-}
+// void drawdata_resetpointers(DrawData * dd) {
+//   for (int __fli = 0; __fli < MAXONION + 1; __fli++) {
+//     dd->draw_pointers[__fli] = dd->start;
+//   }
+// }
 
 SolidRectState srs;
 
 void citro_rect(float x, float y, u16 width, u32 color) {
-  if (x < 0 || y < 0 || x >= srs.layer_info.layer_width ||
-      y >= srs.layer_info.layer_height) {
+  if (x < 0 || y < 0 || x >= srs.layer_info->layer_width ||
+      y >= srs.layer_info->layer_height) {
 #ifdef DEBUG_IGNORERECT
     LOGDBG("IGNORING RECT AT (%f, %f)", x, y);
 #endif
     return;
   }
-  C2D_DrawRectSolid(x + srs.ofsx + LAYER_EDGEBUF,
-                    y + srs.ofsy + LAYER_EDGEBUF, 0.5, width, width, color);
+  //C2D_DrawRectSolid(x + srs.ofsx + LAYER_EDGEBUF,
+  //                  y + srs.ofsy + LAYER_EDGEBUF, 0.5, width, width, color);
+  C2D_DrawRectSolid(x + LAYER_EDGEBUF, y + LAYER_EDGEBUF, 0.5, width, width, color);
   srs.ct.draw_cmd_count++;
   citrotracking_flush(&srs.ct, false);
 }
@@ -277,18 +279,18 @@ void _exp_layer_dt_func(float x, float y, u16 width, u32 color) {
   u32 maxx = x + width;
   if (minx < 0)
     minx = 0;
-  if (maxx >= srs.layer_info.layer_width)
-    maxx = srs.layer_info.layer_width - 1;
+  if (maxx >= srs.layer_info->layer_width)
+    maxx = srs.layer_info->layer_width - 1;
   u32 miny = y;
   u32 maxy = y + width;
   if (miny < 0)
     miny = 0;
-  if (maxy >= srs.layer_info.layer_height)
-    maxy = srs.layer_info.layer_height - 1;
+  if (maxy >= srs.layer_info->layer_height)
+    maxy = srs.layer_info->layer_height - 1;
 
   for (u32 yi = miny; yi < maxy; yi++)
     for (u32 xi = minx; xi < maxx; xi++)
-      srs.export_buffer[yi * srs.layer_info.layer_width + xi] = color;
+      srs.export_buffer[yi * srs.layer_info->layer_width + xi] = color;
 }
 
 // Draw the scrollbars on the sides of the screen for the given screen
@@ -304,92 +306,90 @@ void draw_scrollbars(const struct ScreenState *mod) {
                     mod->screen_height, SCROLL_BG);
 
   u16 sofs_x =
-      (float)mod->offset_x / mod->layer_width / mod->zoom * mod->screen_width;
+      (float)mod->offset_x / mod->layer_info.layer_width / mod->zoom * mod->screen_width;
   u16 sofs_y =
-      (float)mod->offset_y / mod->layer_height / mod->zoom * mod->screen_height;
+      (float)mod->offset_y / mod->layer_info.layer_height / mod->zoom * mod->screen_height;
 
   // bottom and right scrollbar bar
   C2D_DrawRectSolid(sofs_x, mod->screen_height - SCROLL_WIDTH, 0.5f,
                     mod->screen_width * mod->screen_width /
-                        (float)mod->layer_width / mod->zoom,
+                        (float)mod->layer_info.layer_width / mod->zoom,
                     SCROLL_WIDTH, SCROLL_BAR);
   C2D_DrawRectSolid(mod->screen_width - SCROLL_WIDTH, sofs_y, 0.5f,
                     SCROLL_WIDTH,
                     mod->screen_height * mod->screen_height /
-                        (float)mod->layer_height / mod->zoom,
+                        (float)mod->layer_info.layer_height / mod->zoom,
                     SCROLL_BAR);
 }
 
-// Calculate the x and y offset into some layer for an onion layer based on an
-// offset from current page. So, 0 would be current page, but you should never
-// give that as a value. The offset is given WITHOUT the edgebuf
-void onion_offset(const struct DrawState *dstate, int ofs, int *x, int *y) {
-  if (ofs >= 0) {
-    *x = 0;
-    *y = 0;
-    return;
-  }
-  int region = -ofs; // The images go back from closest to furthest
-  // IF we go back to the more optimized onion top thing, this is what we do:
-  // int otop = (dstate->page % MAXONION); // First actual onion page
-  // // Plus one to skip player region
-  // int region = 1 + (MAXONION + otop + ofs + 1) % MAXONION;
-  // CAREFUL: TODO: When we get more modes, this will misbehave!
-  *x = (region & 1) * (LAYER_WIDTH >> dstate->mode); // offset without edgebuf
-  *y = (region >> 1) * (LAYER_WIDTH >> dstate->mode);
-}
+// // Calculate the x and y offset into some layer for an onion layer based on an
+// // offset from current page. So, 0 would be current page, but you should never
+// // give that as a value. The offset is given WITHOUT the edgebuf
+// void onion_offset(const struct DrawState *dstate, int ofs, int *x, int *y) {
+//   if (ofs >= 0) {
+//     *x = 0;
+//     *y = 0;
+//     return;
+//   }
+//   int region = -ofs; // The images go back from closest to furthest
+//   // IF we go back to the more optimized onion top thing, this is what we do:
+//   // int otop = (dstate->page % MAXONION); // First actual onion page
+//   // // Plus one to skip player region
+//   // int region = 1 + (MAXONION + otop + ofs + 1) % MAXONION;
+//   // CAREFUL: TODO: When we get more modes, this will misbehave!
+//   *x = (region & 1) * (LAYER_WIDTH >> dstate->mode); // offset without edgebuf
+//   *y = (region >> 1) * (LAYER_WIDTH >> dstate->mode);
+// }
 
-void draw_layers(const LayerData *layers, layer_num layer_count,
-                 const struct SystemState *sys) {
+void draw_layers(const LayerData *layers, const struct SystemState *sys) {
   C2D_DrawRectSolid(-sys->screen_state.offset_x, -sys->screen_state.offset_y,
                     0.5f,
-                    sys->screen_state.layer_width * sys->screen_state.zoom,
-                    sys->screen_state.layer_height * sys->screen_state.zoom,
+                    sys->screen_state.layer_info.layer_width * sys->screen_state.zoom,
+                    sys->screen_state.layer_info.layer_height * sys->screen_state.zoom,
                     sys->screen_state.bg_color); // The bg color
 
   C2D_ImageTint tint;
-  // We draw the onion skin stuff first
-  if (sys->draw_state.mode == DRAWMODE_ANIMATION ||
-      sys->draw_state.mode == DRAWMODE_ANIMATION2) {
-    // The offset from current page for onion skin. WARN: This used to max out
-    // at the page but now it maxes out at animation loop
-    int max_layers = get_systemstate_max_onionlayers(sys);
-    for (int o = -max_layers; o <= -1; o++) {
-      for (int i = 0; i < 4; i++) {
-        tint.corners[i].color = 0xFFFFFFFF; // Setable sometime?
-        tint.corners[i].blend =
-            1 - DCV_LERP(sys->onion_blendstart, sys->onion_blendend,
-                         fabs((o + 1.0) / (MAXONION - 1.0)));
-      }
-      int x, y;
-      onion_offset(&sys->draw_state, o, &x, &y);
-      for (layer_num i = 0; i < layer_count; i++) {
-        //if (sys->screen_state.layer_visibility & (1 << i)) {
-          C2D_DrawImageAt(layers[i].image,
-                          -sys->screen_state.offset_x -
-                              (LAYER_EDGEBUF + x) * sys->screen_state.zoom,
-                          -sys->screen_state.offset_y -
-                              (LAYER_EDGEBUF + y) * sys->screen_state.zoom,
-                          0.5f, &tint, sys->screen_state.zoom,
-                          sys->screen_state.zoom);
-        //}
-      }
+  // The offset from current page for onion skin. WARN: This used to max out
+  // at the page but now it maxes out at animation loop
+  int max_onion_layers = get_systemstate_max_onionlayers(sys);
+  //for (int o = -max_onion_layers; o <= -1; o++) {
+  for (int o = 0; o < max_onion_layers; o++) {
+    for (int i = 0; i < 4; i++) {
+      tint.corners[i].color = 0xFFFFFFFF; // Setable sometime?
+      tint.corners[i].blend =
+          1 - DCV_LERP(sys->onion_blendstart, sys->onion_blendend,
+                       fabs((o + 1.0) / (MAXONION - 1.0)));
+    }
+    //int x, y;
+    //onion_offset(&sys->draw_state, o, &x, &y);
+    for (layer_num i = 0; i < sys->screen_state.layer_count; i++) {
+      //if (sys->screen_state.layer_visibility & (1 << i)) {
+      C2D_DrawImageAt(layers[i + sys->screen_state.layer_count * (o + 1)].image,
+                      -sys->screen_state.offset_x - LAYER_EDGEBUF * sys->screen_state.zoom,
+                      -sys->screen_state.offset_y - LAYER_EDGEBUF * sys->screen_state.zoom,
+                      0.5f, &tint, sys->screen_state.zoom,
+                      sys->screen_state.zoom);
+      //}
     }
   }
+  // We draw the onion skin stuff first
+  //if (sys->draw_state.mode == DRAWMODE_ANIMATION ||
+  //    sys->draw_state.mode == DRAWMODE_ANIMATION2) {
+  //}
 
-  for (layer_num i = 0; i < layer_count; i++) {
+  for (layer_num i = 0; i < sys->screen_state.layer_count; i++) {
     //if (sys->screen_state.layer_visibility & (1 << i)) {
-      C2D_DrawImageAt(
-          layers[i].image,
-          -sys->screen_state.offset_x - LAYER_EDGEBUF * sys->screen_state.zoom,
-          -sys->screen_state.offset_y - LAYER_EDGEBUF * sys->screen_state.zoom,
-          0.5f, NULL, sys->screen_state.zoom, sys->screen_state.zoom);
+    C2D_DrawImageAt(
+        layers[i].image,
+        -sys->screen_state.offset_x - LAYER_EDGEBUF * sys->screen_state.zoom,
+        -sys->screen_state.offset_y - LAYER_EDGEBUF * sys->screen_state.zoom,
+        0.5f, NULL, sys->screen_state.zoom, sys->screen_state.zoom);
     //}
   }
 
-  float canvas_x = sys->screen_state.layer_width * sys->screen_state.zoom -
+  float canvas_x = sys->screen_state.layer_info.layer_width * sys->screen_state.zoom -
                    sys->screen_state.offset_x;
-  float canvas_y = sys->screen_state.layer_height * sys->screen_state.zoom -
+  float canvas_y = sys->screen_state.layer_info.layer_height * sys->screen_state.zoom -
                    sys->screen_state.offset_y;
 
   // This is rather wasteful but eh...
@@ -423,7 +423,7 @@ void draw_from_buffer(struct LineRingBuffer *scandata, LayerData *layers,
     return;
   }
 
-  for (u8 i = 0; i < LAYER_COUNT; i++) {
+  for (u8 i = 0; i < scrst->layer_count; i++) {
     // Skip expensive drawing for layers that aren't visible
     // if ((scrst->layer_visibility & (1 << i)) == 0) {
     //   continue;
@@ -439,8 +439,6 @@ void draw_from_buffer(struct LineRingBuffer *scandata, LayerData *layers,
       if (lines[li]->layer != i)
         continue;
 
-      // NOTE: It's up to you to set _msr_ofsx + _msr_ofsy appropriately before
-      // calling "draw_from_buffer"
       pixaligned_linefunc(lines[li], citro_rect);
     }
   }
@@ -583,10 +581,10 @@ void fill_colorhistory(struct ColorSystem *cs, char *draw_start, char *draw_end,
 // error
 u32 *export_page_raw(struct ScreenState *scrst, page_num page, char *data,
                      char *data_end) {
-  u32 *layerdata[LAYER_COUNT + 1];
-  u32 size_bytes = sizeof(u32) * scrst->layer_width * scrst->layer_height;
+  u32 *layerdata[scrst->layer_count + 1];
+  u32 size_bytes = sizeof(u32) * scrst->layer_info.layer_width * scrst->layer_info.layer_height;
 
-  for (int i = 0; i < LAYER_COUNT + 1; i++) {
+  for (int i = 0; i < scrst->layer_count + 1; i++) {
     layerdata[i] = malloc(size_bytes);
 
     if (layerdata[i] == NULL) {
@@ -599,7 +597,7 @@ u32 *export_page_raw(struct ScreenState *scrst, page_num page, char *data,
     }
 
     // TODO: This assumes the bg is white
-    memset(layerdata[i], (i == LAYER_COUNT) ? 0xFF : 0, size_bytes);
+    memset(layerdata[i], (i == scrst->layer_count) ? 0xFF : 0, size_bytes);
   }
 
   // Now just parse and parse and parse until we reach the end!
@@ -628,11 +626,11 @@ u32 *export_page_raw(struct ScreenState *scrst, page_num page, char *data,
 
   // Now merge arrays together; our alpha blending is dead simple.
   // Will this take a while?
-  for (int i = 0; i < scrst->layer_width * scrst->layer_height; i++) {
+  for (int i = 0; i < scrst->layer_info.layer_width * scrst->layer_info.layer_height; i++) {
     // Loop over arrays, the topmost (layer) value persists
-    for (int j = LAYER_COUNT - 1; j >= 0; j--) {
+    for (int j = scrst->layer_count - 1; j >= 0; j--) {
       if (layerdata[j][i]) {
-        layerdata[LAYER_COUNT][i] = layerdata[j][i];
+        layerdata[scrst->layer_count][i] = layerdata[j][i];
         break;
       }
     }
@@ -641,10 +639,10 @@ u32 *export_page_raw(struct ScreenState *scrst, page_num page, char *data,
   free_linepackage(&package);
 
   // Remember, don't free the last layer, as that's our merged
-  for (int i = 0; i < LAYER_COUNT; i++)
+  for (int i = 0; i < scrst->layer_count; i++)
     free(layerdata[i]);
 
-  return layerdata[LAYER_COUNT];
+  return layerdata[scrst->layer_count];
 }
 
 struct GifSettings {
@@ -679,7 +677,7 @@ int export_gif(struct ScreenState *scrst, struct GifSettings *settings,
     ret = 1;
     goto EXPORTGIFEND;
   }
-  msf_gif_begin_to_file(&gifState, scrst->layer_width, scrst->layer_height,
+  msf_gif_begin_to_file(&gifState, scrst->layer_info.layer_width, scrst->layer_info.layer_height,
                         (MsfGifFileWriteFunc)fwrite, (void *)fp);
   if(lastpage == 0) {
     lastpage = last_total_page(data, data_end);
@@ -690,7 +688,7 @@ int export_gif(struct ScreenState *scrst, struct GifSettings *settings,
     PRINTINFO("Packing gif page %d / %d...", i + 1, lastpage + 1);
     if (!msf_gif_frame_to_file(&gifState, (uint8_t *)page,
                                settings->csecsperframe, settings->bitdepth,
-                               scrst->layer_width * 4)) {
+                               scrst->layer_info.layer_width * 4)) {
       PRINTERR("ERROR ON PAGE %d\n", i + 1);
       free(page);
       break;
@@ -1025,11 +1023,13 @@ void print_status(u8 width, u8 layer, s8 zoom_power, u8 tool, u16 color,
   // apparently layer 1 is the top, but we display it backwards
   // (layer 1 is first, then 0)
   char layernames[] = LAYER_CHARS; 
-  for (s8 i = LAYER_COUNT - 1; i >= 0; i--) {
-    // NOTE: the second input is an optional character to display on current layer
-    printf("%s%c", i == layer ? activebg_x1b : statusbg_x1b,
-           i == layer ? layernames[i] : ' ');
-  }
+  // TODO: fix this!!
+  printf("%d ", layer);
+  // for (s8 i = LAYER_COUNT - 1; i >= 0; i--) {
+  //   // NOTE: the second input is an optional character to display on current layer
+  //   printf("%s%c", i == layer ? activebg_x1b : statusbg_x1b,
+  //          i == layer ? layernames[i] : ' ');
+  // }
   printf("%s Z:", status_x1b);
   for (s8 i = MIN_ZOOMPOWER; i <= MAX_ZOOMPOWER; i++)
     printf("%s%c", i == zoom_power ? activebg_x1b : statusbg_x1b,
@@ -1053,33 +1053,33 @@ void print_time(bool showcolon) {
          showcolon ? ':' : ' ', timeinfo->tm_min);
 }
 
-void inc_drawstate_mode(struct ScreenState *scrst, struct DrawState *drwst) {
-  int newmode = (drwst->mode + 1) % DRAWMODE_COUNT;
-  if (newmode == DRAWMODE_ANIMATION) {
-    if (easy_warn("Switching to animation mode",
-                  "This will shrink your canvas by half for the\n"
-                  " duration of animation mode. You will not lose\n"
-                  " strokes made outside this area, they will\n"
-                  " just not be seen.\n\n Switch to animation mode?",
-                  MAINMENU_TOP)) {
-      drwst->mode = newmode;
-      // Entering animation mode, make the screen smaller
-      scrst->layer_height >>= 1;
-      scrst->layer_width >>= 1;
-    }
-  } else if (newmode == DRAWMODE_ANIMATION2) {
-    drwst->mode = newmode;
-    // Entering animation mode, make the screen smaller
-    scrst->layer_height >>= 1;
-    scrst->layer_width >>= 1;
-  } else // Going back to the beginning (careful with how this works!)
-  {
-    drwst->mode = newmode;
-    // Exiting animation mode, make the screen larger again
-    scrst->layer_height <<= 2;
-    scrst->layer_width <<= 2;
-  }
-}
+// void inc_drawstate_mode(struct ScreenState *scrst, struct DrawState *drwst) {
+//   int newmode = (drwst->mode + 1) % DRAWMODE_COUNT;
+//   if (newmode == DRAWMODE_ANIMATION) {
+//     if (easy_warn("Switching to animation mode",
+//                   "This will shrink your canvas by half for the\n"
+//                   " duration of animation mode. You will not lose\n"
+//                   " strokes made outside this area, they will\n"
+//                   " just not be seen.\n\n Switch to animation mode?",
+//                   MAINMENU_TOP)) {
+//       drwst->mode = newmode;
+//       // Entering animation mode, make the screen smaller
+//       scrst->layer_height >>= 1;
+//       scrst->layer_width >>= 1;
+//     }
+//   } else if (newmode == DRAWMODE_ANIMATION2) {
+//     drwst->mode = newmode;
+//     // Entering animation mode, make the screen smaller
+//     scrst->layer_height >>= 1;
+//     scrst->layer_width >>= 1;
+//   } else // Going back to the beginning (careful with how this works!)
+//   {
+//     drwst->mode = newmode;
+//     // Exiting animation mode, make the screen larger again
+//     scrst->layer_height <<= 2;
+//     scrst->layer_width <<= 2;
+//   }
+// }
 
 // -- FILESYSTEM --
 
@@ -1247,7 +1247,7 @@ int export_page(struct ScreenState *scrst, page_num page, char *data,
 
   PRINTINFO("Exporting page %d: converting to png...", page + 1);
 
-  if (write_citropng(exported, scrst->layer_width, scrst->layer_height,
+  if (write_citropng(exported, scrst->layer_info.layer_width, scrst->layer_info.layer_height,
                      last_savepath) == 0) {
     PRINTINFO("Exported page to: %s", last_savepath);
   } else {
@@ -1445,7 +1445,7 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
             "Reference Image: %s/%02d\nClear References\nReceive References\n"
             "Rescan Local References\n"
             "Exit\n",
-            modes[sys->draw_state.mode], 
+            "N/A", //modes[sys->draw_state.mode], 
             "ALL", //visibility[sys->screen_state.layer_visibility],
             sys->anim_loop, sys->anim_loop, numtemp,
             ss->reference_total);
@@ -1457,7 +1457,7 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
         easy_menu("Runtime Options", menu, MAINMENU_TOP, MAX_MENULIST, menuopt, KEY_B | KEY_START);
     switch (menuopt) {
     case 0:
-      inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
+      //inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
       break;
     case 1: // layer visibility
       //sys->screen_state.layer_visibility =
@@ -1735,20 +1735,33 @@ void refresh_console(DrawData * dd, SessionState * ss) {
   }
 }
 
-void recreate_layers(LayerData * layers, MaxLayerInfo layer_info, int free_count) {
-  for (int i = 0; i < free_count; i++) {
-    layer_free(layers + i);
+// Perform a FULL reset on the layer window system, clearing all layers and resetting everything to
+// square one. The system should be fully ready to draw on after this.
+void reset_layerpackwindow(LayerPackWindow * layer_window, struct ScreenState * screen_state, DrawData * dd) {
+  if(layer_window->slots != NULL) {
+    layerpackwindow_free(layer_window);
   }
-  for (int i = 0; i < layer_info.max_layers; i++) {
-    layer_create_wh(layers + i, layer_info.texture_width, layer_info.texture_height);
-  }
-  LOGTRACE("CREATED LAYERS");
+  layerpackwindow_init(layer_window, screen_state->layer_info, screen_state->layer_count);
+  layerpackwindow_resetpointers(layer_window, dd->start);
+  layerpackwindow_clearlayers(layer_window, rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR));
 }
 
+// void recreate_layers(LayerData * layers, MaxLayerInfo layer_info, int free_count) {
+//   for (int i = 0; i < free_count; i++) {
+//     layer_free(layers + i);
+//   }
+//   for (int i = 0; i < layer_info.max_layers; i++) {
+//     layer_create_wh(layers + i, layer_info.texture_width, layer_info.texture_height);
+//   }
+//   LOGTRACE("CREATED LAYERS");
+// }
+
+/*
 #define FLUSH_LAYERS()                                                         \
   drawdata_resetpointers(&dd);    \
   reset_lineringbuffer(&scandata);                                             \
   sstate.flush_layers = true;
+*/
 
 // Some macros used ONLY for main (think lambdas)
 #define MAIN_UPDOWN(x, dopage)                                                 \
@@ -1822,15 +1835,9 @@ int main(int argc, char **argv) {
 
   if(R_SUCCEEDED(res)) {
     isn3dssucceed = true;
-    //if(isn3ds) {
-    //  _OBJLIMIT = N3DS_C2DOBJLIMIT;
-    //  _OBJSAFETY = N3DS_C2DOBJLIMITSAFETY;
-    //  _MAXDRAWLINES = N3DS_MAXDRAWLINES;
-    //}
   } 
 
-  MaxLayerInfo layer_info = query_layer_maximums(0);
-  solidrectstate_init(&srs, layer_info);
+  solidrectstate_init(&srs);
 
   C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
   C2D_Init(srs.ct.obj_limit);
@@ -1840,13 +1847,13 @@ int main(int argc, char **argv) {
   consoleInit(GFX_TOP, NULL);
   C3D_RenderTarget *screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
-  LOGTRACE("INITIALIZED");
-
   if(isn3ds) {
     LOGDBG("New 3ds detected");
   } else if(!isn3dssucceed) {
     LOGDBG("Failed to check 3ds version");
   }
+
+  LOGTRACE("INITIALIZED");
 
   struct SystemState sys;
 
@@ -1854,14 +1861,12 @@ int main(int argc, char **argv) {
   set_default_drawstate(&sys.draw_state);
   set_screenstate_defaults(&sys.screen_state);
   set_cpadprofile_canvas(&sys.cpad);
+  srs.layer_info = &sys.screen_state.layer_info;
 
   LOGTRACE("SET SCREENSTATE/CANVAS");
 
   // weird byte order? 16 bits of color are at top
-  const u32 layer_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
-
-  LayerData layers[MAXLAYERS * MAXONION];
-  recreate_layers(layers, layer_info, 0);
+  //const u32 layer_color = rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR);
 
   //SessionState sstate;
   sessionstate_init(&sstate);
@@ -1902,6 +1907,10 @@ int main(int argc, char **argv) {
       metacontainer_init(&meta, MAX_META_DATA)) {
     LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
   }
+
+  LayerPackWindow layer_window;
+  layer_window.slots = NULL;
+  reset_layerpackwindow(&layer_window, &sys.screen_state, &dd);
 
   LOGTRACE("SYSTEM MALLOC");
 
@@ -1986,7 +1995,7 @@ int main(int argc, char **argv) {
       colorsystem_nextpalette(&sys.colors, 1);
     }
     if (control & CTRL_LAYER) {
-      sys.draw_state.layer = (sys.draw_state.layer + 1) % LAYER_COUNT;
+      sys.draw_state.layer = (sys.draw_state.layer + 1) % sys.screen_state.layer_count;
     }
     if (sstate.reference_total > 0) {
       int mod = 0;
@@ -2162,7 +2171,7 @@ int main(int argc, char **argv) {
 
         if (pending.line_count < MAX_STROKE_LINES) {
           // This works for 0 (returns 0,0)
-          onion_offset(&sys.draw_state, 0, &srs.ofsx, &srs.ofsy); 
+          // onion_offset(&sys.draw_state, 0, &srs.ofsx, &srs.ofsy); 
           // This is for a stroke, do different things if we have different tools!
           add_point_to_stroke(&pending, &current_touch, &sys);
           // Draw ONLY the current line
@@ -2240,7 +2249,7 @@ int main(int argc, char **argv) {
     C2D_TargetClear(screen, sys.screen_state.screen_color);
     C2D_SceneBegin(screen);
 
-    draw_layers(layers, LAYER_COUNT, &sys);
+    draw_layers(layers, &sys);
     draw_scrollbars(&sys.screen_state);
     draw_colorpicker(&sys.colors, !sstate.palette_active);
 

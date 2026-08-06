@@ -1,5 +1,8 @@
 #include "layer.h"
 
+#include <stdlib.h>
+
+VECTOR_DEFINE(LayerDrawCommand);
 
 // Create a LAYER based on the information for the subtexture
 void layer_create(LayerData *result, Tex3DS_SubTexture subtex) {
@@ -22,6 +25,67 @@ void layer_free(LayerData * layer) {
 }
 
 
+void layerpack_init(LayerPack * lpack, MaxLayerInfo layer_info, int layer_count) {
+  lpack->page = -1;
+  lpack->layer_count = layer_count;
+  vector_LayerDrawCommand_init(&lpack->pending_commands);
+  for (int li = 0; li < layer_count; li++) {
+    layer_create_wh(lpack->layers + li, layer_info.texture_width, layer_info.texture_height);
+  }
+}
+
+void layerpack_free(LayerPack * lpack) {
+  vector_LayerDrawCommand_free(&lpack->pending_commands);
+  for (int li = 0; li < lpack->layer_count; li++) {
+    layer_free(lpack->layers + li);
+  }
+}
+
+void layerpack_schedule_clear(LayerPack * lpack, u32 clear_color) {
+  // FOR NOW, we clear all drawing commands and insert the clear func
+  vector_LayerDrawCommand_clear(&lpack->pending_commands);
+  vector_LayerDrawCommand_push(&lpack->pending_commands, &(LayerDrawCommand){.clear = clear_color});
+}
+
+void layerpack_
+  for (int i = 0; i < lpack->layer_count; i++)
+    C2D_TargetClear(lpack->layers[i].target, clear_color);
+
+int layerpackwindow_init(LayerPackWindow * window, MaxLayerInfo layer_info, int layer_count) {
+  window->slots_count = layer_info.max_layers / layer_count;
+  window->window_head = 0;
+  window->slots = malloc(sizeof(LayerPack) * window->slots_count);
+  if(!window->slots) return 1;
+  for(int si = 0; si < window->slots_count; si++) {
+    layerpack_init(window->slots + si, layer_info, layer_count);
+  }
+  return 0;
+}
+  
+void layerpackwindow_free(LayerPackWindow * window) {
+  for(int si = 0; si < window->slots_count; si++) {
+    layerpack_free(window->slots + si);
+  }
+  free(window->slots);
+}
+
+void layerpackwindow_next(LayerPackWindow * window, int increment) {
+  window->window_head = (window->window_head + window->slots_count * 100 + increment) % window->slots_count;
+  // NOTE: don't need to change the page in the window slot, as the redraw handles that...
+}
+
+void layerpackwindow_resetpointers(LayerPackWindow * window, char * pointer) {
+  for(int i = 0; i < window->slots_count; i++) {
+    window->slots[i].draw_pointer = pointer;
+  }
+}
+
+void layerpackwindow_schedule_clear(LayerPackWindow * window, u32 clear_color) {
+  for(int i = 0; i < window->slots_count; i++) {
+    layerpack_clear(window->slots + i, clear_color);
+  }
+}
+
 void citrotracking_init(CitroTracking * ct) {
   ct->draw_cmd_count = 0;
   // I tried many things to increase this limit but it seems pretty set...
@@ -42,10 +106,10 @@ u32 citrotracking_flush(CitroTracking * ct, bool force) {
   return result;
 }
 
-void solidrectstate_init(SolidRectState * srs, MaxLayerInfo layer_info) {
-  srs->ofsx = 0;
-  srs->ofsy = 0;
-  srs->layer_info = layer_info;
+void solidrectstate_init(SolidRectState * srs) {
+  //srs->ofsx = 0;
+  //srs->ofsy = 0;
+  srs->layer_info = NULL;
   citrotracking_init(&srs->ct);
 }
 
