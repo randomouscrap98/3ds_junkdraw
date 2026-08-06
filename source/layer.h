@@ -17,6 +17,7 @@
 
 #define MAXLAYERS   8
 #define MAXONION    4
+// #define MAXWINDOWLAYERS 16 //(MAXLAYERS * (MAXONION + 1))
 
 
 typedef struct {
@@ -41,39 +42,53 @@ void layer_create(LayerData * layer, Tex3DS_SubTexture subtex);
 void layer_create_wh(LayerData * layer, int width, int height);
 void layer_free(LayerData * layer);
 
-typedef union {
-  u32 clear;
-  struct FullLine line;
-} LayerDrawCommand;
+// typedef union {
+//   u32 clear;
+//   struct FullLine line;
+// } LayerDrawCommand;
 
-VECTOR_DECLARE(LayerDrawCommand);
+//VECTOR_DECLARE(LayerDrawCommand);
 
 // A collection of layers you can draw into. Should represent one "page".
 // The only use for this is to create a whole window of them
-typedef struct {
-  LayerData layers[MAXLAYERS]; // Wastes memory but whatever
-  int layer_count;
-  s16 page;
-  char * draw_pointer;
-  vector_LayerDrawCommand pending_commands;
-} LayerPack;
+// typedef struct {
+//   LayerData layers[MAXLAYERS]; // Wastes memory but whatever
+//   int layer_count;
+//   s16 page;
+//   //char * draw_pointer;
+//   //vector_LayerDrawCommand pending_commands;
+// } LayerPack;
 
-void layerpack_init(LayerPack * lpack, MaxLayerInfo layer_info, int layer_count);
-void layerpack_schedule_clear(LayerPack * lpack, u32 clear_color);
-void layerpack_free(LayerPack * lpack);
+// void layerpack_init(LayerPack * lpack, MaxLayerInfo layer_info, int layer_count);
+// void layerpack_schedule_clear(LayerPack * lpack, u32 clear_color);
+// void layerpack_free(LayerPack * lpack);
+
+typedef struct {
+  LayerData * layers;
+  int layer_count;
+  LineScanner scanner;
+} LayerPackItem;
 
 // A sliding window of layer packs, each of which can represent a page
 typedef struct {
-  LayerPack * slots;
-  int slots_count;
+  LayerData * master_layers;
+  LayerPackItem * slots;
+  int slot_count;   // You may not use all the slots (texture mem)
   int window_head;
+  int total_layers;
+  //LayerData   raw_layers[MAXWINDOWLAYERS];
+  //u16         raw_pages[MAXWINDOWLAYERS]; // The page per layer, though we only care about per-slot
+  //LineScanner scanners[MAXWINDOWLAYERS];
+  //int         slot_layers;  // number of layers per slot
+  //LayerPack * slots;
+  //int slots_count;
 } LayerPackWindow;
 
-int layerpackwindow_init(LayerPackWindow * window, MaxLayerInfo layer_info, int layer_count);
+int layerpackwindow_init(LayerPackWindow * window, MaxLayerInfo layer_info, int layer_count, char * start, char ** end);
 void layerpackwindow_free(LayerPackWindow * window);
 void layerpackwindow_next(LayerPackWindow * window, int increment);
-void layerpackwindow_resetpointers(LayerPackWindow * window, char * pointer);
-void layerpackwindow_schedule_clear(LayerPackWindow * window, u32 clear_color);
+// void layerpackwindow_resetpointers(LayerPackWindow * window, char * pointer);
+// void layerpackwindow_schedule_clear(LayerPackWindow * window, u32 clear_color);
 
 typedef struct {
   u32 draw_cmd_count;

@@ -292,8 +292,7 @@ char *convert_linepack_to_data(struct LinePackage *lines, char *container,
 // Parsed data is all stored in the given package. A partial parse may result
 // in a partially modified package. Converts a single chunk of line data.
 // Returns the next position in the data to start reading a chunk
-char *convert_data_to_linepack(struct LinePackage *package, char *data,
-                               char *data_end) {
+char *convert_data_to_linepack(struct LinePackage *package, char *data, char *data_end) {
   char *endptr = data;
   package->line_count = 0;
 
@@ -671,4 +670,47 @@ void move_page(char * start, char * end, const u16 sourcepage, const u16 destpag
   }
 
   LOGDBG("Swapped %ld strokes between pg %d and %d", numtouched, sourcepage + 1, destpage + 1);
+}
+
+void linescanner_init(LineScanner * ls, char * start, char ** end) {
+  ls->start = start;
+  ls->end = end;
+  ls->current = ls->start;
+  ls->next_line = 0;
+  ls->page = -1;
+  init_linepackage(&ls->pending);
+}
+
+void linescanner_free(LineScanner * ls) {
+  free_linepackage(&ls->pending);
+}
+
+void linescanner_reset(LineScanner * ls) {
+  ls->current = ls->start;
+  ls->next_line = 0;
+  ls->pending.line_count = 0;
+}
+
+int linescanner_next(LineScanner * ls, struct FullLine * out) {
+  if(ls->next_line < ls->pending.line_count) {
+    // Basic: just return the next line
+    convert_to_fullline(&ls->pending, ls->next_line, out);
+    ls->next_line++;
+    return 1;
+  } else if(ls->current < *ls->end) {
+    // We ran out of pending but we still have some data to scan, let's do it
+    ls->next_line = 0;
+    ls->pending.line_count = 0;
+    // Need to pull the next line package
+    char * stroke_start;
+    ls->current = datamem_scanstroke(ls->current, *ls->end, MAX_SCANNER_SCAN, ls->page, &stroke_start);
+    if(stroke_start != NULL) { 
+      // Didn't find anything before the end
+      return 0;
+    }
+    convert_data_to_linepack(&ls->pending, stroke_start, ls->current);
+    return linescanner_next(ls, out);
+  } else {
+    return 0;
+  }
 }

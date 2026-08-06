@@ -13,6 +13,8 @@
 #define MAX_DRAW_DATA (u32)5000000
 #define MAX_STROKE_LINES 5000
 
+#define MAX_SCANNER_SCAN 500000
+
 #define RSV_PAGE_DEL 4095
 #define RSV_PAGE_TMP 4094
 
@@ -105,5 +107,19 @@ char * delete_page(char * start, char * end, const u16 page);
 void move_page(char * start, char * end, const u16 sourcepage, const u16 destpage);
 
 // -------------- Scan draw system ------------
+
+typedef struct {
+  char * start;
+  char ** end;    // This can be moved by outside forces
+  char * current;
+  struct LinePackage pending;
+  u16 next_line;
+  s16 page;
+} LineScanner;
+
+void linescanner_init(LineScanner * ls, char * start, char ** end);
+void linescanner_free(LineScanner * ls);
+int linescanner_next(LineScanner * ls, struct FullLine * out);
+void linescanner_reset(LineScanner * ls);
 
 #endif

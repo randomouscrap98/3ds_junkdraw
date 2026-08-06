@@ -6,10 +6,6 @@
 
 #define MAX_STROKE_DATA MAX_STROKE_LINES << 3
 
-// At 100_000, will take nearly 1 full second just to scan to end. But, we 
-// don't want to have the system hitching when you move to a new page, so it
-// has to be low enough to not do too much work per frame. Remember that scanning
-// requires parsing a variable width integer to get the page... it's not trivial.
 #define MAX_DRAWDATA_SCAN 500000
 
 // A circular buffer which is able to "pack" lines from disparate strokes together

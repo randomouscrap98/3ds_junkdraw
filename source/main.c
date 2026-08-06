@@ -30,7 +30,7 @@ u32 __stacksize__ = 512 * 1024;
 // #define DEBUG_DATAPRINT
 // #define DEBUG_IGNORERECT
 
-#include "buffer.h"
+// #include "buffer.h"
 #include "color.h"
 #include "console.h"
 #include "draw.h"
@@ -401,48 +401,48 @@ void draw_layers(const LayerData *layers, const struct SystemState *sys) {
                     sys->screen_state.screen_color);
 }
 
-// Draw as much as possible from the given ring buffer, with as little context
-// switching as possible. WARN: MAKES A LOT OF ASSUMPTIONS IN ORDER TO PREVENT
-// COSTLY MALLOCS PER FRAME
-void draw_from_buffer(struct LineRingBuffer *scandata, LayerData *layers,
-                      struct ScreenState *scrst) {
-  u16 lineCount = 0;
-  struct FullLine *lines[MAX_FRAMELINES]; // The largest available
-  struct FullLine *next = NULL;
-
-  // Repeat while there's something in the buffer and we haven't reached the
-  // limit. Essentially, just pull as much as possible out of the ring buffer so
-  // we can later draw it per-layer
-  while ((next = lineringbuffer_shrink(scandata)) &&
-         lineCount < _MAXDRAWLINES) {
-    lines[lineCount] = next;
-    lineCount++;
-  }
-
-  if (lineCount == 0) {
-    return;
-  }
-
-  for (u8 i = 0; i < scrst->layer_count; i++) {
-    // Skip expensive drawing for layers that aren't visible
-    // if ((scrst->layer_visibility & (1 << i)) == 0) {
-    //   continue;
-    // }
-
-    // Don't want to call this too often, so do as much as possible PER
-    // layer instead of jumping around
-    C2D_SceneBegin(layers[i].target);
-
-    // Now loop over our lines
-    for (u16 li = 0; li < lineCount; li++) {
-      // Just entirely skip data for layers we're not focusing on yet.
-      if (lines[li]->layer != i)
-        continue;
-
-      pixaligned_linefunc(lines[li], citro_rect);
-    }
-  }
-}
+// // Draw as much as possible from the given ring buffer, with as little context
+// // switching as possible. WARN: MAKES A LOT OF ASSUMPTIONS IN ORDER TO PREVENT
+// // COSTLY MALLOCS PER FRAME
+// void draw_from_buffer(struct LineRingBuffer *scandata, LayerData *layers,
+//                       struct ScreenState *scrst) {
+//   u16 lineCount = 0;
+//   struct FullLine *lines[MAX_FRAMELINES]; // The largest available
+//   struct FullLine *next = NULL;
+// 
+//   // Repeat while there's something in the buffer and we haven't reached the
+//   // limit. Essentially, just pull as much as possible out of the ring buffer so
+//   // we can later draw it per-layer
+//   while ((next = lineringbuffer_shrink(scandata)) &&
+//          lineCount < _MAXDRAWLINES) {
+//     lines[lineCount] = next;
+//     lineCount++;
+//   }
+// 
+//   if (lineCount == 0) {
+//     return;
+//   }
+// 
+//   for (u8 i = 0; i < scrst->layer_count; i++) {
+//     // Skip expensive drawing for layers that aren't visible
+//     // if ((scrst->layer_visibility & (1 << i)) == 0) {
+//     //   continue;
+//     // }
+// 
+//     // Don't want to call this too often, so do as much as possible PER
+//     // layer instead of jumping around
+//     C2D_SceneBegin(layers[i].target);
+// 
+//     // Now loop over our lines
+//     for (u16 li = 0; li < lineCount; li++) {
+//       // Just entirely skip data for layers we're not focusing on yet.
+//       if (lines[li]->layer != i)
+//         continue;
+// 
+//       pixaligned_linefunc(lines[li], citro_rect);
+//     }
+//   }
+// }
 
 // -------- Data helpers ------------
 
@@ -605,8 +605,7 @@ u32 *export_page_raw(struct ScreenState *scrst, page_num page, char *data,
   char *current_data = data;
   char *stroke_start = NULL;
   struct LinePackage package;
-  init_linepackage(
-      &package); // WARN: initialization could fail, no checks performed!
+  init_linepackage(&package); // WARN: initialization could fail, no checks performed!
 
   while (current_data < data_end) {
     current_data = datamem_scanstroke(current_data, data_end, data_length, page,
@@ -1741,9 +1740,9 @@ void reset_layerpackwindow(LayerPackWindow * layer_window, struct ScreenState * 
   if(layer_window->slots != NULL) {
     layerpackwindow_free(layer_window);
   }
-  layerpackwindow_init(layer_window, screen_state->layer_info, screen_state->layer_count);
-  layerpackwindow_resetpointers(layer_window, dd->start);
-  layerpackwindow_clearlayers(layer_window, rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR));
+  layerpackwindow_init(layer_window, screen_state->layer_info, screen_state->layer_count, dd->start, &dd->end);
+  //layerpackwindow_resetpointers(layer_window, dd->start);
+  //layerpackwindow_clearlayers(layer_window, rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR));
 }
 
 // void recreate_layers(LayerData * layers, MaxLayerInfo layer_info, int free_count) {
@@ -1879,14 +1878,14 @@ int main(int argc, char **argv) {
     LOGDBG("ERR: Couldn't allocate stroke lines");
   }
 
-  struct LineRingBuffer scandata;
-  init_lineringbuffer(&scandata, _MAXDRAWLINES);
-  if (!scandata.lines) {
-    LOGDBG("ERR: COULD NOT INIT LINERINGBUFFER");
-  }
-  if (!scandata.pending.lines) {
-    LOGDBG("ERR: COULD NOT INIT LRB PENDING");
-  }
+  // struct LineRingBuffer scandata;
+  // init_lineringbuffer(&scandata, _MAXDRAWLINES);
+  // if (!scandata.lines) {
+  //   LOGDBG("ERR: COULD NOT INIT LINERINGBUFFER");
+  // }
+  // if (!scandata.pending.lines) {
+  //   LOGDBG("ERR: COULD NOT INIT LRB PENDING");
+  // }
 
   struct RingStack undostack, redostack;
   init_ringstack(&undostack, MAX_UNDO);
@@ -1897,14 +1896,13 @@ int main(int argc, char **argv) {
 
   char save_filename[MAX_FILENAME];
 
-  char *stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
+  // char *stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
 
   DrawData dd;
   metacontainer meta;
   drawdata_init(&dd);
 
-  if (!dd.container || !stroke_data || 
-      metacontainer_init(&meta, MAX_META_DATA)) {
+  if (!dd.container || /*!stroke_data ||*/ metacontainer_init(&meta, MAX_META_DATA)) {
     LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
   }
 
@@ -2261,12 +2259,12 @@ int main(int argc, char **argv) {
 ENDMAINLOOP:;
 
   free_defaultsystemstate(&sys);
-  free_lineringbuffer(&scandata);
+  //free_lineringbuffer(&scandata);
   free_ringstack(&undostack);
   free_ringstack(&redostack);
   free_linepackage(&pending);
   drawdata_free(&dd);
-  free(stroke_data);
+  //free(stroke_data);
   metacontainer_free(&meta);
 
   for (int i = 0; i < layer_info.max_layers; i++)
