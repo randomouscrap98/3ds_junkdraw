@@ -142,8 +142,6 @@ void set_screenstate_defaults(struct ScreenState *state) {
   state->zoom = 1;
   state->layer_info = query_layer_maximums(0);
   state->layer_count = 2; // ???
-  //state->layer_width = LAYER_WIDTH;
-  //state->layer_height = LAYER_HEIGHT;
   state->screen_width = 320; // These two should literally never change
   state->screen_height = 240;
   state->screen_color = SCREEN_COLOR;
@@ -1763,26 +1761,6 @@ void reset_layerpackwindow(LayerPackWindow * layer_window, struct ScreenState * 
 */
 
 // Some macros used ONLY for main (think lambdas)
-#define MAIN_UPDOWN(x, dopage)                                                 \
-  {                                                                            \
-    if (dopage) {                                                              \
-      int diff = x * ((kHeld & KEY_L) ? 10 : 1);                               \
-      if(sys.anim_loop > 0) {                                                  \
-        sys.draw_state.page = (sys.draw_state.page + diff + sys.anim_loop) %   \
-                               sys.anim_loop;                                  \
-      } else {                                                                 \
-        sys.draw_state.page = DCV_CLAMP(                                     \
-            sys.draw_state.page + diff, 0, MAX_PAGE);                          \
-      }                                                                        \
-      reset_ringstack(&undostack);                                             \
-      reset_ringstack(&redostack);                                             \
-      FLUSH_LAYERS();                                                          \
-    } else {                                                                   \
-      sys.draw_state.zoom_power = DCV_CLAMP(sys.draw_state.zoom_power + x,   \
-                                              MIN_ZOOMPOWER, MAX_ZOOMPOWER);   \
-    }                                                                          \
-  }
-
 #define MAIN_NEWDRAW()                                                         \
   {                                                                            \
     reset_ringstack(&undostack);                                               \
@@ -1792,7 +1770,7 @@ void reset_layerpackwindow(LayerPackWindow * layer_window, struct ScreenState * 
     metacontainer_addsimple(&meta, METAKEY_NEW);                               \
     set_default_drawstate(&sys.draw_state);                                    \
     set_screenstate_defaults(&sys.screen_state);                               \
-    FLUSH_LAYERS();                                                            \
+    reset_layerpackwindow(&layer_window, &sys.screen_state, &dd);              \
     save_filename[0] = '\0';                                                   \
     pending.line_count = 0;                                                    \
     sstate.current_frame = sstate.end_frame = 0;                               \
@@ -1815,7 +1793,9 @@ void reset_layerpackwindow(LayerPackWindow * layer_window, struct ScreenState * 
   } else { \
     char *previous_end = dd.end; \
     dd.end = write_to_datamem(stroke_data, cvl_end, sys.draw_state.page, dd.start, dd.end); \
-    if (!force && previous_end == dd.draw_pointers[0]) dd.draw_pointers[0] = dd.end; \
+    if (!force && previous_end == layer_window.slots[layer_window.window_head].scanner.current) { \
+      layer_window.slots[layer_window.window_head].scanner.current = dd.end; \
+    } \
     print_data(&dd); \
   } \
   pending.line_count = 0; \
@@ -1896,7 +1876,7 @@ int main(int argc, char **argv) {
 
   char save_filename[MAX_FILENAME];
 
-  // char *stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
+  char *stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
 
   DrawData dd;
   metacontainer meta;
@@ -1939,17 +1919,26 @@ int main(int argc, char **argv) {
                           sys.draw_state.page);
       }
     }
-    if (control & CTRL_ZOOMIN) {
-      MAIN_UPDOWN(1, 0)
+    int zoomchange = 0;
+    int pagechange = 0;
+    if (control & CTRL_ZOOMIN) { zoomchange = 1; }
+    if (control & CTRL_ZOOMOUT) { zoomchange = -1; }
+    if (control & CTRL_PAGEUP) { pagechange = 1; }
+    if (control & CTRL_PAGEDOWN) { pagechange = -1; }
+    if (zoomchange) {
+      sys.draw_state.zoom_power = DCV_CLAMP(sys.draw_state.zoom_power + zoomchange, 
+                                            MIN_ZOOMPOWER, MAX_ZOOMPOWER);
     }
-    if (control & CTRL_ZOOMOUT) {
-      MAIN_UPDOWN(-1, 0)
-    }
-    if (control & CTRL_PAGEUP) {
-      MAIN_UPDOWN(1, 1)
-    }
-    if (control & CTRL_PAGEDOWN) {
-      MAIN_UPDOWN(-1, 1)
+    if (pagechange) {
+      int diff = pagechange * ((kHeld & KEY_L) ? 10 : 1);
+      if(sys.anim_loop > 0) {
+        sys.draw_state.page = (sys.draw_state.page + diff + sys.anim_loop) % sys.anim_loop;
+      } else {
+        sys.draw_state.page = DCV_CLAMP(sys.draw_state.page + diff, 0, MAX_PAGE);
+      }
+      reset_ringstack(&undostack);
+      reset_ringstack(&redostack);
+      layerpackwindow_next(&layer_window, diff);
     }
     if (control & CTRL_PREVCOLOR) {
       sys.colors.selected_index = (sys.colors.selected_index + 1) % COLORSYS_SELECTIONS;
@@ -1963,7 +1952,7 @@ int main(int argc, char **argv) {
       if (redo != NULL) {
         ringstack_push(&undostack, dd.end);
         dd.end = redo;
-        FLUSH_LAYERS();
+        layerpackwindow_invalidate_head(&layer_window);
         print_data(&dd);
       } else {
         LOGDBG("ERR: No redos in buffer!\n");
@@ -1974,7 +1963,7 @@ int main(int argc, char **argv) {
       if (undo != NULL) {
         ringstack_push(&redostack, dd.end);
         dd.end = undo;
-        FLUSH_LAYERS();
+        layerpackwindow_invalidate_head(&layer_window);
         print_data(&dd);
       } else {
         LOGDBG("ERR: No undos in buffer!\n");
@@ -2013,13 +2002,14 @@ int main(int argc, char **argv) {
           // Full reset on these big edits...
           reset_ringstack(&undostack);
           reset_ringstack(&redostack);
-          FLUSH_LAYERS();
+          reset_layerpackwindow(&layer_window, &sys.screen_state, &dd);
           print_data(&dd);
         }
         break;
       case MAINMENU_NEW:
-        if (MAIN_UNSAVEDCHECK("Are you sure you want to start anew?"))
+        if (MAIN_UNSAVEDCHECK("Are you sure you want to start anew?")) {
           MAIN_NEWDRAW();
+        }
         break;
       case MAINMENU_SAVE:
         tempc = *dd.end;
@@ -2057,12 +2047,14 @@ int main(int argc, char **argv) {
       case MAINMENU_OPTIONS:
         // Run options system
         run_options_menu(&sys);
-        FLUSH_LAYERS(); // Why not...
+        // TODO: is this necessary?
+        reset_layerpackwindow(&layer_window, &sys.screen_state, &dd);
         break;
       case MAINMENU_RUNTIMEOPTIONS:
         // Run runtime options system (settings here not saved)
         run_runtime_options_menu(&sys, last_total_page(dd.start, dd.end), &sstate);
-        FLUSH_LAYERS(); // Why not...
+        // TODO: is this necessary?
+        reset_layerpackwindow(&layer_window, &sys.screen_state, &dd);
         break;
       case MAINMENU_EXIT:
         if (MAIN_UNSAVEDCHECK("Really quit?"))
@@ -2258,8 +2250,8 @@ int main(int argc, char **argv) {
   }
 ENDMAINLOOP:;
 
+  layerpackwindow_free(&layer_window);
   free_defaultsystemstate(&sys);
-  //free_lineringbuffer(&scandata);
   free_ringstack(&undostack);
   free_ringstack(&redostack);
   free_linepackage(&pending);

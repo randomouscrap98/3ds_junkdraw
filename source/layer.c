@@ -74,6 +74,7 @@ int layerpackwindow_init(LayerPackWindow * window, MaxLayerInfo layer_info, int 
     LayerPackItem * slot = window->slots + si;
     slot->layer_count = layer_count;
     slot->layers = window->master_layers + (si * layer_count);
+    // All scanners start in an invalid state (page invalid)
     linescanner_init(&slot->scanner, start, end);
   }
   return 0;
@@ -92,6 +93,10 @@ void layerpackwindow_free(LayerPackWindow * window) {
 void layerpackwindow_next(LayerPackWindow * window, int increment) {
   window->window_head = (window->window_head + window->slot_count * 100 + increment) % window->slot_count;
   // NOTE: don't need to change the page in the window slot, as the redraw handles that...
+}
+
+void layerpackwindow_invalidate_head(LayerPackWindow * window) {
+  window->slots[window->window_head].scanner.page = -1;
 }
 
 // void layerpackwindow_resetpointers(LayerPackWindow * window, char * pointer) {

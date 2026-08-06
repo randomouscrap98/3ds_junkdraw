@@ -12,6 +12,7 @@
 // but if you're consuming this, you probably should...
 #define MAX_DRAW_DATA (u32)5000000
 #define MAX_STROKE_LINES 5000
+#define MAX_STROKE_DATA MAX_STROKE_LINES << 3
 
 #define MAX_SCANNER_SCAN 500000
 

@@ -87,6 +87,9 @@ typedef struct {
 int layerpackwindow_init(LayerPackWindow * window, MaxLayerInfo layer_info, int layer_count, char * start, char ** end);
 void layerpackwindow_free(LayerPackWindow * window);
 void layerpackwindow_next(LayerPackWindow * window, int increment);
+// Force the head slot to become invalidated, which SHOULD trigger a reset. We separate reset from
+// invalidation because reset requires us to be in a drawing state (Citro etc)
+void layerpackwindow_invalidate_head(LayerPackWindow * window);
 // void layerpackwindow_resetpointers(LayerPackWindow * window, char * pointer);
 // void layerpackwindow_schedule_clear(LayerPackWindow * window, u32 clear_color);
 
