@@ -86,7 +86,7 @@
 // #define RELEASE
 
 // Much more logging
-// #define TRACE_PRINT
+#define TRACE_PRINT
 
 #ifdef RELEASE
 // Put anything that goes specifically for release in here
@@ -141,7 +141,7 @@ void LOGTRACE(const char *fmt, ...) {
 #ifdef TRACE_PRINT
   va_list args;
   va_start(args, fmt);
-  LOGBASE(STATUS_WARNING, fmt, args);
+  logbase(STATUS_WARNING, fmt, args);
   va_end(args);
 #endif
 }

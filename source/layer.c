@@ -2,8 +2,6 @@
 
 #include <stdlib.h>
 
-// VECTOR_DEFINE(LayerDrawCommand);
-
 // Create a LAYER based on the information for the subtexture
 void layer_create(LayerData *result, Tex3DS_SubTexture subtex) {
   result->subtex = subtex;
@@ -24,33 +22,6 @@ void layer_free(LayerData * layer) {
   C3D_TexDelete(&layer->texture);
 }
 
-
-// void layerpack_init(LayerPack * lpack, MaxLayerInfo layer_info, int layer_count) {
-//   lpack->page = -1;
-//   lpack->layer_count = layer_count;
-//   //vector_LayerDrawCommand_init(&lpack->pending_commands);
-//   for (int li = 0; li < layer_count; li++) {
-//     layer_create_wh(lpack->layers + li, layer_info.texture_width, layer_info.texture_height);
-//   }
-// }
-
-// void layerpack_free(LayerPack * lpack) {
-//   //vector_LayerDrawCommand_free(&lpack->pending_commands);
-//   for (int li = 0; li < lpack->layer_count; li++) {
-//     layer_free(lpack->layers + li);
-//   }
-// }
-// 
-// void layerpack_schedule_clear(LayerPack * lpack, u32 clear_color) {
-//   // FOR NOW, we clear all drawing commands and insert the clear func
-//   vector_LayerDrawCommand_clear(&lpack->pending_commands);
-//   vector_LayerDrawCommand_push(&lpack->pending_commands, &(LayerDrawCommand){.clear = clear_color});
-// }
-// 
-// void layerpack_
-//   for (int i = 0; i < lpack->layer_count; i++)
-//     C2D_TargetClear(lpack->layers[i].target, clear_color);
-
 int layerpackwindow_init(LayerPackWindow * window, MaxLayerInfo layer_info, int layer_count, 
                          char * start, char ** end) {
   window->slot_count = layer_info.max_layers / layer_count;
@@ -60,7 +31,7 @@ int layerpackwindow_init(LayerPackWindow * window, MaxLayerInfo layer_info, int 
   if(!window->slots) {
     return 1;
   }
-  window->master_layers = malloc(sizeof(LayerData) * window->slot_count * layer_count);
+  window->master_layers = malloc(sizeof(LayerData) * window->total_layers);
   if(!window->master_layers) {
     free(window->slots);
     return 1;
@@ -87,6 +58,7 @@ void layerpackwindow_free(LayerPackWindow * window) {
   for(int si = 0; si < window->slot_count; si++) {
     linescanner_free(&window->slots[si].scanner);
   }
+  free(window->master_layers);
   free(window->slots);
 }
 
@@ -102,18 +74,6 @@ void layerpackwindow_invalidate_head(LayerPackWindow * window) {
 LayerPackItem * layerpackwindow_at(LayerPackWindow * window, int offset) {
   return window->slots + ((window->window_head + offset + 100 * window->slot_count) % window->slot_count);
 }
-
-// void layerpackwindow_resetpointers(LayerPackWindow * window, char * pointer) {
-//   for(int i = 0; i < window->slots_count; i++) {
-//     window->slots[i].draw_pointer = pointer;
-//   }
-// }
-
-// void layerpackwindow_schedule_clear(LayerPackWindow * window, u32 clear_color) {
-//   for(int i = 0; i < window->slots_count; i++) {
-//     layerpack_clear(window->slots + i, clear_color);
-//   }
-// }
 
 void citrotracking_init(CitroTracking * ct) {
   ct->draw_cmd_count = 0;
@@ -136,8 +96,6 @@ u32 citrotracking_flush(CitroTracking * ct, bool force) {
 }
 
 void solidrectstate_init(SolidRectState * srs) {
-  //srs->ofsx = 0;
-  //srs->ofsy = 0;
   srs->layer_info = NULL;
   citrotracking_init(&srs->ct);
 }

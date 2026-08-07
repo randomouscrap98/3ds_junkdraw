@@ -99,9 +99,6 @@ u32 _MAXDRAWLINES = MAX_FRAMELINES; //N3DS_MAXDRAWLINES;
 
 #define CONTROLSCHEME_COUNT 2
 
-//#define LAYER_EDGEERROR 8
-//#define LAYER_EDGEBUF LAYER_EDGEERROR * 2
-
 typedef u16 page_num;
 typedef u8 layer_num;
 
@@ -1730,27 +1727,10 @@ void reset_layerpackwindow(LayerPackWindow * layer_window, struct ScreenState * 
   if(layer_window->slots != NULL) {
     layerpackwindow_free(layer_window);
   }
-  layerpackwindow_init(layer_window, screen_state->layer_info, screen_state->layer_count, dd->start, &dd->end);
-  //layerpackwindow_resetpointers(layer_window, dd->start);
-  //layerpackwindow_clearlayers(layer_window, rgba32c_to_rgba16c_32(CANVAS_LAYER_COLOR));
+  layerpackwindow_init(layer_window, screen_state->layer_info, screen_state->layer_count, 
+                       dd->start, &dd->end);
+
 }
-
-// void recreate_layers(LayerData * layers, MaxLayerInfo layer_info, int free_count) {
-//   for (int i = 0; i < free_count; i++) {
-//     layer_free(layers + i);
-//   }
-//   for (int i = 0; i < layer_info.max_layers; i++) {
-//     layer_create_wh(layers + i, layer_info.texture_width, layer_info.texture_height);
-//   }
-//   LOGTRACE("CREATED LAYERS");
-// }
-
-/*
-#define FLUSH_LAYERS()                                                         \
-  drawdata_resetpointers(&dd);    \
-  reset_lineringbuffer(&scandata);                                             \
-  sstate.flush_layers = true;
-*/
 
 // Some macros used ONLY for main (think lambdas)
 #define MAIN_NEWDRAW()                                                         \
@@ -2146,12 +2126,6 @@ int main(int argc, char **argv) {
       draw_from_buffer(drawlines, lines_drawn, &layer_window, &sys.screen_state);
     }
 
-    // Apparently (not sure), all clearing should be done within our main loop?
-    // if (sstate.flush_layers) {
-    //   for (int i = 0; i < LAYER_COUNT; i++)
-    //     C2D_TargetClear(layers[i].target, layer_color);
-    //   sstate.flush_layers = false;
-    // } else if // TODO! THIS WAS ELSE IF
     // Ignore first frame touches
     if (sstate.touching) {
       if (sstate.palette_active) {
@@ -2175,56 +2149,6 @@ int main(int argc, char **argv) {
         }
       }
     }
-
-    // And now, we scan backwards through
-    // int oend = get_systemstate_max_onionlayers(&sys);
-    // int dp_ofs = 0;
-
-    // // Find the place to stop looking for the appropriate draw pointer to work
-    // // on. This has complicated rules
-    // for (dp_ofs = 0; dp_ofs <= oend; dp_ofs++) {
-    //   // This works for 0 (returns 0,0)
-    //   onion_offset(&sys.draw_state, -dp_ofs, &srs.ofsx, &srs.ofsy); 
-    //   if (dp_ofs == oend) // Don't bother with any logic below, this is the last slot.
-    //     break;
-    //   if (sys.draw_state.mode == DRAWMODE_ANIMATION ||
-    //       sys.draw_state.mode == DRAWMODE_ANIMATION2) {
-    //     // In animation mode, we want to fully complete the current "slot"
-    //     // before continuing to the next. This is functionally equivalent to no
-    //     // animation for onion_count = 0. So, if we're not done scanning this
-    //     // data, obviously continue this. But if it's complete AND the next
-    //     // HASN'T STARTED AND there's draw data left, this is where to break.
-    //     if ((dd.draw_pointers[dp_ofs] != dd.end) ||
-    //         ((dd.draw_pointers[dp_ofs + 1] == dd.start) &&
-    //          lineringbuffer_size(&scandata)))
-    //       break;
-    //   } else {
-    //     // This one is simple: if we're not in animation mode, stop immediately
-    //     break;
-    //   }
-    // }
-
-    // int drawpage = sys.draw_state.page - dp_ofs;
-    // if(sys.anim_loop > 0 && sys.anim_loop > sys.draw_state.page) {
-    //   drawpage = (drawpage + sys.anim_loop) % sys.anim_loop;
-    // } else {
-    //   drawpage = DCV_MAX(drawpage, 0);
-    // }
-    // //TickCounter timer;
-    // //osTickCounterStart(&timer);
-    // dd.draw_pointers[dp_ofs] = scan_lines(
-    //   &scandata, dd.draw_pointers[dp_ofs], dd.end, drawpage);
-    // osTickCounterUpdate(&timer);
-    // bool saydraw = lineringbuffer_size(&scandata) > 0;
-    // if(saydraw) { 
-    //   LOGDBG("SCAN: %0.2fms", osTickCounterRead(&timer)); 
-    // }
-    //osTickCounterStart(&timer);
-    // draw_from_buffer(&scandata, layers, &sys.screen_state);
-    // osTickCounterUpdate(&timer);
-    // if(saydraw) {
-    //   LOGDBG("DRAW: %0.2fms", osTickCounterRead(&timer));
-    // }
 
     C2D_Flush();
     srs.ct.draw_cmd_count = 0;
@@ -2262,11 +2186,8 @@ ENDMAINLOOP:;
   free_ringstack(&redostack);
   free_linepackage(&pending);
   drawdata_free(&dd);
-  //free(stroke_data);
+  free(stroke_data);
   metacontainer_free(&meta);
-
-  // for (int i = 0; i < layer_info.max_layers; i++)
-  //   layer_free(layers + i);
 
   C3D_RenderTargetDelete(screen);
 

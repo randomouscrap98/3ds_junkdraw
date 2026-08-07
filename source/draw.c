@@ -174,7 +174,9 @@ void init_linepackage(struct LinePackage *package) {
   package->max_lines = MAX_STROKE_LINES;
 }
 
-void free_linepackage(struct LinePackage *package) { free(package->lines); }
+void free_linepackage(struct LinePackage *package) { 
+  free(package->lines); 
+}
 
 void convert_to_fullline(const struct LinePackage *package, u16 line_index,
                          struct FullLine *result) {
@@ -704,7 +706,7 @@ int linescanner_next(LineScanner * ls, struct FullLine * out) {
     // Need to pull the next line package
     char * stroke_start;
     ls->current = datamem_scanstroke(ls->current, *ls->end, MAX_SCANNER_SCAN, ls->page, &stroke_start);
-    if(stroke_start != NULL) { 
+    if(stroke_start == NULL) { 
       // Didn't find anything before the end
       return 0;
     }
