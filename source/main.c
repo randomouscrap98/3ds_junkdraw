@@ -355,21 +355,31 @@ void draw_layers(LayerPackWindow * layer_window, const struct SystemState *sys) 
                     sys->screen_state.screen_color);
 }
 
+longflags _dfb_used = {0};
+
 // // Draw as much as possible from the given ring buffer, with as little context
 // // switching as possible. WARN: MAKES A LOT OF ASSUMPTIONS IN ORDER TO PREVENT
 // // COSTLY MALLOCS PER FRAME
 void draw_from_buffer(struct FullLine * lines, u32 lines_drawn, LayerPackWindow * layer_window, struct ScreenState *scrst) {
+  if(!lines_drawn) return;
+  if(_dfb_used.flags == 0)
+    longflags_init(&_dfb_used);
+  else
+    longflags_zero(&_dfb_used);
   // Scan for the USED layers/etc (for optimization)
-  longflags used;
-  longflags_init(&used);
+  u32 maxlayer = 0;
   for(u32 i = 0; i < lines_drawn; i++) {
-    longflags_set(&used, lines[i].layer);
+    longflags_set(&_dfb_used, lines[i].layer);
+    if(maxlayer < lines[i].layer)
+      maxlayer = lines[i].layer;
   }
+  // LOGTRACE("DRAWING %d LINES (%d)", lines_drawn, maxlayer);
 
-  for (u8 i = 0; i < MAXWINDOWLAYERS; i++) {
-    if(!longflags_isset(&used, i)) { continue; }
+  for (u32 i = 0; i <= maxlayer; i++) {
+    if(!longflags_isset(&_dfb_used, i)) { continue; }
     u16 layer = i % scrst->layer_count;
     u16 slot = i / scrst->layer_count;
+
     // Skip expensive drawing for layers that aren't visible
     // if ((scrst->layer_visibility & (1 << i)) == 0) {
     //   continue;
@@ -377,7 +387,7 @@ void draw_from_buffer(struct FullLine * lines, u32 lines_drawn, LayerPackWindow 
 
     // Don't want to call this too often, so do as much as possible PER
     // layer instead of jumping around
-    C2D_SceneBegin(layerpackwindow_at(layer_window, -slot)->layers[layer].target);
+    C2D_SceneBegin(layer_window->slots[slot].layers[layer].target);
 
     // Now loop over our lines
     for (u16 li = 0; li < lines_drawn; li++) {
@@ -387,6 +397,7 @@ void draw_from_buffer(struct FullLine * lines, u32 lines_drawn, LayerPackWindow 
       pixaligned_linefunc(lines + li, citro_rect);
     }
   }
+  //longflags_free(&used);
 }
 
 // -------- Data helpers ------------
@@ -1724,7 +1735,8 @@ void reset_layerpackwindow(LayerPackWindow * layer_window, struct ScreenState * 
   }
   layerpackwindow_init(layer_window, screen_state->layer_info, screen_state->layer_count, 
                        dd->start, &dd->end);
-  LOGTRACE("INIT LAYERS: TL:%d SC:%d", layer_window->total_layers, layer_window->slot_count);
+  LOGTRACE("INIT LAYERS: LC: %d TL:%d SC:%d", screen_state->layer_count, 
+           layer_window->total_layers, layer_window->slot_count);
 }
 
 // Some macros used ONLY for main (think lambdas)
@@ -1884,6 +1896,7 @@ int main(int argc, char **argv) {
     }
     if (pagechange) {
       int diff = pagechange * ((kHeld & KEY_L) ? 10 : 1);
+      u16 oldpage = sys.draw_state.page;
       if(sys.anim_loop > 0) {
         sys.draw_state.page = (sys.draw_state.page + diff + sys.anim_loop) % sys.anim_loop;
       } else {
@@ -1891,7 +1904,10 @@ int main(int argc, char **argv) {
       }
       reset_ringstack(&undostack);
       reset_ringstack(&redostack);
-      layerpackwindow_next(&layer_window, diff);
+      s32 realdiff = (s32)sys.draw_state.page - oldpage;
+      if(realdiff != 0) {
+        layerpackwindow_next(&layer_window, realdiff);
+      }
     }
     if (control & CTRL_PREVCOLOR) {
       sys.colors.selected_index = (sys.colors.selected_index + 1) % COLORSYS_SELECTIONS;
@@ -2119,9 +2135,10 @@ int main(int argc, char **argv) {
         LayerPackItem * winslot = layerpackwindow_at(&layer_window, -li);
         u16 realpage = get_systemstate_onion_offset(&sys, -li);
         if(realpage == last_page) { break; } // in case we aren't looping
+        int slotid = (int)(winslot - layer_window.slots);
         if(winslot->scanner.page != realpage) {
-          LOGTRACE("INIT PAGE %d ON SLOT %d HEAD %d", realpage, 
-                   (int)(winslot - layer_window.slots), layer_window.window_head);
+          LOGTRACE("INIT PAGE %d ON SLOT %d HEAD %d", realpage, slotid, 
+                   layer_window.window_head);
           linescanner_reset(&winslot->scanner);
           winslot->scanner.page = realpage;
           for (int lii = 0; lii < winslot->layer_count; lii++)
@@ -2129,7 +2146,8 @@ int main(int argc, char **argv) {
         }
         // And also fill up on drawing? We always focus on the first slot and work backwards.
         while(lines_drawn < MAX_FRAMELINES && linescanner_next(&winslot->scanner, drawlines + lines_drawn)) {
-          drawlines[lines_drawn].layer += li * sys.screen_state.layer_count;
+          if(drawlines[lines_drawn].layer >= sys.screen_state.layer_count) { continue; }
+          drawlines[lines_drawn].layer += slotid * sys.screen_state.layer_count;
           lines_drawn++;
         }
         last_page = realpage;

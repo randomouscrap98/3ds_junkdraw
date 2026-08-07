@@ -63,8 +63,8 @@ struct SimpleLine { u16 x1, y1, x2, y2; };
 struct FullLine {
    u32 color; // Must be pre-converted.
    u16 x1, y1, x2, y2;
+   u16 layer;
    u8 style;
-   u8 layer;
    u8 width;
 };
 

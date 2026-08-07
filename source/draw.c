@@ -224,7 +224,7 @@ char *convert_linepack_to_data(struct LinePackage *lines, char *container,
   // included at the start, as it may be stored in the final product
 
   // 1 byte style/layer, 1 byte width, 3 bytes color
-  // 3 bits of line style, 1 bit (for now) of layers, 2 unused
+  // 3 bits of line style, 3 bits of layers
   ptr = int_to_chars((lines->style & 0x7) | (lines->layer << 3), 1, ptr);
   // 6 bits of line width (minus 1)
   ptr = int_to_chars(lines->width - 1, 1, ptr);
@@ -303,7 +303,7 @@ char *convert_data_to_linepack(struct LinePackage *package, char *data, char *da
 
   u32 temp = CHARS_TO_INT_1(endptr);
   package->style = temp & 0x7;
-  package->layer = (temp >> 3) & 0x1;
+  package->layer = (temp >> 3) & 0x7;
   package->width = CHARS_TO_INT_1(endptr + 1) + 1;
   package->color = chars_to_int(endptr + 2, 3);
   endptr += 5;
