@@ -1729,7 +1729,7 @@ void reset_layerpackwindow(LayerPackWindow * layer_window, struct ScreenState * 
   }
   layerpackwindow_init(layer_window, screen_state->layer_info, screen_state->layer_count, 
                        dd->start, &dd->end);
-
+  LOGTRACE("INIT LAYERS: TL:%d SC:%d", layer_window->total_layers, layer_window->slot_count);
 }
 
 // Some macros used ONLY for main (think lambdas)
@@ -2112,6 +2112,8 @@ int main(int argc, char **argv) {
         u16 realpage = get_systemstate_onion_offset(&sys, -li);
         if(realpage == last_page) { break; } // in case we aren't looping
         if(winslot->scanner.page != realpage) {
+          LOGTRACE("INIT PAGE %d ON SLOT %d HEAD %d", realpage, 
+                   (int)(winslot - layer_window.slots), layer_window.window_head);
           linescanner_reset(&winslot->scanner);
           winslot->scanner.page = realpage;
           for (int lii = 0; lii < winslot->layer_count; lii++)
@@ -2120,6 +2122,7 @@ int main(int argc, char **argv) {
         // And also fill up on drawing? We always focus on the first slot and work backwards.
         while(lines_drawn < MAX_FRAMELINES && linescanner_next(&winslot->scanner, drawlines + lines_drawn)) {
           drawlines[lines_drawn].layer += li * sys.screen_state.layer_count;
+          lines_drawn++;
         }
         last_page = realpage;
       }
