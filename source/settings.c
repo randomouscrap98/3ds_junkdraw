@@ -7,7 +7,7 @@
 #define DEFAULTKEY "default"
 #define SLOWAVGKEY "slow_avg"
 #define POWERSAVEKEY "power_saver"
-#define ONIONCOUNTKEY "onion_count"
+//#define ONIONCOUNTKEY "onion_count"
 #define ONIONSTARTKEY "onion_blendstart"
 #define COLORMODEKEY "color_mode"
 #define CONTROLSCHEMEKEY "control_scheme"
@@ -21,7 +21,7 @@ void load_settings_raw(struct SystemState *sys, char *settings) {
   initable_t *iniroot = ini_get_table(&ini, DEFAULTKEY);
   sys->slow_avg = (float)ini_as_num(ini_get(iniroot, SLOWAVGKEY));
   sys->power_saver = (bool)ini_as_int(ini_get(iniroot, POWERSAVEKEY));
-  sys->onion_count = (int)ini_as_int(ini_get(iniroot, ONIONCOUNTKEY));
+  //sys->onion_count = (int)ini_as_int(ini_get(iniroot, ONIONCOUNTKEY));
   set_systemstate_onionstart(
       sys, (float)ini_as_num(ini_get(iniroot, ONIONSTARTKEY)));
   sys->colors.mode = (int)ini_as_int(ini_get(iniroot, COLORMODEKEY));
@@ -34,7 +34,7 @@ void load_settings_raw(struct SystemState *sys, char *settings) {
 void set_default_settings(struct SystemState *sys) {
   sys->slow_avg = 0.15;
   sys->power_saver = false;
-  sys->onion_count = 3;
+  //sys->onion_count = 3;
   set_systemstate_onionstart(sys, 0.3);
   sys->colors.mode = 0;
   sys->control_scheme = 0;
@@ -54,7 +54,7 @@ int save_settings(struct SystemState *sys, const char *path) {
     POWERSAVEKEY " = %d\n"
     DATESTAMPEKEY " = %d\n"
     DATECOLORKEY " = %d\n"
-    ONIONCOUNTKEY " = %d\n"
+    //ONIONCOUNTKEY " = %d\n"
     ONIONSTARTKEY " = %f\n"
     COLORMODEKEY " = %d\n"
     CONTROLSCHEMEKEY " = %d\n",
@@ -62,7 +62,7 @@ int save_settings(struct SystemState *sys, const char *path) {
       sys->power_saver,
       sys->datestamp,
       sys->datestamp_color,
-      sys->onion_count,
+      //sys->onion_count,
       sys->onion_blendstart,
       sys->colors.mode,
       sys->control_scheme

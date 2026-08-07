@@ -28,8 +28,7 @@ struct ScreenState {
   MaxLayerInfo layer_info;
   u8 layer_count;
   u8 resolution_id;
-  //u16 layer_width;
-  //u16 layer_height;
+  u8 onion_count;
   //u8 layer_visibility;
 
   // These are pretty standard, but included just in case..
@@ -45,7 +44,6 @@ struct ScreenState {
 // set to unsafe values, etc)
 void set_screenstate_offset(struct ScreenState *state, u16 offset_x,
                             u16 offset_y);
-
 // Adjust the zoom while preserving subjective location in some manner.
 void set_screenstate_zoom(struct ScreenState *state, float zoom);
 
@@ -87,7 +85,7 @@ u8 get_drawstate_tool(const struct DrawState *state);
 
 // Variables for system stuff, probably shouldn't change between loads etc
 struct SystemState {
-  u8 onion_count;
+  //u8 onion_count;
   u16 anim_loop;
 
   // This is the target blend for the last onion layer. The other layers are
@@ -124,7 +122,7 @@ static inline void set_systemstate_onionstart(struct SystemState *sys, float sta
 
 // Calculate the maximum onionlayers we're going to show
 static inline int get_systemstate_max_onionlayers(const struct SystemState * sys) {
-  int max_layers = sys->onion_count; // Assume it's the actual count
+  int max_layers = sys->screen_state.onion_count; // Assume it's the actual count
   int max_actual = sys->screen_state.layer_info.max_layers - sys->screen_state.layer_count;
   if(max_actual < max_layers) max_layers = max_actual;
   int cut = sys->anim_loop; // figure out if either anim_loop or the page cuts it

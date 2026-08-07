@@ -1,10 +1,7 @@
-#include "3ds/os.h"
 #include "3ds/result.h"
 #include "3ds/services/apt.h"
 #include "3ds/services/hid.h"
-#include "digits.h"
-#include "metadata.h"
-#include "settings.h"
+//#include "3ds/svc.h"
 #include <3ds.h>
 
 u32 __stacksize__ = 512 * 1024;
@@ -41,6 +38,9 @@ u32 __stacksize__ = 512 * 1024;
 #include "undo.h"
 #include "layer.h"
 #include "longflags.h"
+#include "digits.h"
+#include "metadata.h"
+#include "settings.h"
 
 #include "log.h"
 #include "setup.h"
@@ -138,8 +138,10 @@ void set_screenstate_defaults(struct ScreenState *state) {
   state->offset_x = 0;
   state->offset_y = 0;
   state->zoom = 1;
-  state->layer_info = query_layer_maximums(0);
+  state->resolution_id = 0;
+  state->layer_info = query_layer_maximums(state->resolution_id);
   state->layer_count = 2; // ???
+  state->onion_count = 0;
   state->screen_width = 320; // These two should literally never change
   state->screen_height = 240;
   state->screen_color = SCREEN_COLOR;
@@ -151,7 +153,6 @@ void set_default_drawstate(struct DrawState *state) {
   state->zoom_power = 0;
   state->page = 0;
   state->layer = DEFAULT_START_LAYER;
-  // state->mode = DRAWMODE_NORMAL;
 
   memcpy(state->tools, default_tooldata, sizeof(default_tooldata));
   state->current_tool = state->tools + TOOL_PENCIL;
@@ -177,7 +178,6 @@ void set_cpadprofile_canvas(struct CpadProfile *profile) {
 typedef struct {
   bool touching;
   bool palette_active;
-  //bool flush_layers;
   bool close_palette;
   bool is_new_date;
   bool is_menu_open;
@@ -193,7 +193,6 @@ typedef struct {
 void sessionstate_init(SessionState * ss) {
   ss->touching = false;
   ss->palette_active = false;
-  //ss->flush_layers = true;
   ss->close_palette = false;
   ss->is_new_date = false;
   ss->is_menu_open = false;
@@ -224,16 +223,15 @@ typedef struct {
   char *start;     // This goes to the start of actual drawing data, past file header
   char *end;       // NOTE: this is exclusive: it points one past the end.
   char *saved_last;
-  //char *draw_pointers[1 + MAXONION];
 } DrawData;
 
 void drawdata_init(DrawData * dd) {
-  dd->container = malloc(MAX_FILE_DATA * sizeof(char));
+  dd->container = linearAlloc(MAX_FILE_DATA * sizeof(char));
   dd->start = dd->end = dd->saved_last = dd->container;
 }
 
 void drawdata_free(DrawData * dd) {
-  free(dd->container);
+  linearFree(dd->container);
 }
 
 void drawdata_new(DrawData * dd) {
@@ -242,12 +240,6 @@ void drawdata_new(DrawData * dd) {
   dd->end = dd->saved_last = dd->start;
   *dd->start = 0; /* Not strictly necessary */
 }
-
-// void drawdata_resetpointers(DrawData * dd) {
-//   for (int __fli = 0; __fli < MAXONION + 1; __fli++) {
-//     dd->draw_pointers[__fli] = dd->start;
-//   }
-// }
 
 SolidRectState srs;
 
@@ -259,8 +251,6 @@ void citro_rect(float x, float y, u16 width, u32 color) {
 #endif
     return;
   }
-  //C2D_DrawRectSolid(x + srs.ofsx + LAYER_EDGEBUF,
-  //                  y + srs.ofsy + LAYER_EDGEBUF, 0.5, width, width, color);
   C2D_DrawRectSolid(x + LAYER_EDGEBUF, y + LAYER_EDGEBUF, 0.5, width, width, color);
   srs.ct.draw_cmd_count++;
   citrotracking_flush(&srs.ct, false);
@@ -320,25 +310,6 @@ void draw_scrollbars(const struct ScreenState *mod) {
                     SCROLL_BAR);
 }
 
-// // Calculate the x and y offset into some layer for an onion layer based on an
-// // offset from current page. So, 0 would be current page, but you should never
-// // give that as a value. The offset is given WITHOUT the edgebuf
-// void onion_offset(const struct DrawState *dstate, int ofs, int *x, int *y) {
-//   if (ofs >= 0) {
-//     *x = 0;
-//     *y = 0;
-//     return;
-//   }
-//   int region = -ofs; // The images go back from closest to furthest
-//   // IF we go back to the more optimized onion top thing, this is what we do:
-//   // int otop = (dstate->page % MAXONION); // First actual onion page
-//   // // Plus one to skip player region
-//   // int region = 1 + (MAXONION + otop + ofs + 1) % MAXONION;
-//   // CAREFUL: TODO: When we get more modes, this will misbehave!
-//   *x = (region & 1) * (LAYER_WIDTH >> dstate->mode); // offset without edgebuf
-//   *y = (region >> 1) * (LAYER_WIDTH >> dstate->mode);
-// }
-
 void draw_layers(LayerPackWindow * layer_window, const struct SystemState *sys) {
   C2D_DrawRectSolid(-sys->screen_state.offset_x, -sys->screen_state.offset_y,
                     0.5f,
@@ -369,20 +340,6 @@ void draw_layers(LayerPackWindow * layer_window, const struct SystemState *sys) 
       //}
     }
   }
-  // We draw the onion skin stuff first
-  //if (sys->draw_state.mode == DRAWMODE_ANIMATION ||
-  //    sys->draw_state.mode == DRAWMODE_ANIMATION2) {
-  //}
-
-  // for (layer_num i = 0; i < sys->screen_state.layer_count; i++) {
-  //   //if (sys->screen_state.layer_visibility & (1 << i)) {
-  //   C2D_DrawImageAt(
-  //       layers[i].image,
-  //       -sys->screen_state.offset_x - LAYER_EDGEBUF * sys->screen_state.zoom,
-  //       -sys->screen_state.offset_y - LAYER_EDGEBUF * sys->screen_state.zoom,
-  //       0.5f, NULL, sys->screen_state.zoom, sys->screen_state.zoom);
-  //   //}
-  // }
 
   float canvas_x = sys->screen_state.layer_info.layer_width * sys->screen_state.zoom -
                    sys->screen_state.offset_x;
@@ -461,6 +418,24 @@ void get_metafile_location(char *savename, char *container) {
   get_save_location(savename, container);
   strcpy(container + strlen(container), "meta");
 }
+
+// void get_memory_usage(s64 * maxCommit, s64 * currentCommit) {
+//   Handle reslimit = 0;
+//   Result rc = svcGetResourceLimit(&reslimit, CUR_PROCESS_HANDLE);
+// 
+//   if (R_SUCCEEDED(rc)) {
+//     *maxCommit = 0;
+//     *currentCommit = 0;
+//     ResourceLimitType type = RESLIMIT_COMMIT;
+// 
+//     svcGetResourceLimitLimitValues(maxCommit, reslimit, &type, 1);
+//     svcGetResourceLimitCurrentValues(currentCommit, reslimit, &type, 1);
+//     svcCloseHandle(reslimit);
+// 
+//     //printf("Used Mem:  %llu / %llu bytes\n", currentCommit, maxCommit);
+//     //printf("Free Mem:  %llu bytes\n", maxCommit - currentCommit);
+//   }
+// }
 
 struct SimpleLine *add_point_to_stroke(struct LinePackage *pending,
                                        const touchPosition *pos,
@@ -1039,34 +1014,6 @@ void print_time(bool showcolon) {
          showcolon ? ':' : ' ', timeinfo->tm_min);
 }
 
-// void inc_drawstate_mode(struct ScreenState *scrst, struct DrawState *drwst) {
-//   int newmode = (drwst->mode + 1) % DRAWMODE_COUNT;
-//   if (newmode == DRAWMODE_ANIMATION) {
-//     if (easy_warn("Switching to animation mode",
-//                   "This will shrink your canvas by half for the\n"
-//                   " duration of animation mode. You will not lose\n"
-//                   " strokes made outside this area, they will\n"
-//                   " just not be seen.\n\n Switch to animation mode?",
-//                   MAINMENU_TOP)) {
-//       drwst->mode = newmode;
-//       // Entering animation mode, make the screen smaller
-//       scrst->layer_height >>= 1;
-//       scrst->layer_width >>= 1;
-//     }
-//   } else if (newmode == DRAWMODE_ANIMATION2) {
-//     drwst->mode = newmode;
-//     // Entering animation mode, make the screen smaller
-//     scrst->layer_height >>= 1;
-//     scrst->layer_width >>= 1;
-//   } else // Going back to the beginning (careful with how this works!)
-//   {
-//     drwst->mode = newmode;
-//     // Exiting animation mode, make the screen larger again
-//     scrst->layer_height <<= 2;
-//     scrst->layer_width <<= 2;
-//   }
-// }
-
 // -- FILESYSTEM --
 
 int save_drawing(char *filename, char *data, metacontainer * mc) {
@@ -1330,12 +1277,12 @@ void run_options_menu(struct SystemState *sys) {
     // easier, we just sprintf everything into the array with newlines, then
     // replace newlines with 0
     sprintf(menu,
-            "Color Picker: %s\nOnion layers: %d\nOnion darkness: "
+            "Color Picker: %s\nOnion darkness: "
             "%.1f\nSlow pen friction: %.2f\nPower saving: %s\n"
             "Date stamp: %s\nDate color: %s\n"
             "Control Scheme: %s\nReset to defaults\nExit\n",
             colpickers[sys->colors.mode], 
-            sys->onion_count, sys->onion_blendstart,
+            sys->onion_blendstart,
             1 - sys->slow_avg, sys->power_saver ? "on" : "off",
             datesettings[sys->datestamp],
             datecolorsettings[sys->datestamp_color],
@@ -1351,11 +1298,7 @@ void run_options_menu(struct SystemState *sys) {
       settings_changed = true;
       sys->colors.mode = (sys->colors.mode + 1) % COLORSYSMODE_COUNT;
       break;
-    case 1: // onion layers
-      settings_changed = true;
-      sys->onion_count = (sys->onion_count + 1) % (MAXONION + 1);
-      break;
-    case 2: // onion darkness
+    case 1: // onion darkness
       settings_changed = true;
       newonionstart = sys->onion_blendstart + 0.1;
       set_systemstate_onionstart(sys, newonionstart);
@@ -1364,31 +1307,31 @@ void run_options_menu(struct SystemState *sys) {
         set_systemstate_onionstart(sys, 0.1);
       }
       break;
-    case 3: // slow avg
+    case 2: // slow avg
       settings_changed = true;
       sys->slow_avg += 0.05;
       if (sys->slow_avg > 0.51) {
         sys->slow_avg = 0.05;
       }
       break;
-    case 4: // power saver
+    case 3: // power saver
       settings_changed = true;
       sys->power_saver = !sys->power_saver;
       osSetSpeedupEnable(!sys->power_saver);
       break;
-    case 5: // date stamp
+    case 4: // date stamp
       settings_changed = true;
       sys->datestamp = (sys->datestamp + 1) % 4;
       break;
-    case 6: // date color stamp
+    case 5: // date color stamp
       settings_changed = true;
       sys->datestamp_color = (sys->datestamp_color + 1) % 4;
       break;
-    case 7: // control scheme
+    case 6: // control scheme
       settings_changed = true;
       sys->control_scheme = (sys->control_scheme + 1) % CONTROLSCHEME_COUNT;
       break;
-    case 8: // defaults
+    case 7: // defaults
       settings_changed = true;
       set_default_settings(sys);
       break;
@@ -1408,8 +1351,8 @@ void run_options_menu(struct SystemState *sys) {
 void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionState * ss) {
   char filepath[MAX_FILEPATH];
   char menu[256];
-  char visibility[][3] = {"", "b", "t", "bt"};
-  char modes[][16] = {"Normal", "Animation", "Small Animation"};
+  //char visibility[][3] = {"", "b", "t", "bt"};
+  //char modes[][16] = {"Normal", "Animation", "Small Animation"};
   s32 menuopt = 0;
   while (1) {
     // Recreate menu every time, since we have dynamic values. To make life
@@ -1425,14 +1368,14 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
       numtemp[2] = 0;
     }
     sprintf(menu,
-            "Draw Mode: %s\nLayer visibility: %s\n"
+            //"Draw Mode: %s\nLayer visibility: %s\n"
             "Page Loop+: %d\nPage Loop-: %d\n"
             "Page Loop Clear\nPage Loop Last Pg\n"
             "Reference Image: %s/%02d\nClear References\nReceive References\n"
             "Rescan Local References\n"
             "Exit\n",
-            "N/A", //modes[sys->draw_state.mode], 
-            "ALL", //visibility[sys->screen_state.layer_visibility],
+            //"N/A", //modes[sys->draw_state.mode], 
+            //"ALL", //visibility[sys->screen_state.layer_visibility],
             sys->anim_loop, sys->anim_loop, numtemp,
             ss->reference_total);
     for (int x = strlen(menu); x >= 0; x--) {
@@ -1442,33 +1385,33 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
     menuopt =
         easy_menu("Runtime Options", menu, MAINMENU_TOP, MAX_MENULIST, menuopt, KEY_B | KEY_START);
     switch (menuopt) {
-    case 0:
-      //inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
-      break;
-    case 1: // layer visibility
-      //sys->screen_state.layer_visibility =
-      //    (sys->screen_state.layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
-      break;
-    case 2: // anim loop up
+    //case 0:
+    //  //inc_drawstate_mode(&sys->screen_state, &sys->draw_state);
+    //  break;
+    //case 1: // layer visibility
+    //  //sys->screen_state.layer_visibility =
+    //  //    (sys->screen_state.layer_visibility + 1) & ((1 << LAYER_COUNT) - 1);
+    //  break;
+    case 0: // anim loop up
       sys->anim_loop++;
       break;
-    case 3: // anim loop down
+    case 1: // anim loop down
       if(sys->anim_loop > 0) { sys->anim_loop--; }
       break;
-    case 4: // anim loop 0
+    case 2: // anim loop 0
       sys->anim_loop = 0;
       break;
-    case 5: // anim loop 0
+    case 3: // anim loop 0
       sys->anim_loop = lastpage + 1;
       break;
-    case 6:
+    case 4:
       sessionstate_increference(ss, 1);
       break;
-    case 7:
+    case 5:
       ss->reference_total = 0;
       ss->reference_image = 0;
       break;
-    case 8:;
+    case 6:;
       int old_total = ss->reference_total;
       if(receiveReferenceHttp(ss)) {
         return;
@@ -1480,7 +1423,7 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
         }
         break;
       }
-    case 9:; // rescan local
+    case 7:; // rescan local
       PRINTINFO("Scanning for old references...");
       for(ss->reference_total = 0; ss->reference_total < MAX_REFERENCES;
             ss->reference_total++) {
@@ -1833,8 +1776,8 @@ int main(int argc, char **argv) {
 
   char save_filename[MAX_FILENAME];
 
-  char *stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
-  struct FullLine * drawlines = malloc(sizeof(struct FullLine) * MAX_FRAMELINES);
+  char *stroke_data = linearAlloc(MAX_STROKE_DATA * sizeof(char));
+  struct FullLine * drawlines = linearAlloc(sizeof(struct FullLine) * MAX_FRAMELINES);
 
   DrawData dd;
   metacontainer meta;
@@ -1953,6 +1896,13 @@ int main(int argc, char **argv) {
     }
     if (control & CTRL_MENU) {
       sstate.is_menu_open = true;
+      // char mtitle[80];
+      // //u32 memUsed = osGetMemRegionUsed(MEMREGION_ALL);
+      // //u32 memTotal = osGetMemRegionSize(MEMREGION_ALL);
+      // s64 memUsed, memTotal;
+      // get_memory_usage(&memTotal, &memUsed);
+      // snprintf(mtitle, 80, "%s (%0.2f/%0.2f)", MAINMENU_TITLE, 
+      //          memUsed / (1024.0 * 1024), memTotal / (1024.0 * 1024));
       switch (easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, 0,
                         KEY_B | KEY_START)) {
       case MAINMENU_EDIT:
@@ -2189,7 +2139,8 @@ ENDMAINLOOP:;
   free_ringstack(&redostack);
   free_linepackage(&pending);
   drawdata_free(&dd);
-  free(stroke_data);
+  linearFree(stroke_data);
+  linearFree(drawlines);
   metacontainer_free(&meta);
 
   C3D_RenderTargetDelete(screen);
