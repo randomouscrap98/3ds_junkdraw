@@ -40,6 +40,7 @@ u32 __stacksize__ = 512 * 1024;
 #include "settings.h"
 #include "undo.h"
 #include "layer.h"
+#include "longflags.h"
 
 #include "log.h"
 #include "setup.h"
@@ -341,7 +342,7 @@ void draw_scrollbars(const struct ScreenState *mod) {
 //   *y = (region >> 1) * (LAYER_WIDTH >> dstate->mode);
 // }
 
-void draw_layers(const LayerData *layers, const struct SystemState *sys) {
+void draw_layers(LayerPackWindow * layer_window, const struct SystemState *sys) {
   C2D_DrawRectSolid(-sys->screen_state.offset_x, -sys->screen_state.offset_y,
                     0.5f,
                     sys->screen_state.layer_info.layer_width * sys->screen_state.zoom,
@@ -351,24 +352,23 @@ void draw_layers(const LayerData *layers, const struct SystemState *sys) {
   C2D_ImageTint tint;
   // The offset from current page for onion skin. WARN: This used to max out
   // at the page but now it maxes out at animation loop
-  int max_onion_layers = get_systemstate_max_onionlayers(sys);
+  int max_onion_layers = get_systemstate_max_onionlayers(sys) + 1;
   //for (int o = -max_onion_layers; o <= -1; o++) {
   for (int o = 0; o < max_onion_layers; o++) {
-    for (int i = 0; i < 4; i++) {
-      tint.corners[i].color = 0xFFFFFFFF; // Setable sometime?
-      tint.corners[i].blend =
-          1 - DCV_LERP(sys->onion_blendstart, sys->onion_blendend,
-                       fabs((o + 1.0) / (MAXONION - 1.0)));
+    if(o != 0) {
+      for (int i = 0; i < 4; i++) {
+        tint.corners[i].color = 0xFFFFFFFF; // Setable sometime?
+        tint.corners[i].blend =
+          1 - DCV_LERP(sys->onion_blendstart, sys->onion_blendend, (o - 1) / (MAXONION - 1.0));
+      }
     }
-    //int x, y;
-    //onion_offset(&sys->draw_state, o, &x, &y);
+    LayerPackItem * winslot = layerpackwindow_at(layer_window, -o);
     for (layer_num i = 0; i < sys->screen_state.layer_count; i++) {
       //if (sys->screen_state.layer_visibility & (1 << i)) {
-      C2D_DrawImageAt(layers[i + sys->screen_state.layer_count * (o + 1)].image,
+      C2D_DrawImageAt(winslot->layers[i].image,
                       -sys->screen_state.offset_x - LAYER_EDGEBUF * sys->screen_state.zoom,
                       -sys->screen_state.offset_y - LAYER_EDGEBUF * sys->screen_state.zoom,
-                      0.5f, &tint, sys->screen_state.zoom,
-                      sys->screen_state.zoom);
+                      0.5f, o != 0 ? &tint : NULL, sys->screen_state.zoom, sys->screen_state.zoom);
       //}
     }
   }
@@ -377,15 +377,15 @@ void draw_layers(const LayerData *layers, const struct SystemState *sys) {
   //    sys->draw_state.mode == DRAWMODE_ANIMATION2) {
   //}
 
-  for (layer_num i = 0; i < sys->screen_state.layer_count; i++) {
-    //if (sys->screen_state.layer_visibility & (1 << i)) {
-    C2D_DrawImageAt(
-        layers[i].image,
-        -sys->screen_state.offset_x - LAYER_EDGEBUF * sys->screen_state.zoom,
-        -sys->screen_state.offset_y - LAYER_EDGEBUF * sys->screen_state.zoom,
-        0.5f, NULL, sys->screen_state.zoom, sys->screen_state.zoom);
-    //}
-  }
+  // for (layer_num i = 0; i < sys->screen_state.layer_count; i++) {
+  //   //if (sys->screen_state.layer_visibility & (1 << i)) {
+  //   C2D_DrawImageAt(
+  //       layers[i].image,
+  //       -sys->screen_state.offset_x - LAYER_EDGEBUF * sys->screen_state.zoom,
+  //       -sys->screen_state.offset_y - LAYER_EDGEBUF * sys->screen_state.zoom,
+  //       0.5f, NULL, sys->screen_state.zoom, sys->screen_state.zoom);
+  //   //}
+  // }
 
   float canvas_x = sys->screen_state.layer_info.layer_width * sys->screen_state.zoom -
                    sys->screen_state.offset_x;
@@ -393,9 +393,8 @@ void draw_layers(const LayerData *layers, const struct SystemState *sys) {
                    sys->screen_state.offset_y;
 
   // This is rather wasteful but eh...
-  C2D_DrawRectSolid(
-      canvas_x, 0, 0.5f, sys->screen_state.screen_width - canvas_x,
-      sys->screen_state.screen_height, sys->screen_state.screen_color);
+  C2D_DrawRectSolid(canvas_x, 0, 0.5f, sys->screen_state.screen_width - canvas_x,
+                    sys->screen_state.screen_height, sys->screen_state.screen_color);
   C2D_DrawRectSolid(0, canvas_y, 0.5f, canvas_x,
                     sys->screen_state.screen_height,
                     sys->screen_state.screen_color);
@@ -404,45 +403,36 @@ void draw_layers(const LayerData *layers, const struct SystemState *sys) {
 // // Draw as much as possible from the given ring buffer, with as little context
 // // switching as possible. WARN: MAKES A LOT OF ASSUMPTIONS IN ORDER TO PREVENT
 // // COSTLY MALLOCS PER FRAME
-// void draw_from_buffer(struct LineRingBuffer *scandata, LayerData *layers,
-//                       struct ScreenState *scrst) {
-//   u16 lineCount = 0;
-//   struct FullLine *lines[MAX_FRAMELINES]; // The largest available
-//   struct FullLine *next = NULL;
-// 
-//   // Repeat while there's something in the buffer and we haven't reached the
-//   // limit. Essentially, just pull as much as possible out of the ring buffer so
-//   // we can later draw it per-layer
-//   while ((next = lineringbuffer_shrink(scandata)) &&
-//          lineCount < _MAXDRAWLINES) {
-//     lines[lineCount] = next;
-//     lineCount++;
-//   }
-// 
-//   if (lineCount == 0) {
-//     return;
-//   }
-// 
-//   for (u8 i = 0; i < scrst->layer_count; i++) {
-//     // Skip expensive drawing for layers that aren't visible
-//     // if ((scrst->layer_visibility & (1 << i)) == 0) {
-//     //   continue;
-//     // }
-// 
-//     // Don't want to call this too often, so do as much as possible PER
-//     // layer instead of jumping around
-//     C2D_SceneBegin(layers[i].target);
-// 
-//     // Now loop over our lines
-//     for (u16 li = 0; li < lineCount; li++) {
-//       // Just entirely skip data for layers we're not focusing on yet.
-//       if (lines[li]->layer != i)
-//         continue;
-// 
-//       pixaligned_linefunc(lines[li], citro_rect);
-//     }
-//   }
-// }
+void draw_from_buffer(struct FullLine * lines, u32 lines_drawn, LayerPackWindow * layer_window, struct ScreenState *scrst) {
+  // Scan for the USED layers/etc (for optimization)
+  longflags used;
+  longflags_init(&used);
+  for(u32 i = 0; i < lines_drawn; i++) {
+    longflags_set(&used, lines[i].layer);
+  }
+
+  for (u8 i = 0; i < MAXWINDOWLAYERS; i++) {
+    if(!longflags_isset(&used, i)) { continue; }
+    u16 layer = i % scrst->layer_count;
+    u16 slot = i / scrst->layer_count;
+    // Skip expensive drawing for layers that aren't visible
+    // if ((scrst->layer_visibility & (1 << i)) == 0) {
+    //   continue;
+    // }
+
+    // Don't want to call this too often, so do as much as possible PER
+    // layer instead of jumping around
+    C2D_SceneBegin(layerpackwindow_at(layer_window, -slot)->layers[layer].target);
+
+    // Now loop over our lines
+    for (u16 li = 0; li < lines_drawn; li++) {
+      // Just entirely skip data for layers we're not focusing on yet.
+      if (lines[li].layer != i)
+        continue;
+      pixaligned_linefunc(lines + li, citro_rect);
+    }
+  }
+}
 
 // -------- Data helpers ------------
 
@@ -1864,12 +1854,13 @@ int main(int argc, char **argv) {
   char save_filename[MAX_FILENAME];
 
   char *stroke_data = malloc(MAX_STROKE_DATA * sizeof(char));
+  struct FullLine * drawlines = malloc(sizeof(struct FullLine) * MAX_FRAMELINES);
 
   DrawData dd;
   metacontainer meta;
   drawdata_init(&dd);
 
-  if (!dd.container || !stroke_data || metacontainer_init(&meta, MAX_META_DATA)) {
+  if (!dd.container || !stroke_data || !drawlines || metacontainer_init(&meta, MAX_META_DATA)) {
     LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
   }
 
@@ -2130,19 +2121,31 @@ int main(int argc, char **argv) {
     C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE,
                    GPU_ZERO);
 
-    // Clear + fix all broken scanners in the layer system
-    int draw_layers = get_systemstate_max_onionlayers(&sys) + 1;
-    for(int li = 0; li < draw_layers; li++) {
-      LayerPackItem * winslot = layerpackwindow_at(&layer_window, -li);
-      u16 realpage = get_systemstate_onion_offset(&sys, -li);
-      if(winslot->scanner.page != realpage) {
-        linescanner_reset(&winslot->scanner);
-        winslot->scanner.page = realpage;
-        for (int lii = 0; lii < winslot->layer_count; lii++)
-          C2D_TargetClear(winslot->layers[lii].target, sstate.clear_color);
+    // All background drawing, including flushing and scanning and all that.
+    {
+      u32 lines_drawn = 0;
+      // Clear + fix all broken scanners in the layer system
+      int draw_pages = get_systemstate_max_onionlayers(&sys) + 1;
+      int last_page = -1;
+      for(int li = 0; li < draw_pages; li++) {
+        LayerPackItem * winslot = layerpackwindow_at(&layer_window, -li);
+        u16 realpage = get_systemstate_onion_offset(&sys, -li);
+        if(realpage == last_page) { break; } // in case we aren't looping
+        if(winslot->scanner.page != realpage) {
+          linescanner_reset(&winslot->scanner);
+          winslot->scanner.page = realpage;
+          for (int lii = 0; lii < winslot->layer_count; lii++)
+            C2D_TargetClear(winslot->layers[lii].target, sstate.clear_color);
+        }
+        // And also fill up on drawing? We always focus on the first slot and work backwards.
+        while(lines_drawn < MAX_FRAMELINES && linescanner_next(&winslot->scanner, drawlines + lines_drawn)) {
+          drawlines[lines_drawn].layer += li * sys.screen_state.layer_count;
+        }
+        last_page = realpage;
       }
-      // And also fill up on drawing?
+      draw_from_buffer(drawlines, lines_drawn, &layer_window, &sys.screen_state);
     }
+
     // Apparently (not sure), all clearing should be done within our main loop?
     // if (sstate.flush_layers) {
     //   for (int i = 0; i < LAYER_COUNT; i++)
@@ -2217,7 +2220,7 @@ int main(int argc, char **argv) {
     //   LOGDBG("SCAN: %0.2fms", osTickCounterRead(&timer)); 
     // }
     //osTickCounterStart(&timer);
-    draw_from_buffer(&scandata, layers, &sys.screen_state);
+    // draw_from_buffer(&scandata, layers, &sys.screen_state);
     // osTickCounterUpdate(&timer);
     // if(saydraw) {
     //   LOGDBG("DRAW: %0.2fms", osTickCounterRead(&timer));
@@ -2242,7 +2245,7 @@ int main(int argc, char **argv) {
     C2D_TargetClear(screen, sys.screen_state.screen_color);
     C2D_SceneBegin(screen);
 
-    draw_layers(layers, &sys);
+    draw_layers(&layer_window, &sys);
     draw_scrollbars(&sys.screen_state);
     draw_colorpicker(&sys.colors, !sstate.palette_active);
 

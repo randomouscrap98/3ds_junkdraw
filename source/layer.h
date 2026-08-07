@@ -17,7 +17,7 @@
 
 #define MAXLAYERS   8
 #define MAXONION    4
-// #define MAXWINDOWLAYERS 16 //(MAXLAYERS * (MAXONION + 1))
+#define MAXWINDOWLAYERS (MAXLAYERS * (MAXONION + 1))
 
 
 typedef struct {

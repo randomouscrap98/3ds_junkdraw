@@ -8,8 +8,8 @@
 
 void set_screenstate_offset(struct ScreenState *state, u16 offset_x,
                             u16 offset_y) {
-  float maxofsx = state->layer_width * state->zoom - state->screen_width;
-  float maxofsy = state->layer_height * state->zoom - state->screen_height;
+  float maxofsx = state->layer_info.layer_width * state->zoom - state->screen_width;
+  float maxofsy = state->layer_info.layer_height * state->zoom - state->screen_height;
   state->offset_x = C2D_Clamp(offset_x, 0, maxofsx < 0 ? 0 : maxofsx);
   state->offset_y = C2D_Clamp(offset_y, 0, maxofsy < 0 ? 0 : maxofsy);
 }
