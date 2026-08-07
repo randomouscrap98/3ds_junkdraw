@@ -287,27 +287,37 @@ void draw_scrollbars(const struct ScreenState *mod) {
   // Need to draw an n-thickness scrollbar on the right and bottom. Assumes
   // standard page size for screen modifier.
 
-  // Bottom and right scrollbar bg
-  C2D_DrawRectSolid(0, mod->screen_height - SCROLL_WIDTH, 0.5f,
-                    mod->screen_width, SCROLL_WIDTH, SCROLL_BG);
-  C2D_DrawRectSolid(mod->screen_width - SCROLL_WIDTH, 0, 0.5f, SCROLL_WIDTH,
-                    mod->screen_height, SCROLL_BG);
+  float fill_w = mod->screen_width / (float)mod->layer_info.layer_width / mod->zoom;
+  float fill_h = mod->screen_height / (float)mod->layer_info.layer_height / mod->zoom;
+  u16 sofs_x = fill_w * (float)mod->offset_x;
+  u16 sofs_y = fill_h * (float)mod->offset_y;
 
-  u16 sofs_x =
-      (float)mod->offset_x / mod->layer_info.layer_width / mod->zoom * mod->screen_width;
-  u16 sofs_y =
-      (float)mod->offset_y / mod->layer_info.layer_height / mod->zoom * mod->screen_height;
+  // Bottom and right scrollbar bg
+  if(fill_w < 1.0f) {
+    C2D_DrawRectSolid(0, mod->screen_height - SCROLL_WIDTH, 0.5f,
+                      mod->screen_width, SCROLL_WIDTH, SCROLL_BG);
+  }
+  if(fill_h < 1.0f) {
+    C2D_DrawRectSolid(mod->screen_width - SCROLL_WIDTH, 0, 0.5f, SCROLL_WIDTH,
+                      mod->screen_height, SCROLL_BG);
+  }
+
+      //(float)mod->offset_x / mod->layer_info.layer_width / mod->zoom * mod->screen_width;
+  //u16 sofs_y =
+      //(float)mod->offset_y / mod->layer_info.layer_height / mod->zoom * mod->screen_height;
 
   // bottom and right scrollbar bar
-  C2D_DrawRectSolid(sofs_x, mod->screen_height - SCROLL_WIDTH, 0.5f,
-                    mod->screen_width * mod->screen_width /
-                        (float)mod->layer_info.layer_width / mod->zoom,
-                    SCROLL_WIDTH, SCROLL_BAR);
-  C2D_DrawRectSolid(mod->screen_width - SCROLL_WIDTH, sofs_y, 0.5f,
-                    SCROLL_WIDTH,
-                    mod->screen_height * mod->screen_height /
-                        (float)mod->layer_info.layer_height / mod->zoom,
-                    SCROLL_BAR);
+  if(fill_w < 1.0f) {
+    C2D_DrawRectSolid(sofs_x, mod->screen_height - SCROLL_WIDTH, 0.5f,
+                      mod->screen_width * fill_w, SCROLL_WIDTH, SCROLL_BAR);
+  }
+                         // (float)mod->layer_info.layer_width / mod->zoom,
+  if(fill_h < 1.0f) {
+    C2D_DrawRectSolid(mod->screen_width - SCROLL_WIDTH, sofs_y, 0.5f,
+                    SCROLL_WIDTH, mod->screen_height * fill_h, SCROLL_BAR);
+  }
+                      //mod->screen_height / (float)mod->layer_info.layer_height / mod->zoom,
+                    //SCROLL_BAR);
 }
 
 void draw_layers(LayerPackWindow * layer_window, const struct SystemState *sys) {
