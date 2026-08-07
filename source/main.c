@@ -322,7 +322,8 @@ void draw_layers(LayerPackWindow * layer_window, const struct SystemState *sys) 
   // at the page but now it maxes out at animation loop
   int max_onion_layers = get_systemstate_max_onionlayers(sys) + 1;
   //for (int o = -max_onion_layers; o <= -1; o++) {
-  for (int o = 0; o < max_onion_layers; o++) {
+  // These HAVE TO go in reverse order (actual lines on top)
+  for (int o = max_onion_layers - 1; o >= 0; o--) {
     if(o != 0) {
       for (int i = 0; i < 4; i++) {
         tint.corners[i].color = 0xFFFFFFFF; // Setable sometime?
@@ -1437,6 +1438,57 @@ void run_runtime_options_menu(struct SystemState *sys, int lastpage, SessionStat
   }
 }
 
+void run_canvas_options_menu(struct SystemState *sys, DrawData * dd) {
+  char menu[256];
+  //char modes[][16] = {"Normal", "Animation", "Small Animation"};
+  s32 menuopt = 0;
+  while (1) {
+    sprintf(menu,
+            "Canvas Resolution: %d x %d\n"
+            "Layers: %d\n"
+            "Onion Skin: %d\n"
+            "Exit\n",
+            sys->screen_state.layer_info.layer_width,
+            sys->screen_state.layer_info.layer_height,
+            sys->screen_state.layer_count,
+            sys->screen_state.onion_count
+            );
+    for (int x = strlen(menu); x >= 0; x--) {
+      if (menu[x] == '\n')
+        menu[x] = 0;
+    }
+    menuopt = easy_menu("Canvas Options", menu, MAINMENU_TOP, MAX_MENULIST, 
+                        menuopt, KEY_B | KEY_START);
+    switch (menuopt) {
+    case 0: // Canvas resolution
+      sys->screen_state.resolution_id = (sys->screen_state.resolution_id + 1) % RESOLUTIONCOUNT;
+      sys->screen_state.layer_info = query_layer_maximums(sys->screen_state.resolution_id);
+      // TODO: make this less annoying
+      sys->screen_state.layer_count = 2;
+      sys->screen_state.onion_count = 0;
+      break;
+    case 1: // Layers
+      sys->screen_state.layer_count = (sys->screen_state.layer_count + 1) % (MAXLAYERS + 1);
+      if(sys->screen_state.layer_count == 0 || screenstate_layers_overloaded(&sys->screen_state)) {
+        sys->screen_state.layer_count = 1;
+      }
+      break;
+    case 2: // Onion skin
+      sys->screen_state.onion_count = (sys->screen_state.onion_count + 1) % (MAXONION + 1);
+      if(screenstate_layers_overloaded(&sys->screen_state)) {
+        sys->screen_state.onion_count = 0;
+      }
+      break;
+    default:
+      // Need to write the values back into the header
+      return;
+    }
+    if(sys->draw_state.layer >= sys->screen_state.layer_count) {
+      sys->draw_state.layer = 0;
+    }
+  }
+}
+
 void run_export_menu(struct SystemState *sys, DrawData * dd, char *filename) {
   char menu[256];
   s32 menuopt = 0;
@@ -1787,9 +1839,9 @@ int main(int argc, char **argv) {
     LOGDBG("ERR: COULD NOT INIT MAIN BUFFER");
   }
 
+  // Don't need to initialize, will do so in newdraw
   LayerPackWindow layer_window;
   layer_window.slots = NULL;
-  reset_layerpackwindow(&layer_window, &sys.screen_state, &dd);
 
   LOGTRACE("SYSTEM MALLOC");
 
@@ -1961,6 +2013,12 @@ int main(int argc, char **argv) {
       case MAINMENU_RUNTIMEOPTIONS:
         // Run runtime options system (settings here not saved)
         run_runtime_options_menu(&sys, last_total_page(dd.start, dd.end), &sstate);
+        // TODO: is this necessary?
+        reset_layerpackwindow(&layer_window, &sys.screen_state, &dd);
+        break;
+      case MAINMENU_CANVASOPTIONS:
+        // Run runtime options system (settings here not saved)
+        run_canvas_options_menu(&sys, &dd);
         // TODO: is this necessary?
         reset_layerpackwindow(&layer_window, &sys.screen_state, &dd);
         break;

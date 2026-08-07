@@ -6,6 +6,13 @@
 
 // ---------- SCREEN STATE ------------
 
+int get_screenstate_total_layers(struct ScreenState * state) {
+  return state->layer_count * (state->onion_count + 1);
+}
+int screenstate_layers_overloaded(struct ScreenState * state) {
+  return get_screenstate_total_layers(state) > state->layer_info.max_layers;
+}
+
 void set_screenstate_offset(struct ScreenState *state, u16 offset_x,
                             u16 offset_y) {
   float maxofsx = state->layer_info.layer_width * state->zoom - state->screen_width;

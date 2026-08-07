@@ -40,6 +40,9 @@ struct ScreenState {
   u32 bg_color;
 };
 
+int get_screenstate_total_layers(struct ScreenState * state);
+int screenstate_layers_overloaded(struct ScreenState * state);
+
 // Safely adjust the screen offset given new desired offsets (doesn't let you
 // set to unsafe values, etc)
 void set_screenstate_offset(struct ScreenState *state, u16 offset_x,
