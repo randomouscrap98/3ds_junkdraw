@@ -145,7 +145,7 @@ void set_screenstate_defaults(struct ScreenState *state) {
   state->screen_width = 320; // These two should literally never change
   state->screen_height = 240;
   state->screen_color = SCREEN_COLOR;
-  state->bg_color = CANVAS_BG_COLOR;
+  state->bg_color = 0xFFFF; //CANVAS_BG_COLOR;
   // state->layer_visibility = (1 << LAYER_COUNT) - 1; // All visible
 }
 
@@ -318,7 +318,7 @@ void draw_layers(LayerPackWindow * layer_window, const struct SystemState *sys) 
                     0.5f,
                     sys->screen_state.layer_info.layer_width * sys->screen_state.zoom,
                     sys->screen_state.layer_info.layer_height * sys->screen_state.zoom,
-                    sys->screen_state.bg_color); // The bg color
+                    rgba16_to_rgba32c(sys->screen_state.bg_color)); // The bg color
 
   C2D_ImageTint tint;
   // The offset from current page for onion skin. WARN: This used to max out
@@ -326,10 +326,11 @@ void draw_layers(LayerPackWindow * layer_window, const struct SystemState *sys) 
   int max_onion_layers = get_systemstate_max_onionlayers(sys) + 1;
   //for (int o = -max_onion_layers; o <= -1; o++) {
   // These HAVE TO go in reverse order (actual lines on top)
+  u32 tintcol = rgba16_to_rgba32c(sys->screen_state.bg_color);
   for (int o = max_onion_layers - 1; o >= 0; o--) {
     if(o != 0) {
       for (int i = 0; i < 4; i++) {
-        tint.corners[i].color = 0xFFFFFFFF; // Setable sometime?
+        tint.corners[i].color = tintcol;
         tint.corners[i].blend =
           1 - DCV_LERP(sys->onion_blendstart, sys->onion_blendend, (o - 1) / (MAXONION - 1.0));
       }
@@ -433,24 +434,6 @@ void get_metafile_location(char *savename, char *container) {
   get_save_location(savename, container);
   strcpy(container + strlen(container), "meta");
 }
-
-// void get_memory_usage(s64 * maxCommit, s64 * currentCommit) {
-//   Handle reslimit = 0;
-//   Result rc = svcGetResourceLimit(&reslimit, CUR_PROCESS_HANDLE);
-// 
-//   if (R_SUCCEEDED(rc)) {
-//     *maxCommit = 0;
-//     *currentCommit = 0;
-//     ResourceLimitType type = RESLIMIT_COMMIT;
-// 
-//     svcGetResourceLimitLimitValues(maxCommit, reslimit, &type, 1);
-//     svcGetResourceLimitCurrentValues(currentCommit, reslimit, &type, 1);
-//     svcCloseHandle(reslimit);
-// 
-//     //printf("Used Mem:  %llu / %llu bytes\n", currentCommit, maxCommit);
-//     //printf("Free Mem:  %llu bytes\n", maxCommit - currentCommit);
-//   }
-// }
 
 struct SimpleLine *add_point_to_stroke(struct LinePackage *pending,
                                        const touchPosition *pos,
@@ -1029,6 +1012,18 @@ void print_time(bool showcolon) {
          showcolon ? ':' : ' ', timeinfo->tm_min);
 }
 
+// Perform a FULL reset on the layer window system, clearing all layers and resetting everything to
+// square one. The system should be fully ready to draw on after this.
+void reset_layerpackwindow(LayerPackWindow * layer_window, struct ScreenState * screen_state, DrawData * dd) {
+  if(layer_window->slots != NULL) {
+    layerpackwindow_free(layer_window);
+  }
+  layerpackwindow_init(layer_window, screen_state->layer_info, screen_state->layer_count, 
+                       dd->start, &dd->end);
+  LOGTRACE("INIT LAYERS: LC: %d TL:%d SC:%d", screen_state->layer_count, 
+           layer_window->total_layers, layer_window->slot_count);
+}
+
 // -- FILESYSTEM --
 
 int save_drawing(char *filename, char *data, metacontainer * mc) {
@@ -1084,6 +1079,28 @@ int save_drawing(char *filename, char *data, metacontainer * mc) {
   }
 
   return -1;
+}
+
+int save_drawing_full(struct SystemState * sys, DrawData * dd, metacontainer * meta, 
+                      char * save_filename) {
+  int result = 0;
+  char tempc = *dd->end;
+  *dd->end = 0;
+  // Write back the pending fileheader data just before... not ideal but blegh
+  fileheader_write(&(FileHeader){
+    .layer_count = sys->screen_state.layer_count, 
+    .resolution_id = sys->screen_state.resolution_id,
+    .onion_count = sys->screen_state.onion_count,
+    .bgcolor = sys->screen_state.bg_color,
+  }, dd->container);
+  if (save_drawing(save_filename, dd->container, meta) == 0) {
+    dd->saved_last = dd->end;
+    print_data(dd);
+  } else {
+    result = 1;
+  }
+  *dd->end = tempc;
+  return result;
 }
 
 char *load_drawing(char *data_container, char *final_filename, metacontainer * mc) {
@@ -1159,6 +1176,32 @@ END:
   free(all_files);
 TRUEEND:
   return result;
+}
+
+int load_drawing_full(struct SystemState * sys, DrawData * dd, metacontainer * meta, 
+                      LayerPackWindow * layer_window, char * save_filename) {
+  dd->end = load_drawing(dd->container, save_filename, meta);
+  if (dd->end == NULL) {
+    return 1;
+    //PRINTERR("LOAD FAILED!");
+    //MAIN_NEWDRAW();
+  } else {
+    dd->saved_last = dd->end;
+    // Find last USED page (that the user touched), set it.
+    sys->draw_state.page = last_used_page(dd->start, dd->end - dd->start);
+    sstate.is_new_date = metacontainer_lastloads_differentdate(meta);
+    FileHeader fhtemp;
+    fileheader_read(&fhtemp, dd->container);
+    LOGTRACE("FH: '%c' LC:%d RS:%d", dd->container[10], fhtemp.layer_count, fhtemp.resolution_id);
+    sys->screen_state.layer_count = fhtemp.layer_count;
+    sys->screen_state.resolution_id = fhtemp.resolution_id;
+    sys->screen_state.onion_count = fhtemp.onion_count;
+    sys->screen_state.bg_color = fhtemp.bgcolor;
+    sys->screen_state.layer_info = query_layer_maximums(sys->screen_state.resolution_id);
+    reset_layerpackwindow(layer_window, &sys->screen_state, dd);
+    print_data(dd);
+  }
+  return 0;
 }
 
 // Export the given page from the given data into a default named file in some
@@ -1461,12 +1504,15 @@ void run_canvas_options_menu(struct SystemState *sys, DrawData * dd) {
             "Canvas Resolution: %d x %d\n"
             "Layers: %d\n"
             "Onion Skin: %d\n"
+            "BG Color: 0x%04X\n"
+            "Reset BG Color\n"
             "Exit\n",
             sys->screen_state.layer_info.layer_width,
             sys->screen_state.layer_info.layer_height,
             sys->screen_state.layer_count,
-            sys->screen_state.onion_count
-            );
+            sys->screen_state.onion_count,
+            sys->screen_state.bg_color
+          );
     for (int x = strlen(menu); x >= 0; x--) {
       if (menu[x] == '\n')
         menu[x] = 0;
@@ -1493,8 +1539,13 @@ void run_canvas_options_menu(struct SystemState *sys, DrawData * dd) {
         sys->screen_state.onion_count = 0;
       }
       break;
+    case 3: // Set background color
+      sys->screen_state.bg_color = colorsystem_getcolor(&sys->colors);
+      break;
+    case 4: // Reset background color
+      sys->screen_state.bg_color = 0xFFFF;
+      break;
     default:
-      // Need to write the values back into the header
       return;
     }
     if(sys->draw_state.layer >= sys->screen_state.layer_count) {
@@ -1730,18 +1781,6 @@ void refresh_console(DrawData * dd, SessionState * ss) {
   }
 }
 
-// Perform a FULL reset on the layer window system, clearing all layers and resetting everything to
-// square one. The system should be fully ready to draw on after this.
-void reset_layerpackwindow(LayerPackWindow * layer_window, struct ScreenState * screen_state, DrawData * dd) {
-  if(layer_window->slots != NULL) {
-    layerpackwindow_free(layer_window);
-  }
-  layerpackwindow_init(layer_window, screen_state->layer_info, screen_state->layer_count, 
-                       dd->start, &dd->end);
-  LOGTRACE("INIT LAYERS: LC: %d TL:%d SC:%d", screen_state->layer_count, 
-           layer_window->total_layers, layer_window->slot_count);
-}
-
 // Some macros used ONLY for main (think lambdas)
 #define MAIN_NEWDRAW()                                                         \
   {                                                                            \
@@ -1825,8 +1864,6 @@ int main(int argc, char **argv) {
   srs.layer_info = &sys.screen_state.layer_info;
 
   LOGTRACE("SETUP STATE");
-
-  char tempc; // Used for anything, very short life
 
   struct LinePackage pending;
   init_linepackage(&pending);
@@ -1967,13 +2004,6 @@ int main(int argc, char **argv) {
     }
     if (control & CTRL_MENU) {
       sstate.is_menu_open = true;
-      // char mtitle[80];
-      // //u32 memUsed = osGetMemRegionUsed(MEMREGION_ALL);
-      // //u32 memTotal = osGetMemRegionSize(MEMREGION_ALL);
-      // s64 memUsed, memTotal;
-      // get_memory_usage(&memTotal, &memUsed);
-      // snprintf(mtitle, 80, "%s (%0.2f/%0.2f)", MAINMENU_TITLE, 
-      //          memUsed / (1024.0 * 1024), memTotal / (1024.0 * 1024));
       switch (easy_menu(MAINMENU_TITLE, MAINMENU_ITEMS, MAINMENU_TOP, 0, 0,
                         KEY_B | KEY_START)) {
       case MAINMENU_EDIT:
@@ -1991,32 +2021,16 @@ int main(int argc, char **argv) {
         }
         break;
       case MAINMENU_SAVE:
-        tempc = *dd.end;
-        *dd.end = 0;
-        if (save_drawing(save_filename, dd.container, &meta) == 0) {
-          dd.saved_last = dd.end;
-          print_data(&dd);
-        } else {
+        if(save_drawing_full(&sys, &dd, &meta, save_filename)) {
           PRINTERR("SAVE FAILED!");
         }
-        *dd.end = tempc;
         break;
       case MAINMENU_LOAD:
-        if (MAIN_UNSAVEDCHECK(
-                "Are you sure you want to load and lose changes?")) {
+        if (MAIN_UNSAVEDCHECK("Are you sure you want to load and lose changes?")) {
           MAIN_NEWDRAW();
-          dd.end = load_drawing(dd.container, save_filename, &meta);
-
-          if (dd.end == NULL) {
+          if(load_drawing_full(&sys, &dd, &meta, &layer_window, save_filename)) {
             PRINTERR("LOAD FAILED!");
             MAIN_NEWDRAW();
-          } else {
-            dd.saved_last = dd.end;
-            // Find last USED page (that the user touched), set it.
-            sys.draw_state.page =
-                last_used_page(dd.start, dd.end - dd.start);
-            sstate.is_new_date = metacontainer_lastloads_differentdate(&meta);
-            print_data(&dd);
           }
         }
         break;

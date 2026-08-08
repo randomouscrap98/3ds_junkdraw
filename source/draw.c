@@ -44,11 +44,6 @@ u32 chars_to_int(const char *container, const u8 count) {
   return result;
 }
 
-// Some optimized reads
-#define CHARS_TO_INT_1(container) ((container)[0] - DCV_START)
-#define CHARS_TO_INT_2(container) (((container)[0] - DCV_START) + \
-  (((container)[1] - DCV_START) << DCV_BITSPER))
-
 // A dumb form of 2's compliment that doesn't carry the leading 1's
 s32 special_to_signed(u32 special) {
   if (special & 1)

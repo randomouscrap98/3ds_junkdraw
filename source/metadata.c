@@ -1,4 +1,6 @@
 #include "metadata.h"
+#include "version.h"
+#include "draw.h"
 
 #include <time.h>
 #include <stdio.h>
@@ -147,3 +149,39 @@ int metacontainer_lastloads_differentdate(metacontainer * mc) {
   // The amount of chars to check is 10: YYYY-MM-DD
   return strncmp(lastdate, penultdate, 10);
 }
+
+void fileheader_default(FileHeader * header) {
+  header->resolution_id = 0;
+  header->layer_count = 2;
+  header->onion_count = 0;
+  header->bgcolor = 0xFFFF;
+}
+
+void fileheader_write(FileHeader * header, char * out) {
+  CUR_PUTFHEADER(out);
+  // Now we can write the metadata into the empty space
+  u8 byte10 = (header->resolution_id & 0x3) | (((header->layer_count - 1) & 0x7) << 2);
+  u8 byte11 = (header->onion_count & 0x7);
+  u16 byte12_14 = header->bgcolor;
+  int_to_chars(byte10, 1, out + 10);
+  int_to_chars(byte11, 1, out + 11);
+  int_to_chars(byte12_14, 3, out + 12);
+}
+
+void fileheader_read(FileHeader * header, char * out) {
+  fileheader_default(header);
+  if(out[10] != '_') {
+    u8 byte10 = CHARS_TO_INT_1(out + 10);
+    header->resolution_id = byte10 & 0x3;
+    header->layer_count = 1 + ((byte10 >> 2) & 0x7);
+  }
+  if(out[11] != '_') {
+    u8 byte11 = CHARS_TO_INT_1(out + 11);
+    header->onion_count = byte11 & 0x7;
+  }
+  if(out[12] != '_' && out[13] != '_' && out[14] != '_') {
+    header->bgcolor = chars_to_int(out + 12, 3);
+    //header->onion_count = byte11 & 0x7;
+  }
+}
+

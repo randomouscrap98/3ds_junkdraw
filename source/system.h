@@ -37,7 +37,7 @@ struct ScreenState {
 
   // Some configurable display stuff related to drawing
   u32 screen_color;
-  u32 bg_color;
+  u16 bg_color;
 };
 
 int get_screenstate_total_layers(struct ScreenState * state);

@@ -43,6 +43,11 @@ typedef void (* rectangle_func)(float, float, u16, u32); //X,Y,width,32-bit colo
 #define DCV_VARISTEP (1 << DCV_VARIBITSPER) 
 #define DCV_VARIMAXSCAN 7
 
+// Some optimized reads
+#define CHARS_TO_INT_1(container) ((container)[0] - DCV_START)
+#define CHARS_TO_INT_2(container) (((container)[0] - DCV_START) + \
+  (((container)[1] - DCV_START) << DCV_BITSPER))
+
 char * int_to_chars(u32 num, const u8 chars, char * container);
 u32 chars_to_int(const char * container, const u8 count);
 s32 special_to_signed(u32 special);

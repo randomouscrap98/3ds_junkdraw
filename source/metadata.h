@@ -40,5 +40,17 @@ int metacontainer_lastloads_differentdate(metacontainer * mc);
 // then result will point to ABCDF
 // char * metacontainer_scanback(metacontainer * mc, char * from);
 
+// This is ONLY for the latest version!! For older versions, you may
+// need a conversion
+typedef struct {
+  u8 resolution_id;
+  u8 layer_count;
+  u8 onion_count;
+  u16 bgcolor;
+} FileHeader;
+
+void fileheader_default(FileHeader * header);
+void fileheader_write(FileHeader * header, char * out);
+void fileheader_read(FileHeader * header, char * out);
 
 #endif
