@@ -128,7 +128,7 @@ size_t datacontainer_length(DataContainer * dc) {
   return dc->end - dc->start;
 }
 
-void fileheader_default(DataHeader * header) {
+void dataheader_default(DataHeader * header) {
   // No need to set these as constants; if you want the defaults,
   // just call this function
   header->resolution_id = 0;
@@ -198,6 +198,10 @@ page_t datacontainer_last_total_page(DataContainer * dc) {
   return maxpage;
 }
 
+int datacontainer_enough(DataContainer * dc, size_t added_space) {
+  return dc->capacity - (dc->end - dc->container) >= added_space;
+}
+
 // ==========================================
 //              DATA SCANNER
 // ==========================================
@@ -227,12 +231,14 @@ DataScannerResult datascanner_next(DataScanner * ds) {
 
   DataScannerResult result;
   result.stroke_start = NULL;
-  result.next_alignment = NULL;
+  result.data_start = NULL;
+  result.data_end = NULL;
+  result.page = -1;
 
   if (ds->current >= ds->parent->end) {
     LOGDBG("WARN: scanner run at or past end of data! Diff: %d\n",
            ds->parent->end - ds->current);
-    result.next_alignment = ds->parent->end;
+    result.data_end = ds->parent->end;
     return result;
   }
 
@@ -243,7 +249,7 @@ DataScannerResult datascanner_next(DataScanner * ds) {
 
     if (tempptr == NULL) {
       LOGDBG("SCAN ERROR: NO MORE ALIGNMENT CHARS! Skipping all the way to end\n");
-      result.next_alignment = ds->parent->end;
+      result.data_end = ds->parent->end;
       return result;
     } else {
       LOGDBG("SCAN SKIP: fast-forwarding %d characters to next alignment\n",
@@ -259,27 +265,48 @@ DataScannerResult datascanner_next(DataScanner * ds) {
 
   while (ds->current < stop)
   {
+    // Include the alignment character
+    result.data_start = ds->current;
+
     // Skip the alignment character (TODO: assuming it's 1 byte)
     ds->current++;
 
     // TODO: will crash if last character is the alignment char, or if there
     // just aren't enough characters to read up the page.
-    page_t stroke_page = JDDC_CHARS_TO_INT_2(ds->current);
+    result.page = JDDC_CHARS_TO_INT_2(ds->current);
     char * tempptr = ds->current + JDDC_PAGEBYTES; // tmpptr points at the stroke start
 
     // Move scanptr to the next stroke, always
     ds->current = memchr(ds->current, JDDC_ALIGNMENT, (ds->parent->end - ds->current));
 
     // If no more strokes are found, we're at the end
-    if (ds->current == NULL)
+    if (ds->current == NULL) {
       ds->current = ds->parent->end;
+    }
 
-    if (stroke_page == ds->page || ds->page < 0) {
+    if (result.page == ds->page || ds->page < 0) {
       result.stroke_start = tempptr;
       break;
     }
   }
 
-  result.next_alignment = ds->current;
+  result.data_end = ds->current;
   return result;
 }
+
+// Useful for loop: scan while strokes are found. Does not throw errors if
+// ds is already past the end.
+int datascanner_next_loop(DataScanner * ds, DataScannerResult * dsr) {
+  if(datascanner_at_end(ds)) return 0;
+  *dsr = datascanner_next(ds);
+  return dsr->stroke_start != NULL;
+}
+
+int datascanner_at_end(DataScanner * ds) {
+  return ds->current >= ds->parent->end;
+}
+
+void datascannerresult_overwritepage(DataScannerResult * dsr, page_t page) {
+  int_to_chars(page, JDDC_PAGEBYTES, dsr->data_start + 1);
+}
+

@@ -50,6 +50,8 @@ void datacontainer_free(DataContainer * dc);
 size_t datacontainer_length(DataContainer * dc);
 page_t datacontainer_last_used_page(DataContainer * dc);
 page_t datacontainer_last_total_page(DataContainer * dc);
+// Return whether there's enough space to add the given amount
+int datacontainer_enough(DataContainer * dc, size_t added_space);
 
 void datacontainer_setheader(DataContainer * dc, DataHeader * dh);
 void datacontainer_getheader(DataContainer * dc, DataHeader * dh);
@@ -64,15 +66,21 @@ typedef struct {
 } DataScanner;
 
 typedef struct {
+  char * data_start;
   char * stroke_start;
-  char * next_alignment;
+  char * data_end;
+  page_t page;
 } DataScannerResult;
-
-DataScannerResult datascanner_next(DataScanner * ds);
 
 // Note: scanners are throwaway and hold onto no data, so I just return
 // by value to signify this a bit
 DataScanner datacontainer_get_scanner(DataContainer * dc);
+
+DataScannerResult datascanner_next(DataScanner * ds);
+// Useful for loop: scan while strokes are found
+int datascanner_next_loop(DataScanner * ds, DataScannerResult * dsr);
+int datascanner_at_end(DataScanner * ds);
+void datascannerresult_overwritepage(DataScannerResult * dsr, page_t page);
 
 // Data conersion stuff
 #define JDDC_START '0'   // Starting character
@@ -83,6 +91,9 @@ DataScanner datacontainer_get_scanner(DataContainer * dc);
 #define JDDC_VARISTEP (1 << JDDC_VARIBITSPER) 
 #define JDDC_VARIMAXSCAN 7
 #define JDDC_PAGEBYTES 2
+
+#define JDDC_PAGE_DEL 4095
+#define JDDC_PAGE_TMP 4094
 
 // Some optimized reads
 #define JDDC_CHARS_TO_INT_1(container) ((container)[0] - JDDC_START)
