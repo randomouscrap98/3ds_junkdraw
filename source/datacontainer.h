@@ -8,8 +8,12 @@
 typedef s16 page_t;
 typedef u16 color_t;
 typedef s8 resolutionid_t;
-typedef s8 onionid_t;
-typedef s8 layerid_t;
+typedef s8 onion_t;
+typedef s8 layer_t;
+typedef u8 style_t;
+typedef u8 width_t;
+typedef u16 coord_t;
+typedef u16 lineidx_t;
 
 // These constants are defined here because the data container dictates 
 // how much space is given to the data
@@ -24,11 +28,30 @@ typedef s8 layerid_t;
 #define JDDC_FHEADER_BASE (JDDC_MAGICSTRING JDDC_FVERSION "______")
 #define JDDC_FHEADER_LEN 16
 
+// Data conversion stuff
+#define JDDC_START '0'   // Starting character
+#define JDDC_BITSPER 6
+#define JDDC_VARIBITSPER 5
+#define JDDC_MAXVAL(x) ((1 << (x * JDDC_BITSPER)) - 1)
+#define JDDC_VARIMAXVAL(x) ((1 << (x * JDDC_VARIBITSPER)) - 1)
+#define JDDC_VARISTEP (1 << JDDC_VARIBITSPER) 
+#define JDDC_VARIMAXSCAN 7
+#define JDDC_PAGEBYTES 2
+#define JDDC_COORDBYTES 2
+// Header bytes are the alignment character, the page bytes, then
+// the stroke/layer/width/color bytes
+#define JDDC_STROKEHEADERBYTES (1 + JDDC_PAGEBYTES + 5)
+
+#define JDDC_LINESTYLE_STROKE 0
+#define JDDC_LINESTYLE_COLLECTION 1
+#define JDDC_PAGE_DEL 4095
+#define JDDC_PAGE_TMP 4094
+
 typedef struct {
   resolutionid_t resolution_id;
   color_t bgcolor;
-  layerid_t layer_count;
-  onionid_t onion_count;
+  layer_t layer_count;
+  onion_t onion_count;
 } DataHeader;
 
 void dataheader_default(DataHeader * header);
@@ -56,6 +79,28 @@ int datacontainer_enough(DataContainer * dc, size_t added_space);
 void datacontainer_setheader(DataContainer * dc, DataHeader * dh);
 void datacontainer_getheader(DataContainer * dc, DataHeader * dh);
 
+typedef struct { 
+  coord_t x1, y1, x2, y2; 
+} LineSegment;
+
+// Lines as the data container wants them
+typedef struct {
+   LineSegment * lines;
+   u16 capacity;
+   u16 length;
+   page_t page;
+   color_t color;
+   style_t style;
+   layer_t layer;
+   width_t width;
+} LineContainer;
+
+// Initialize a line container specifically to hold a stroke and no more.
+int linecontainer_init_stroke(LineContainer * lc);
+void linecontainer_free(LineContainer * lc);
+
+int datacontainer_addline(DataContainer * dc, LineContainer * lc);
+
 typedef struct {
   DataContainer * parent;
   char * current;
@@ -81,23 +126,5 @@ DataScannerResult datascanner_next(DataScanner * ds);
 int datascanner_next_loop(DataScanner * ds, DataScannerResult * dsr);
 int datascanner_at_end(DataScanner * ds);
 void datascannerresult_overwritepage(DataScannerResult * dsr, page_t page);
-
-// Data conersion stuff
-#define JDDC_START '0'   // Starting character
-#define JDDC_BITSPER 6
-#define JDDC_VARIBITSPER 5
-#define JDDC_MAXVAL(x) ((1 << (x * JDDC_BITSPER)) - 1)
-#define JDDC_VARIMAXVAL(x) ((1 << (x * JDDC_VARIBITSPER)) - 1)
-#define JDDC_VARISTEP (1 << JDDC_VARIBITSPER) 
-#define JDDC_VARIMAXSCAN 7
-#define JDDC_PAGEBYTES 2
-
-#define JDDC_PAGE_DEL 4095
-#define JDDC_PAGE_TMP 4094
-
-// Some optimized reads
-#define JDDC_CHARS_TO_INT_1(container) ((container)[0] - JDDC_START)
-#define JDDC_CHARS_TO_INT_2(container) (((container)[0] - JDDC_START) + \
-  (((container)[1] - JDDC_START) << JDDC_BITSPER))
 
 #endif

@@ -1,17 +1,26 @@
 #include "datacontainer.h"
 #include "utils.h"
 
+#include <assert.h>
 #include <string.h>
+#include <stdlib.h>
 // #include "3ds/allocator/linear.h"
 
 // No limit to variable width scan (it's faster)
 #define JDDC_NOVARIMAXSCAN
 
+
 // ==========================================
 //    INTERNAL CONVERSION FUNCTIONS
 // ==========================================
 
-// Container needs at least 'chars' amount of space to store this int
+// Some optimized reads
+#define JDDC_CHARS_TO_INT_1(container) ((container)[0] - JDDC_START)
+#define JDDC_CHARS_TO_INT_2(container) (((container)[0] - JDDC_START) + \
+  (((container)[1] - JDDC_START) << JDDC_BITSPER))
+
+
+// Returns the new end. Container needs at least 'chars' amount of space to store this int
 static inline char *int_to_chars(u32 num, const u8 chars, char *container) {
   // WARN: clamping rather than ignoring! Hope this is ok
   num = JD_CLAMP(num, 0, JDDC_MAXVAL(chars));
@@ -200,6 +209,115 @@ page_t datacontainer_last_total_page(DataContainer * dc) {
 
 int datacontainer_enough(DataContainer * dc, size_t added_space) {
   return dc->capacity - (dc->end - dc->container) >= added_space;
+}
+
+// ==========================================
+//              LINE CONTAINER
+// ==========================================
+
+int linecontainer_init_stroke(LineContainer * lc) {
+  memset(lc, 0, sizeof(LineContainer));
+  lc->capacity = JDDC_MAXSTROKELINES;
+  lc->lines = malloc(sizeof(LineSegment) * lc->capacity);
+  if(!lc->lines) {
+    return 1;
+  }
+  return 0;
+}
+
+void linecontainer_free(LineContainer * lc) {
+  free(lc->lines);
+}
+
+#define JDDC_LINECHECK(dc, v) { \
+  if (!datacontainer_enough(dc, (v))) { \
+    LOGDBG("ERROR: OUT OF SPACE, can't store stroke data!\n"); \
+    return 1; \
+  } \
+}
+
+// Internal function to store the line header. If it fails, dc->end is left in a shifted state
+static inline int datacontainer_addline_header(DataContainer * dc, LineContainer * lc) {
+  JDDC_LINECHECK(dc, JDDC_STROKEHEADERBYTES);
+
+  *dc->end = JDDC_ALIGNMENT; 
+  dc->end += 1;
+  // 1 byte style/layer, 1 byte width, 3 bytes color
+  // 3 bits of line style, 3 bits of layers
+  // 6 bits of line width (minus 1)
+  // 16 bits of color (2 unused)
+  dc->end = int_to_chars(lc->page, JDDC_PAGEBYTES, dc->end); 
+  dc->end = int_to_chars((lc->style & 0x7) | (lc->layer << 3), 1, dc->end);
+  dc->end = int_to_chars(lc->width - 1, 1, dc->end);
+  dc->end = int_to_chars(lc->color, 3, dc->end);
+
+  return 0;
+}
+
+// Internal function to store the stroke portion of the line. If it fails,
+// dc->end is left in a shifted state.
+static inline int datacontainer_addline_stroke(DataContainer * dc, LineContainer * lc) {
+  // This is a check that will need to be performed a lot
+
+  // Now for strokes, we store the first point, then move along the rest of the
+  // points doing an offset storage
+  if (lc->style == JDDC_LINESTYLE_STROKE) {
+    JDDC_LINECHECK(dc, 2 * JDDC_COORDBYTES);
+
+    // Dump first point, save point data for later
+    coord_t x = lc->lines[0].x1;
+    coord_t y = lc->lines[0].y1;
+    dc->end = int_to_chars(x, JDDC_COORDBYTES, dc->end);
+    dc->end = int_to_chars(y, JDDC_COORDBYTES, dc->end);
+
+    // Now compute distances between this point and previous, store those as
+    // variable width values. This can save a significant amount for most
+    // types of drawing.
+    for (lineidx_t i = 0; i < lc->length; i++) {
+      if (x == lc->lines[i].x2 && y == lc->lines[i].y2)
+        continue; // Don't need to store stationary lines
+      JDDC_LINECHECK(dc, JDDC_VARIMAXSCAN);
+      dc->end = int_to_varwidth(signed_to_special(lc->lines[i].x2 - x), dc->end);
+      dc->end = int_to_varwidth(signed_to_special(lc->lines[i].y2 - y), dc->end);
+      x = lc->lines[i].x2;
+      y = lc->lines[i].y2;
+    }
+  } else if (lc->style == JDDC_LINESTYLE_COLLECTION) {
+    // A very simple storage: each line is just two points, stored
+    // as-is with no variance. VERY fast
+    for (lineidx_t i = 0; i < lc->length; i++) {
+      JDDC_LINECHECK(dc, 8);
+      dc->end = int_to_chars(lc->lines[i].x1, 2, dc->end);
+      dc->end = int_to_chars(lc->lines[i].y1, 2, dc->end);
+      dc->end = int_to_chars(lc->lines[i].x2, 2, dc->end);
+      dc->end = int_to_chars(lc->lines[i].y2, 2, dc->end);
+    }
+  } else {
+    // We DON'T support this!
+    LOGDBG("ERR: L2D UNSUPPORTED STROKE: %d\n", lc->style);
+    return 1;
+  }
+
+  return 0;
+}
+
+int datacontainer_addline(DataContainer * dc, LineContainer * lc) {
+  // Just write data into the container until we run out, it's ok to leave stuff behind.
+  // Might waste a little time but no worries.
+  char * prev_end = dc->end;
+
+  if (lc->length < 1) {
+    LOGDBG("WARN: NO LINES TO STORE!\n");
+    return 1;
+  }
+  
+  if(datacontainer_addline_header(dc, lc) || 
+     datacontainer_addline_stroke(dc, lc)) {
+    dc->end = prev_end;
+    return 1;
+  }
+
+  return 0;
 }
 
 // ==========================================
