@@ -4,7 +4,6 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
-// #include "3ds/allocator/linear.h"
 
 // No limit to variable width scan (it's faster)
 #define JDDC_NOVARIMAXSCAN
@@ -286,11 +285,11 @@ static inline int datacontainer_addline_stroke(DataContainer * dc, LineContainer
     // A very simple storage: each line is just two points, stored
     // as-is with no variance. VERY fast
     for (lineidx_t i = 0; i < lc->length; i++) {
-      JDDC_LINECHECK(dc, 8);
-      dc->end = int_to_chars(lc->lines[i].x1, 2, dc->end);
-      dc->end = int_to_chars(lc->lines[i].y1, 2, dc->end);
-      dc->end = int_to_chars(lc->lines[i].x2, 2, dc->end);
-      dc->end = int_to_chars(lc->lines[i].y2, 2, dc->end);
+      JDDC_LINECHECK(dc, JDDC_COORDBYTES * 4);
+      dc->end = int_to_chars(lc->lines[i].x1, JDDC_COORDBYTES, dc->end);
+      dc->end = int_to_chars(lc->lines[i].y1, JDDC_COORDBYTES, dc->end);
+      dc->end = int_to_chars(lc->lines[i].x2, JDDC_COORDBYTES, dc->end);
+      dc->end = int_to_chars(lc->lines[i].y2, JDDC_COORDBYTES, dc->end);
     }
   } else {
     // We DON'T support this!
@@ -426,5 +425,88 @@ int datascanner_at_end(DataScanner * ds) {
 
 void datascannerresult_overwritepage(DataScannerResult * dsr, page_t page) {
   int_to_chars(page, JDDC_PAGEBYTES, dsr->data_start + 1);
+}
+
+// A true macro, as in just dump code into the function later. Used ONLY for
+// convert_data, hence "CVD"
+#define JDDC_READCHECK(dsr, endptr, x, msg) {                               \
+  if ((dsr->data_end - endptr) < x) {                                       \
+    LOGDBG("ERROR: Not enough data to parse line! %s\n", msg);              \
+    return 1;                                                               \
+  } \
+}
+
+// Use this like it's going to return a value and check to see if you have space
+#define JDDC_NEWLINE_OK(lc) \
+  lc->lines + lc->length; \
+  if (lc->length >= lc->capacity) { \
+    LOGDBG("ERR: got a stroke that's too long!"); \
+    return 1; \
+  } \
+  lc->length++; 
+
+
+int datascannerresult_parseline(DataScannerResult * dsr, LineContainer * lc) {
+  lc->length = 0;
+  char * endptr = dsr->stroke_start;
+
+  JDDC_READCHECK(dsr, endptr, JDDC_PREAMBLEBYTES, "PREAMBLE");
+
+  // Read the preamble
+  u32 temp = JDDC_CHARS_TO_INT_1(endptr);
+  lc->style = temp & 0x7;
+  lc->layer = (temp >> 3) & 0x7;
+  lc->width = JDDC_CHARS_TO_INT_1(endptr + 1) + 1;
+  lc->color = chars_to_int(endptr + 2, 3);
+  endptr += JDDC_PREAMBLEBYTES;
+
+  if (lc->style == JDDC_LINESTYLE_STROKE) {
+    JDDC_READCHECK(dsr, endptr, 2 * JDDC_COORDBYTES, "STROKE FIRST POINT");
+
+    // First point is regular simple 4 byte data point.
+    coord_t x = JDDC_CHARS_TO_INT_2(endptr);
+    coord_t y = JDDC_CHARS_TO_INT_2(endptr + JDDC_COORDBYTES);
+    endptr += 2 * JDDC_COORDBYTES;
+
+    u8 scanned = 0;
+
+    while (endptr < dsr->data_end) {
+      LineSegment *line = JDDC_NEWLINE_OK(lc);
+      // Store current end as first point
+      line->x1 = x;
+      line->y1 = y;
+      // Read next endpoint
+      x = x + special_to_signed(varwidth_to_int(endptr, &scanned));
+      endptr += scanned;
+      y = y + special_to_signed(varwidth_to_int(endptr, &scanned));
+      endptr += scanned;
+      // The end of us is the next endpoint
+      line->x2 = x;
+      line->y2 = y;
+    }
+
+    // The special case where there's no additional strokes
+    if (lc->length == 0) {
+      lc->lines[0].x1 = lc->lines[0].x2 = x;
+      lc->lines[0].y1 = lc->lines[0].y2 = y;
+      lc->length++;
+    }
+  } else if (lc->style == JDDC_LINESTYLE_COLLECTION) {
+    while (endptr < dsr->data_end) {
+      JDDC_READCHECK(dsr, endptr, 8, "COLLECTION: LINE")
+      LineSegment *line = JDDC_NEWLINE_OK(lc);
+      line->x1 = JDDC_CHARS_TO_INT_2(endptr);
+      line->y1 = JDDC_CHARS_TO_INT_2(endptr + JDDC_COORDBYTES);
+      line->x2 = JDDC_CHARS_TO_INT_2(endptr + JDDC_COORDBYTES * 2);
+      line->y2 = JDDC_CHARS_TO_INT_2(endptr + JDDC_COORDBYTES * 3);
+      endptr += JDDC_COORDBYTES * 4;
+    }
+  } else {
+    // We DON'T support this!
+    LOGDBG("ERR: D2L UNSUPPORTED STROKE: %d\n", lc->style);
+    return 1;
+  }
+
+  return 0;
 }
 

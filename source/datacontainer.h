@@ -40,7 +40,8 @@ typedef u16 lineidx_t;
 #define JDDC_COORDBYTES 2
 // Header bytes are the alignment character, the page bytes, then
 // the stroke/layer/width/color bytes
-#define JDDC_STROKEHEADERBYTES (1 + JDDC_PAGEBYTES + 5)
+#define JDDC_PREAMBLEBYTES 5
+#define JDDC_STROKEHEADERBYTES (1 + JDDC_PAGEBYTES + JDDC_PREAMBLEBYTES)
 
 #define JDDC_LINESTYLE_STROKE 0
 #define JDDC_LINESTYLE_COLLECTION 1
@@ -99,6 +100,7 @@ typedef struct {
 int linecontainer_init_stroke(LineContainer * lc);
 void linecontainer_free(LineContainer * lc);
 
+// Lines are always added at the end of the container. No need for scanning
 int datacontainer_addline(DataContainer * dc, LineContainer * lc);
 
 typedef struct {
@@ -125,6 +127,8 @@ DataScannerResult datascanner_next(DataScanner * ds);
 // Useful for loop: scan while strokes are found
 int datascanner_next_loop(DataScanner * ds, DataScannerResult * dsr);
 int datascanner_at_end(DataScanner * ds);
+
 void datascannerresult_overwritepage(DataScannerResult * dsr, page_t page);
+int datascannerresult_parseline(DataScannerResult * dsr, LineContainer * lc);
 
 #endif
