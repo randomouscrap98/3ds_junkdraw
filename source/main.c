@@ -366,10 +366,13 @@ longflags _dfb_used = {0};
 // // COSTLY MALLOCS PER FRAME
 void draw_from_buffer(struct FullLine * lines, u32 lines_drawn, LayerPackWindow * layer_window, struct ScreenState *scrst) {
   if(!lines_drawn) return;
-  if(_dfb_used.flags == 0)
-    longflags_init(&_dfb_used);
-  else
+  if(_dfb_used.flags == 0) {
+    longflags_init(&_dfb_used); 
+    LOGTRACE("INIT LONGFLAGS (ONCE?)");
+  }
+  else {
     longflags_zero(&_dfb_used);
+  }
   // Scan for the USED layers/etc (for optimization)
   u32 maxlayer = 0;
   for(u32 i = 0; i < lines_drawn; i++) {
