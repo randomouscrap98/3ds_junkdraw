@@ -542,10 +542,10 @@ void fill_colorhistory(struct ColorSystem *cs, char *draw_start, char *draw_end,
 u32 *export_page_raw(struct ScreenState *scrst, page_num page, char *data,
                      char *data_end) {
   u32 *layerdata[scrst->layer_count + 1];
-  u32 size_bytes = sizeof(u32) * scrst->layer_info.layer_width * scrst->layer_info.layer_height;
+  u32 pixelcount = scrst->layer_info.layer_width * scrst->layer_info.layer_height;
 
   for (int i = 0; i < scrst->layer_count + 1; i++) {
-    layerdata[i] = malloc(size_bytes);
+    layerdata[i] = calloc(pixelcount, sizeof(u32));
 
     if (layerdata[i] == NULL) {
       LOGDBG("ERR: COULDN'T ALLOCATE MEMORY FOR EXPORT");
@@ -555,9 +555,14 @@ u32 *export_page_raw(struct ScreenState *scrst, page_num page, char *data,
 
       return NULL;
     }
-
     // TODO: This assumes the bg is white
-    memset(layerdata[i], (i == scrst->layer_count) ? 0xFF : 0, size_bytes);
+    // memset(layerdata[i], (i == scrst->layer_count) ? 0xFF : 0, size_bytes);
+  }
+
+  u32 bg = rgba16_to_rgba32c(scrst->bg_color);
+  // This might be slow, but fill last layer (the composite) with the user's bg
+  for(u32 i = 0; i < pixelcount; i++) {
+    layerdata[scrst->layer_count][i] = bg;
   }
 
   // Now just parse and parse and parse until we reach the end!
