@@ -210,6 +210,11 @@ int datacontainer_enough(DataContainer * dc, size_t added_space) {
   return dc->capacity - (dc->end - dc->container) >= added_space;
 }
 
+// Get the TOTAL fill, including the header
+size_t datacontainer_filled(DataContainer * dc) {
+  return dc->end - dc->container;
+}
+
 // ==========================================
 //              LINE CONTAINER
 // ==========================================

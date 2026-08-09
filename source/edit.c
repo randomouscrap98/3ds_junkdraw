@@ -10,19 +10,25 @@ int edit_copy_page(DataContainer * dc, const page_t sourcepage, const page_t des
   DataScanner ds = datacontainer_get_scanner(dc);
   ds.page = sourcepage;
   u32 numcopied = 0;
+  size_t copybytes = 0;
 
   // Scan through, find strokes on given page (only up to old end)
   while(datascanner_next_loop(&ds, &result)) {
     size_t len = (result.data_end - result.data_start); // length includes meta
     if(!datacontainer_enough(dc, len)) {
-      LOGDBG("Not enough space to copy page!");
+      size_t filled = datacontainer_filled(dc);
+      LOGDBG("Not enough space to copy page! Len: %zu Fill: %zu Copied: %d", 
+             len, filled, numcopied);
       return 1;
     }
     memcpy(dc->end, result.data_start, len); // copy WHOLE stroke
     datascannerresult_overwritepage(&result, destpage);
-    dc->end += len;
+    copybytes += len;
     numcopied++;
   }
+
+  // Only update end afterwards
+  dc->end += copybytes;
 
   LOGDBG("Copied %ld strokes from pg %d to %d", numcopied, sourcepage + 1, destpage + 1);
 
@@ -62,7 +68,6 @@ int edit_swap_pages(DataContainer * dc, const page_t sourcepage, const page_t de
   ds.page = JDDC_PAGE_TMP;
   while(datascanner_next_loop(&ds, &result)) {
     datascannerresult_overwritepage(&result, destpage);
-    numtouched++;
   }
 
   LOGDBG("Swapped %ld strokes between pg %d and %d", numtouched, sourcepage + 1, destpage + 1);
@@ -139,9 +144,8 @@ int edit_move_page(DataContainer * dc, const page_t sourcepage, const page_t des
   ds.page = JDDC_PAGE_TMP;
   while(datascanner_next_loop(&ds, &result)) {
     datascannerresult_overwritepage(&result, destpage);
-    numtouched++;
   }
 
-  LOGDBG("Swapped %ld strokes between pg %d and %d", numtouched, sourcepage + 1, destpage + 1);
+  LOGDBG("Moved %ld strokes between pg %d and %d", numtouched, sourcepage + 1, destpage + 1);
   return 0;
 }

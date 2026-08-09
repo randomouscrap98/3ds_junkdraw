@@ -76,6 +76,7 @@ page_t datacontainer_last_used_page(DataContainer * dc);
 page_t datacontainer_last_total_page(DataContainer * dc);
 // Return whether there's enough space to add the given amount
 int datacontainer_enough(DataContainer * dc, size_t added_space);
+size_t datacontainer_filled(DataContainer * dc);
 
 void datacontainer_setheader(DataContainer * dc, DataHeader * dh);
 void datacontainer_getheader(DataContainer * dc, DataHeader * dh);
