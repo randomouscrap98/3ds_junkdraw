@@ -34,6 +34,9 @@ typedef union {
 #define JDL_TYPE_SOFTWARE 1
 
 // A layer is a single texture that can accept lines (and maybe other things) to draw.
+// You can initialize a layer to be hardware or software, so you can use the same
+// data type for export (software) or for compositing a scene (hardware) and feed it
+// the same lines, etc. 
 typedef struct {
   LayerTexture texture;
   u16 width;    // APPARENT width (requested)
@@ -56,6 +59,8 @@ void layer_realsize(Layer * layer, u16 * width, u16 * height);
 void layer_drawlines(Layer * layer, RenderLine * lines, size_t count);
 // WARN: make sure you're in a render scene before clearing! Target not set...
 void layer_clear(Layer * layer, u32 color);
+// Put source layer onto dest layer, ONLY works for software layers!
+void layer_composite_onto(Layer * dest, Layer * source);
 
 
 #endif

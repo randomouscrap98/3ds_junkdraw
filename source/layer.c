@@ -101,6 +101,8 @@ void layer_free(Layer * layer) {
 
 static inline void layer_drawlines_hardware(Layer * layer, RenderLine * lines, size_t count) {
   static u32 command_count = 0; // GLOBAL TRACKING, kind of scary but yeah...
+  //  WARN: this flushes, be careful when calling!
+  C2D_SceneBegin(layer->texture.hw.target);
   for(size_t i = 0; i < count; i++) {
     BRESENHAM_PRE(lines[i], layer) {
       C2D_DrawRectSolid(lines[i].x1 + JDL_EDGEBUF, lines[i].y1 + JDL_EDGEBUF, 
@@ -138,3 +140,19 @@ void layer_drawlines(Layer * layer, RenderLine * lines, size_t count) {
     layer_drawlines_software(layer, lines, count);
   }
 }
+
+void layer_composite_onto(Layer * dest, Layer * source) {
+  if(dest->type == JDL_TYPE_SOFTWARE && source->type == JDL_TYPE_SOFTWARE &&
+    dest->width == source->width && dest->height == source->height) {
+    size_t max = dest->width * dest->height;
+    for (size_t i = 0; i < max; i++) {
+      // TODO: CAREFUL! For speed, we check for full 0, when only alpha matters!
+      if (source->texture.sf.buf[i]) {
+        dest->texture.sf.buf[i] = source->texture.sf.buf[i];
+      }
+    }
+  } else {
+    LOGDBG("UNSUPPORTED LAYER COMPOSITION");
+  }
+}
+
