@@ -1,85 +1,61 @@
 #ifndef __HEADER_3DSJUNKDRAW_LAYER__
 #define __HEADER_3DSJUNKDRAW_LAYER__
 
-#include "draw.h"
-
 #include <3ds.h>
-#include <citro2d.h>
 #include <citro3d.h>
+#include <citro2d.h>
 
-// Glitch in citro2d (or so we assume) prevents us from writing into the first 8
-// pixels in the texture. As such, we simply shift the texture over by this
-// amount when drawing.
-#define LAYER_EDGEERROR 8
-#define LAYER_EDGEBUF   10
-#define LAYER_FORMAT GPU_RGBA5551
-
-#define RESOLUTIONCOUNT 3
-#define MAXLAYERS   8
-#define MAXONION    4
-#define MAXWINDOWLAYERS (MAXLAYERS * (MAXONION + 1))
-
-
-typedef struct {
-  int layer_width;
-  int layer_height;
-  int texture_width;
-  int texture_height;
-  int max_layers;
-} MaxLayerInfo;
-
-MaxLayerInfo query_layer_maximums(int resolution);
-
+#define JDL_EDGEERROR 8
+#define JDL_EDGEBUF   10
+#define JDL_FORMAT GPU_RGBA5551
+// TODO: see if this system is even needed anymore...
+#define JDL_MAXOBJECTS 8192 // Default is 4096, and 8192 is extremely pushing it
+#define JDL_FLUSHOBJECTS (JDL_MAXOBJECTS - 100)
 
 typedef struct {
   Tex3DS_SubTexture subtex; // Simple structures
   C3D_Tex texture;
   C2D_Image image;
   C3D_RenderTarget *target; // Actual data?
-} LayerData;
-
-void layer_create(LayerData * layer, Tex3DS_SubTexture subtex);
-void layer_create_wh(LayerData * layer, int width, int height);
-void layer_free(LayerData * layer);
+} Layer_Hardware;
 
 typedef struct {
-  LayerData * layers;
-  int layer_count;
-  LineScanner scanner;
-} LayerPackItem;
+  u32 * buf;
+  u16 width;
+  u16 height;
+} Layer_Software;
 
-// A sliding window of layer packs, each of which can represent a page
+typedef union {
+  Layer_Hardware hw;
+  Layer_Software sf;
+} LayerTexture;
+
+#define JDL_TYPE_HARDWARE 0
+#define JDL_TYPE_SOFTWARE 1
+
+// A layer is a single texture that can accept lines (and maybe other things) to draw.
 typedef struct {
-  LayerData * master_layers;
-  LayerPackItem * slots;
-  int slot_count;   // You may not use all the slots (texture mem)
-  int window_head;
-  int total_layers;
-} LayerPackWindow;
-
-int layerpackwindow_init(LayerPackWindow * window, MaxLayerInfo layer_info, int layer_count, char * start, char ** end);
-void layerpackwindow_free(LayerPackWindow * window);
-void layerpackwindow_next(LayerPackWindow * window, int increment);
-// Force the head slot to become invalidated, which SHOULD trigger a reset. We separate reset from
-// invalidation because reset requires us to be in a drawing state (Citro etc)
-void layerpackwindow_invalidate_head(LayerPackWindow * window);
-LayerPackItem * layerpackwindow_at(LayerPackWindow * window, int offset);
-
-typedef struct {
-  u32 draw_cmd_count;
-  u32 obj_limit;
-  u32 obj_safety;
-} CitroTracking;
-
-void citrotracking_init(CitroTracking * ct);
-u32 citrotracking_flush(CitroTracking * ct, bool force);
+  LayerTexture texture;
+  u16 width;    // APPARENT width (requested)
+  u16 height;   // APPARENT height (requested)
+  u8 type;
+} Layer;
 
 typedef struct {
-  MaxLayerInfo * layer_info;
-  CitroTracking ct;
-  u32 * export_buffer; // a buffer of pixels to fill potentially
-} SolidRectState;
+  u32 color; // Must be pre-converted.
+  u16 x1, y1, x2, y2;
+  u8 width;
+} RenderLine;
 
-void solidrectstate_init(SolidRectState * srs);
+//void layer_create_wh(Layer * layer, int width, int height);
+int layer_init(Layer * layer, u16 width, u16 height, u8 type); //Tex3DS_SubTexture subtex);
+void layer_free(Layer * layer);
+void layer_realsize(Layer * layer, u16 * width, u16 * height);
+
+// WARN: sets target if hardware rendering, which is slow and flushes!
+void layer_drawlines(Layer * layer, RenderLine * lines, size_t count);
+// WARN: make sure you're in a render scene before clearing! Target not set...
+void layer_clear(Layer * layer, u32 color);
+
 
 #endif

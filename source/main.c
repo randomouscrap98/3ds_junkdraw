@@ -36,7 +36,7 @@ u32 __stacksize__ = 512 * 1024;
 #include "render_palette.h"
 #include "settings.h"
 #include "undo.h"
-#include "layer.h"
+#include "layer_system.h"
 #include "longflags.h"
 #include "digits.h"
 #include "metadata.h"
@@ -265,16 +265,12 @@ void _exp_layer_dt_func(float x, float y, u16 width, u32 color) {
   //  hopefully that's ok??
   u32 minx = x;
   u32 maxx = x + width;
-  if (minx < 0)
-    minx = 0;
-  if (maxx >= srs.layer_info->layer_width)
-    maxx = srs.layer_info->layer_width - 1;
+  if (minx < 0) minx = 0;
+  if (maxx >= srs.layer_info->layer_width) maxx = srs.layer_info->layer_width - 1;
   u32 miny = y;
   u32 maxy = y + width;
-  if (miny < 0)
-    miny = 0;
-  if (maxy >= srs.layer_info->layer_height)
-    maxy = srs.layer_info->layer_height - 1;
+  if (miny < 0) miny = 0;
+  if (maxy >= srs.layer_info->layer_height) maxy = srs.layer_info->layer_height - 1;
 
   for (u32 yi = miny; yi < maxy; yi++)
     for (u32 xi = minx; xi < maxx; xi++)

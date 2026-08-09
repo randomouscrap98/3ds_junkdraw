@@ -3,7 +3,7 @@
 
 #include "color.h"
 #include "input.h"
-#include "layer.h"
+#include "layer_system.h"
 #include <3ds.h>
 #include <citro2d.h>
 #include <citro3d.h>
