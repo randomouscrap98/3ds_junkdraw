@@ -8,9 +8,14 @@
 #define JDL_EDGEERROR 8
 #define JDL_EDGEBUF   10
 #define JDL_FORMAT GPU_RGBA5551
+#define JDL_MAXHWLAYERDIM 1024
+
 // TODO: see if this system is even needed anymore...
 #define JDL_MAXOBJECTS 8192 // Default is 4096, and 8192 is extremely pushing it
 #define JDL_FLUSHOBJECTS (JDL_MAXOBJECTS - 100)
+
+
+typedef u16 layerdim_t;
 
 typedef struct {
   Tex3DS_SubTexture subtex; // Simple structures
@@ -21,8 +26,8 @@ typedef struct {
 
 typedef struct {
   u32 * buf;
-  u16 width;
-  u16 height;
+  layerdim_t width;
+  layerdim_t height;
 } Layer_Software;
 
 typedef union {
@@ -39,8 +44,8 @@ typedef union {
 // the same lines, etc. 
 typedef struct {
   LayerTexture texture;
-  u16 width;    // APPARENT width (requested)
-  u16 height;   // APPARENT height (requested)
+  layerdim_t width;    // APPARENT width (requested)
+  layerdim_t height;   // APPARENT height (requested)
   u8 type;
 } Layer;
 
@@ -51,9 +56,11 @@ typedef struct {
 } RenderLine;
 
 //void layer_create_wh(Layer * layer, int width, int height);
-int layer_init(Layer * layer, u16 width, u16 height, u8 type); //Tex3DS_SubTexture subtex);
+int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type); //Tex3DS_SubTexture subtex);
 void layer_free(Layer * layer);
-void layer_realsize(Layer * layer, u16 * width, u16 * height);
+void layer_realsize(Layer * layer, layerdim_t * width, layerdim_t * height);
+size_t layer_pixelcount(Layer * layer);
+size_t layer_estimate_pixelcount(u8 type, layerdim_t width, layerdim_t height);
 
 // WARN: sets target if hardware rendering, which is slow and flushes!
 void layer_drawlines(Layer * layer, RenderLine * lines, size_t count);

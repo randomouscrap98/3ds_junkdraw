@@ -3,18 +3,29 @@
 
 #include <stdlib.h>
 
-int layer_init(Layer * layer, u16 width, u16 height, u8 type) {
+static Tex3DS_SubTexture layer_new_subtexture(layerdim_t width, layerdim_t height) {
+  return (Tex3DS_SubTexture) { 
+    next_power_of_2(width + JDL_EDGEBUF), 
+    next_power_of_2(height + JDL_EDGEBUF), 
+    0.0f, 1.0f, 1.0f, 0.0f 
+  };
+}
+
+int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type) {
   layer->type = type;
   layer->width = width;
   layer->height = height;
   if(type == JDL_TYPE_HARDWARE) {
-    Tex3DS_SubTexture subtex = { 
-      next_power_of_2(width + JDL_EDGEBUF), 
-      next_power_of_2(height + JDL_EDGEBUF), 
-      0.0f, 1.0f, 1.0f, 0.0f 
-    };
-    layer->texture.hw.subtex = subtex;
-    C3D_TexInitVRAM(&(layer->texture.hw.texture), subtex.width, subtex.height, JDL_FORMAT);
+    layer->texture.hw.subtex = layer_new_subtexture(width, height);
+    if(layer->texture.hw.subtex.width > JDL_MAXHWLAYERDIM || 
+       layer->texture.hw.subtex.height > JDL_MAXHWLAYERDIM) {
+      LOGDBG("ERR: HW LAYER TOO LARGE! MAX: %d", JDL_MAXHWLAYERDIM);
+      return 1;
+    }
+    C3D_TexInitVRAM(&(layer->texture.hw.texture), 
+                    layer->texture.hw.subtex.width, 
+                    layer->texture.hw.subtex.height, 
+                    JDL_FORMAT);
     layer->texture.hw.target = C3D_RenderTargetCreateFromTex(
       &(layer->texture.hw.texture), GPU_TEXFACE_2D, 0, -1);
     layer->texture.hw.image.tex = &(layer->texture.hw.texture);
@@ -33,7 +44,7 @@ int layer_init(Layer * layer, u16 width, u16 height, u8 type) {
   return 0;
 }
 
-void layer_realsize(Layer * layer, u16 * width, u16 * height) {
+void layer_realsize(Layer * layer, layerdim_t * width, layerdim_t * height) {
   if(layer->type == JDL_TYPE_HARDWARE) {
     *width = layer->texture.hw.subtex.width - JDL_EDGEBUF;
     *height = layer->texture.hw.subtex.height - JDL_EDGEBUF;
@@ -46,12 +57,31 @@ void layer_realsize(Layer * layer, u16 * width, u16 * height) {
   }
 }
 
+size_t layer_pixelcount(Layer * layer) {
+  if(layer->type == JDL_TYPE_HARDWARE) {
+    return layer->texture.hw.subtex.width * layer->texture.hw.subtex.height;
+  } else if(layer->type == JDL_TYPE_SOFTWARE) {
+    return layer->texture.sf.width * layer->texture.sf.height;
+  } 
+  return 0;
+}
+
+size_t layer_estimate_pixelcount(u8 type, layerdim_t width, layerdim_t height) {
+  if(type == JDL_TYPE_HARDWARE) {
+    Tex3DS_SubTexture subtex = layer_new_subtexture(width, height);
+    return subtex.width * subtex.height;
+  } else if(type == JDL_TYPE_SOFTWARE) {
+    return width * height;
+  } 
+  return 0;
+}
+
 void layer_clear(Layer * layer, u32 color) {
   if(layer->type == JDL_TYPE_HARDWARE) {
     C2D_TargetClear(layer->texture.hw.target, color);
   } else if(layer->type == JDL_TYPE_SOFTWARE) {
-    u32 max = layer->texture.sf.width * layer->texture.sf.height;
-    for(u32 i = 0; i < max; i++) {
+    size_t max = layer_pixelcount(layer);
+    for(size_t i = 0; i < max; i++) {
       layer->texture.sf.buf[i] = color;
     }
   }
@@ -144,7 +174,7 @@ void layer_drawlines(Layer * layer, RenderLine * lines, size_t count) {
 void layer_composite_onto(Layer * dest, Layer * source) {
   if(dest->type == JDL_TYPE_SOFTWARE && source->type == JDL_TYPE_SOFTWARE &&
     dest->width == source->width && dest->height == source->height) {
-    size_t max = dest->width * dest->height;
+    size_t max = layer_pixelcount(dest);
     for (size_t i = 0; i < max; i++) {
       // TODO: CAREFUL! For speed, we check for full 0, when only alpha matters!
       if (source->texture.sf.buf[i]) {
