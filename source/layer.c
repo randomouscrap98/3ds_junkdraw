@@ -139,6 +139,7 @@ static inline void layer_drawlines_hardware(Layer * layer, RenderLine * lines, s
                         0.5, lines[i].width, lines[i].width, lines[i].color);
       if(++command_count >= JDL_FLUSHOBJECTS) {
         //LOGTRACE("FLUSHING %ld DRAW CMDS PREMATURELY\n", ct->draw_cmd_count); 
+        // ALTERNATIVE: Try C2D_Flush()? That might be why it flashes all weird...
         C3D_FrameEnd(0);
         C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
         command_count = 0;

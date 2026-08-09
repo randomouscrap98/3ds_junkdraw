@@ -31,16 +31,16 @@ include $(DEVKITARM)/3ds_rules
 #     - icon.png
 #     - <libctru folder>/default_icon.png
 #---------------------------------------------------------------------------------
-TARGET		:=	$(notdir $(CURDIR))
+TARGET		:=	$(notdir $(CURDIR))_test
 BUILD		:=	build
-SOURCES		:=	source source_app
+SOURCES		:=	source source_test
 DATA		:=	data
 INCLUDES	:=	include source
 GRAPHICS	:=	gfx
 ROMFS		:=	romfs
 GFXBUILD	:=	$(ROMFS)/gfx
-APP_TITLE := Junk Draw
-APP_DESCRIPTION := Basic paginated drawing program
+APP_TITLE := Junk Draw Test
+APP_DESCRIPTION := Tests for Junk Draw
 APP_AUTHOR := haloopdy
 
 #---------------------------------------------------------------------------------
@@ -50,8 +50,8 @@ APP_VERSION_MAJOR	:=	0
 APP_VERSION_MINOR	:=	5
 APP_VERSION_MICRO	:=	1
 APP_VERSION_STRING	:=	$(APP_VERSION_MAJOR).$(APP_VERSION_MINOR).$(APP_VERSION_MICRO)
-PRODUCT_CODE	:=	CTR-HALJ
-UNIQUE_ID		:=	0xBBAF0
+PRODUCT_CODE	:=	CTR-HALJT
+UNIQUE_ID		:=	0xBBAF1
 
 BANNER_AUDIO	:=	meta/banner.wav
 BANNER_IMAGE	:=	meta/banner.png
