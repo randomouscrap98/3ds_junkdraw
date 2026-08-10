@@ -1,4 +1,5 @@
 #include "layer.h"
+#include "3ds/gpu/gx.h"
 #include "utils.h"
 
 #include <stdlib.h>
@@ -33,7 +34,8 @@ int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type) {
   } else if(type == JDL_TYPE_SOFTWARE) {
     layer->texture.sf.width = width;
     layer->texture.sf.height = height;
-    layer->texture.sf.buf = malloc(sizeof(u32) * width * height);
+    // WARN: will linearAlloc become a problem? Something something fragmented...
+    layer->texture.sf.buf = linearAlloc(sizeof(u32) * width * height);
     if(!layer->texture.sf.buf) {
       return 1;
     }
@@ -92,8 +94,76 @@ void layer_free(Layer * layer) {
     C3D_RenderTargetDelete(layer->texture.hw.target);
     C3D_TexDelete(&layer->texture.hw.texture);
   } else if(layer->type == JDL_TYPE_SOFTWARE) {
-    free(layer->texture.sf.buf);
+    linearFree(layer->texture.sf.buf);
   } 
+}
+
+// Copy from one layer into another. Can perform conversions while copying.
+// CAREFUL: will begin a scene / flush etc to copy vram!
+int layer_copy(Layer * dest, Layer * source, u8 type) {
+  // Simple init the dest texture
+  layer_init(dest, source->width, source->height, type);
+  if(dest->type == source->type) {
+    if(dest->type == JDL_TYPE_HARDWARE) {
+      // VRAM to VRAM Copy
+      C2D_SceneBegin(dest->texture.hw.target);
+      C2D_DrawImageAt(source->texture.hw.image, 0.0f, 0.0f, 0.5f, NULL, 1.0f, 1.0f);
+    } else if(dest->type == JDL_TYPE_SOFTWARE) {
+      // We can straight copy the whole pix buffer
+      memcpy(dest->texture.sf.buf, source->texture.sf.buf, 
+             layer_pixelcount(source) * sizeof(u32));
+    } else {
+      LOGDBG("ERR: Unsupported texture type!");
+      return 1;
+    }
+  } else {
+    if(dest->type == JDL_TYPE_HARDWARE && source->type == JDL_TYPE_SOFTWARE) {
+      size_t sourcepixelcount = layer_pixelcount(source);
+      // Flush cache for the source buffer in FCRAM
+      GSPGPU_FlushDataCache(source->texture.sf.buf, sourcepixelcount * sizeof(u32));
+
+      for(size_t i = 0; i < sourcepixelcount; i++) {
+        source->texture.sf.buf[i] = JD_REVERSE32(source->texture.sf.buf[i]);
+      }
+
+      // Perform Display Transfer from FCRAM (RGBA8) to VRAM (RGBA5551)
+      C3D_SyncDisplayTransfer(
+          (u32*)source->texture.sf.buf, GX_BUFFER_DIM(source->texture.sf.width, source->texture.sf.height),
+          (u32*)dest->texture.hw.texture.data,  GX_BUFFER_DIM(
+            dest->texture.hw.subtex.width, dest->texture.hw.subtex.height),
+          (GX_TRANSFER_OUT_TILED(1) | 
+           GX_TRANSFER_RAW_COPY(0) |
+           GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8) | 
+           GX_TRANSFER_OUT_FORMAT(JDL_FORMAT_TRANSFER) |
+           GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO))
+      );
+
+      for(size_t i = 0; i < sourcepixelcount; i++) {
+        source->texture.sf.buf[i] = JD_REVERSE32(source->texture.sf.buf[i]);
+      }
+    } else if(dest->type == JDL_TYPE_SOFTWARE && source->type == JDL_TYPE_HARDWARE) {
+      // TODO: pull texture data out of vram into software buffer
+      size_t destpixelcount = layer_pixelcount(dest);
+      // Perform Display Transfer from FCRAM (RGBA8) to VRAM (RGBA5551)
+      C3D_SyncDisplayTransfer(
+          (u32*)source->texture.hw.texture.data,  GX_BUFFER_DIM(
+            source->texture.hw.subtex.width, source->texture.hw.subtex.height),
+          (u32*)dest->texture.sf.buf, GX_BUFFER_DIM(
+            dest->texture.sf.width, dest->texture.sf.height),
+          (GX_TRANSFER_OUT_TILED(0) | 
+           GX_TRANSFER_RAW_COPY(0) |
+           GX_TRANSFER_IN_FORMAT(JDL_FORMAT_TRANSFER) | 
+           GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGBA8) |
+           GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO))
+      );
+      // Flush cache for the source buffer in FCRAM
+      GSPGPU_FlushDataCache(dest->texture.sf.buf, destpixelcount * sizeof(u32));
+    } else {
+      LOGDBG("ERR: Unsupported layer conversion type!");
+      return 1;
+    }
+  }
+  return 0;
 }
 
 #define BRESENHAM_PRE(rl, layer) { \

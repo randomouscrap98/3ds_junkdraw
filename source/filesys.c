@@ -1,5 +1,5 @@
 #include "filesys.h"
-#include "log.h"
+#include "utils.h"
 
 #include <dirent.h>
 #include <errno.h>

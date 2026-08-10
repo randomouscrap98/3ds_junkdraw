@@ -13,8 +13,11 @@ u32 __stacksize__ = 512 * 1024;
 #include <time.h>
 #include <string.h>
 
+#include "color.h"
+#include "layer.h"
 #include "edit.h"
 #include "datacontainer.h"
+#include "filesys.h"
 
 #define BREPEAT_DELAY 20
 #define BREPEAT_INTERVAL 7
@@ -376,6 +379,92 @@ error:
   return 1;
 }
 
+
+
+
+int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
+  LOGTRACE("Starting Layer Software-to-Hardware Display Test...");
+
+  Layer sw_layer;
+  Layer hw_layer;
+  int ret = 0;
+
+  // 1. Initialize Software Layer (320x240 for 3DS Bottom Screen)
+  if (layer_init(&sw_layer, 320, 240, JDL_TYPE_SOFTWARE) != 0) {
+    LOGDBG("ERR: Failed to initialize software layer");
+    return 1;
+  }
+
+  // Clear software layer to fully opaque dark gray
+  layer_clear(&sw_layer, rgb24_to_rgba32c(0x444444));
+
+  // 2. Define lines to draw numbers "1" and "2"
+  RenderLine lines[] = {
+    // Digit "1" (Cyan) - X offset ~ 100
+    { .x1 = 110, .y1 = 80,  .x2 = 110, .y2 = 160, .width = 4, .color = rgb24_to_rgba32c(0x00FFFF) },
+
+    // Digit "2" (inverted top to bottom, oops) (Yellow) - X offset ~ 180
+    { .x1 = 180, .y1 = 80,  .x2 = 220, .y2 = 80,  .width = 4, 
+      .color = rgb24_to_rgba32c(0xFFFF00) }, // Top
+    { .x1 = 220, .y1 = 80,  .x2 = 220, .y2 = 120, .width = 4, 
+      .color = rgb24_to_rgba32c(0xFFFF00) }, // Top Right
+    { .x1 = 220, .y1 = 120, .x2 = 180, .y2 = 120, .width = 4, 
+      .color = rgb24_to_rgba32c(0xFFFF00) }, // Middle
+    { .x1 = 180, .y1 = 120, .x2 = 180, .y2 = 160, .width = 4, 
+      .color = rgb24_to_rgba32c(0xFFFF00) }, // Bottom Left
+    { .x1 = 180, .y1 = 160, .x2 = 220, .y2 = 160, .width = 4, 
+      .color = rgb24_to_rgba32c(0xFFFF00) }  // Bottom
+  };
+
+  size_t line_count = sizeof(lines) / sizeof(lines[0]);
+
+  // Draw lines onto the SOFTWARE layer
+  layer_drawlines(&sw_layer, lines, line_count);
+
+  // 3. Copy/Convert Software layer -> Hardware layer (VRAM)
+  if (layer_copy(&hw_layer, &sw_layer, JDL_TYPE_HARDWARE) != 0) {
+    LOGDBG("ERR: Failed to copy software layer to hardware layer");
+    layer_free(&sw_layer);
+    return 1;
+  }
+
+  char outpath[80] = "/3dsjunkdrawtest1.png";
+  LOGTRACE("Writing png to %s", outpath);
+
+  // Export the png
+  write_citropng(sw_layer.texture.sf.buf, sw_layer.texture.sf.width, 
+                 sw_layer.texture.sf.height, outpath);
+
+  LOGTRACE("Render ready! Press A on the 3DS to exit test...");
+
+  // 4. Render loop: Draw hardware layer image to bottom screen until 'A' is pressed
+  while (aptMainLoop()) {
+    hidScanInput();
+    u32 kDown = hidKeysDown();
+
+    if (kDown & KEY_A) {
+      LOGTRACE("A pressed, exiting display test.");
+      break;
+    }
+
+    C2D_TargetClear(bottom_target, C2D_Color32(0, 0, 0, 255));
+    C2D_SceneBegin(bottom_target);
+
+    // Draw the converted hardware layer texture onto the screen target
+    C2D_DrawImageAt(hw_layer.texture.hw.image, 0.0f, 0.0f, 0.5f, NULL, 1.0f, 1.0f);
+
+    C3D_FrameEnd(0);
+    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+  }
+
+  // 5. Cleanup resources
+  layer_free(&hw_layer);
+  layer_free(&sw_layer);
+
+  LOGDBG("PASS: Layer display test completed successfully");
+  return ret;
+}
+
 // -- MENU/PRINT STUFF --
 
 int main(int argc, char **argv) {
@@ -402,6 +491,10 @@ int main(int argc, char **argv) {
   }
   if(run_edit_test_suite()) {
     LOGDBG("EDIT FAILED");
+    goto SKIPTESTS;
+  }
+  if(test_layer_sw_to_hw_display(screen)) {
+    LOGDBG("LAYER FAILED");
     goto SKIPTESTS;
   }
 

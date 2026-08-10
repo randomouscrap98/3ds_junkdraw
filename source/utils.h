@@ -8,6 +8,13 @@
 #define JD_MIN(a, b) ((a) <= (b) ? (a) : (b))
 #define JD_MAX(a, b) ((a) >= (b) ? (a) : (b))
 
+#define JD_REVERSE32(val) ( \
+    (((val) & 0x000000FFU) << 24) | \
+    (((val) & 0x0000FF00U) << 8)  | \
+    (((val) & 0x00FF0000U) >> 8)  | \
+    (((val) & 0xFF000000U) >> 24)   \
+)
+
 static inline u32 next_power_of_2(u32 v) {
   v--;
   v |= v >> 1;
