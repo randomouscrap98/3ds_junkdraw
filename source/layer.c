@@ -101,10 +101,10 @@ void layer_free(Layer * layer) {
 }
 
 // Copy from one layer into another. Can perform conversions while copying.
-// CAREFUL: will begin a scene / flush etc to copy vram!
-int layer_copy(Layer * dest, Layer * source, u8 type) {
+// CAREFUL: will begin a scene / flush etc to copy vram! Does NOT init!!
+int layer_copy(Layer * dest, Layer * source) {
   // Simple init the dest texture
-  layer_init(dest, source->width, source->height, type);
+  // layer_init(dest, source->width, source->height, type);
   if(dest->type == source->type) {
     if(dest->type == JDL_TYPE_HARDWARE) {
       // VRAM to VRAM Copy
@@ -120,16 +120,9 @@ int layer_copy(Layer * dest, Layer * source, u8 type) {
     }
   } else {
     if(dest->type == JDL_TYPE_HARDWARE && source->type == JDL_TYPE_SOFTWARE) {
-      // TickCounter timer;
-      // osTickCounterStart(&timer);
       size_t sourcepixelcount = layer_pixelcount(source);
       // Flush cache for the source buffer in FCRAM
       GSPGPU_FlushDataCache(source->texture.sf.buf, sourcepixelcount * sizeof(u32));
-
-      // for(size_t i = 0; i < sourcepixelcount; i++) {
-      //   source->texture.sf.buf[i] = JD_REVERSE32(source->texture.sf.buf[i]);
-      // }
-
       // Perform Display Transfer from FCRAM (RGBA8) to VRAM (RGBA5551)
       C3D_SyncDisplayTransfer(
           (u32*)source->texture.sf.buf, GX_BUFFER_DIM(source->texture.sf.width, source->texture.sf.height),
@@ -141,13 +134,6 @@ int layer_copy(Layer * dest, Layer * source, u8 type) {
            GX_TRANSFER_OUT_FORMAT(JDL_FORMAT_TRANSFER) |
            GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO))
       );
-
-      // for(size_t i = 0; i < sourcepixelcount; i++) {
-      //   source->texture.sf.buf[i] = JD_REVERSE32(source->texture.sf.buf[i]);
-      // }
-      // osTickCounterUpdate(&timer);
-      // double ms = osTickCounterRead(&timer);
-      // printf("TIME: %0.3fms\n", ms);
     } else if(dest->type == JDL_TYPE_SOFTWARE && source->type == JDL_TYPE_HARDWARE) {
       // TODO: pull texture data out of vram into software buffer
       size_t destpixelcount = layer_pixelcount(dest);

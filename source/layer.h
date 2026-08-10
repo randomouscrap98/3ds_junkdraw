@@ -65,7 +65,7 @@ size_t layer_estimate_pixelcount(u8 type, layerdim_t width, layerdim_t height);
 
 // Copy from one layer into another. Can perform conversions while copying.
 // CAREFUL: will begin a scene / flush etc to copy vram!
-int layer_copy(Layer * dest, Layer * source, u8 type);
+int layer_copy(Layer * dest, Layer * source);
 
 // WARN: sets target if hardware rendering, which is slow and flushes!
 void layer_drawlines(Layer * layer, RenderLine * lines, size_t count);

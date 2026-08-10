@@ -10,6 +10,8 @@ char *read_file(const char *filename, char *container, u32 maxread);
 
 // Returns 0 on success
 int write_file(const char *filename, const char *data);
-int write_citropng(u32 *rawdata, u16 width, u16 height, char *filepath);
+// Write a big-endian png of width and height to path. Can temporarily reverse the 
+// bytes if the array is little endian (it's slow)
+int write_citropng(u32 *rawdata, u16 width, u16 height, char *filepath, u8 reverse);
 
 #endif

@@ -396,6 +396,12 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
     return 1;
   }
 
+  if (layer_init(&hw_layer, 320, 240, JDL_TYPE_HARDWARE) != 0) {
+    LOGDBG("ERR: Failed to initialize hardware layer");
+    layer_free(&sw_layer);
+    return 1;
+  }
+
   // Clear software layer to fully opaque dark gray
   layer_clear(&sw_layer, rgb24_to_rgba32c(0x444444));
 
@@ -428,10 +434,9 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   // printf("TIMEDRAW: %0.3fms\n", ms);
 
   // 3. Copy/Convert Software layer -> Hardware layer (VRAM)
-  if (layer_copy(&hw_layer, &sw_layer, JDL_TYPE_HARDWARE) != 0) {
+  if (layer_copy(&hw_layer, &sw_layer) != 0) {
     LOGDBG("ERR: Failed to copy software layer to hardware layer");
-    layer_free(&sw_layer);
-    return 1;
+    goto ERROR;
   }
 
   char outpath[80] = "/3dsjunkdrawtest1.png";
@@ -439,7 +444,7 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
 
   // Export the png
   write_citropng(sw_layer.texture.sf.buf, sw_layer.texture.sf.width, 
-                 sw_layer.texture.sf.height, outpath);
+                 sw_layer.texture.sf.height, outpath, 1);
 
   LOGTRACE("Render ready! Press A on the 3DS to exit test...");
 
@@ -463,12 +468,41 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
   }
 
+  // Make a really obvious clear color on sw
+  layer_clear(&sw_layer, rgb24_to_rgba32c(0xFF0000));
+
+  // Go back and forth a couple times, see if colors decay a bit
+  for(int i = 2; i < 8; i+=1) {
+
+    if (layer_copy(&sw_layer, &hw_layer) != 0) {
+      LOGDBG("ERR: Failed to copy hardware layer to software layer");
+      goto ERROR;
+    }
+
+    sprintf(outpath, "/3dsjunkdrawtest%d.png", i);
+    LOGTRACE("Writing png to %s", outpath);
+
+    // Export the png
+    write_citropng(sw_layer.texture.sf.buf, sw_layer.texture.sf.width, 
+                   sw_layer.texture.sf.height, outpath, 1);
+
+    if (layer_copy(&hw_layer, &sw_layer) != 0) {
+      LOGDBG("ERR: Failed to copy software layer to hardware layer %d", i);
+      goto ERROR;
+    }
+  }
+
   // 5. Cleanup resources
   layer_free(&hw_layer);
   layer_free(&sw_layer);
 
   LOGDBG("PASS: Layer display test completed successfully");
   return ret;
+
+ERROR:
+  layer_free(&hw_layer);
+  layer_free(&sw_layer);
+  return 1;
 }
 
 // -- MENU/PRINT STUFF --
@@ -511,10 +545,10 @@ SKIPTESTS:;
   while (aptMainLoop()) {
     hidScanInput();
 
-    u32 kDown = hidKeysDown();
     u32 kUp = hidKeysUp();
-    u32 kRepeat = hidKeysDownRepeat();
-    u32 kHeld = hidKeysHeld();
+    //u32 kDown = hidKeysDown();
+    //u32 kRepeat = hidKeysDownRepeat();
+    //u32 kHeld = hidKeysHeld();
     circlePosition pos;
     touchPosition current_touch;
     hidTouchRead(&current_touch);

@@ -136,10 +136,9 @@ char *read_file(const char *filename, char *container, u32 maxread) {
 #define MYPNG_FORMAT PNG_COLOR_TYPE_RGBA
 #define MYPNG_BYTESPER 4
 
-// No, the data must be in a linear array, row first, of PNG formatted RGBA
-// bytes. Ironically, citro-formatted colors on the 3ds are already like this,
-// as the 3ds is little endian just like png
-int write_citropng(u32 *rawdata, u16 width, u16 height, char *filepath) {
+// Write a big-endian png of width and height to path. Can temporarily reverse the 
+// bytes if the array is little endian (it's slow)
+int write_citropng(u32 *rawdata, u16 width, u16 height, char *filepath, u8 reverse) {
   // A lot of this is taken from
   // http://www.labbookpages.co.uk/software/imgProc/libPNG.html
   int code = 0;
@@ -190,7 +189,19 @@ int write_citropng(u32 *rawdata, u16 width, u16 height, char *filepath) {
 
   // Write image data
   for (u32 y = 0; y < height; y++) {
+    if(reverse) {
+      for(u32 x = 0; x < width; x++) {
+        u32 pix = x + y * width;
+        rawdata[pix] = JD_REVERSE32(rawdata[pix]);
+      }
+    }
     png_write_row(png_ptr, (png_bytep)(rawdata + y * width));
+    if(reverse) {
+      for(u32 x = 0; x < width; x++) {
+        u32 pix = x + y * width;
+        rawdata[pix] = JD_REVERSE32(rawdata[pix]);
+      }
+    }
   }
 
   // End write
