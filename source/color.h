@@ -4,6 +4,12 @@
 #include <3ds.h>
 #include <string.h>
 
+// NOTE: png and other graphics all use big endian, which is what rgb32c is when
+// you see it. The 3ds drawing functions like DrawRectSolid also use big endian 
+// color. So does png export. However, the 3ds is a little endian system and the
+// gpu sync functions expect your buffer to be little endian. Just something to 
+// consider...
+
 #define COLORSYSMODE_PALETTE 0
 #define COLORSYSMODE_RGB 1
 #define COLORSYSMODE_AUTOPALETTE 2

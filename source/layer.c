@@ -83,8 +83,10 @@ void layer_clear(Layer * layer, u32 color) {
     C2D_TargetClear(layer->texture.hw.target, color);
   } else if(layer->type == JDL_TYPE_SOFTWARE) {
     size_t max = layer_pixelcount(layer);
+    // reverse color for DMA transfer speed
+    u32 revcolor = JD_REVERSE32(color);
     for(size_t i = 0; i < max; i++) {
-      layer->texture.sf.buf[i] = color;
+      layer->texture.sf.buf[i] = revcolor;
     }
   }
 }
@@ -118,13 +120,15 @@ int layer_copy(Layer * dest, Layer * source, u8 type) {
     }
   } else {
     if(dest->type == JDL_TYPE_HARDWARE && source->type == JDL_TYPE_SOFTWARE) {
+      // TickCounter timer;
+      // osTickCounterStart(&timer);
       size_t sourcepixelcount = layer_pixelcount(source);
       // Flush cache for the source buffer in FCRAM
       GSPGPU_FlushDataCache(source->texture.sf.buf, sourcepixelcount * sizeof(u32));
 
-      for(size_t i = 0; i < sourcepixelcount; i++) {
-        source->texture.sf.buf[i] = JD_REVERSE32(source->texture.sf.buf[i]);
-      }
+      // for(size_t i = 0; i < sourcepixelcount; i++) {
+      //   source->texture.sf.buf[i] = JD_REVERSE32(source->texture.sf.buf[i]);
+      // }
 
       // Perform Display Transfer from FCRAM (RGBA8) to VRAM (RGBA5551)
       C3D_SyncDisplayTransfer(
@@ -138,9 +142,12 @@ int layer_copy(Layer * dest, Layer * source, u8 type) {
            GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO))
       );
 
-      for(size_t i = 0; i < sourcepixelcount; i++) {
-        source->texture.sf.buf[i] = JD_REVERSE32(source->texture.sf.buf[i]);
-      }
+      // for(size_t i = 0; i < sourcepixelcount; i++) {
+      //   source->texture.sf.buf[i] = JD_REVERSE32(source->texture.sf.buf[i]);
+      // }
+      // osTickCounterUpdate(&timer);
+      // double ms = osTickCounterRead(&timer);
+      // printf("TIME: %0.3fms\n", ms);
     } else if(dest->type == JDL_TYPE_SOFTWARE && source->type == JDL_TYPE_HARDWARE) {
       // TODO: pull texture data out of vram into software buffer
       size_t destpixelcount = layer_pixelcount(dest);
@@ -221,6 +228,8 @@ static inline void layer_drawlines_hardware(Layer * layer, RenderLine * lines, s
 
 static inline void layer_drawlines_software(Layer * layer, RenderLine * lines, size_t count) {
   for(size_t i = 0; i < count; i++) {
+    // Store reversed so DMA transfer is fast
+    u32 color = JD_REVERSE32(lines[i].color);
     BRESENHAM_PRE(lines[i], layer) {
       // We know we reject stuff on the left side for safety reasons, but the right
       // side is allowed to run off, so we must clamp
@@ -228,7 +237,7 @@ static inline void layer_drawlines_software(Layer * layer, RenderLine * lines, s
       u32 maxy = JD_MIN(lines[i].y1 + lines[i].width, layer->texture.sf.height);
       for (u32 yi = lines[i].y1; yi < maxy; yi++)
         for (u32 xi = lines[i].x1; xi < maxx; xi++)
-          layer->texture.sf.buf[yi * layer->texture.sf.width + xi] = lines[i].color;
+          layer->texture.sf.buf[yi * layer->texture.sf.width + xi] = color;
     }
     BRESENHAM_POST(lines[i]);
   }

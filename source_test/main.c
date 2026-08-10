@@ -1,3 +1,4 @@
+#include "3ds/os.h"
 #include <3ds.h>
 
 u32 __stacksize__ = 512 * 1024;
@@ -418,8 +419,13 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
 
   size_t line_count = sizeof(lines) / sizeof(lines[0]);
 
+  //TickCounter timer;
+  //osTickCounterStart(&timer);
   // Draw lines onto the SOFTWARE layer
   layer_drawlines(&sw_layer, lines, line_count);
+  // osTickCounterUpdate(&timer);
+  // double ms = osTickCounterRead(&timer);
+  // printf("TIMEDRAW: %0.3fms\n", ms);
 
   // 3. Copy/Convert Software layer -> Hardware layer (VRAM)
   if (layer_copy(&hw_layer, &sw_layer, JDL_TYPE_HARDWARE) != 0) {
