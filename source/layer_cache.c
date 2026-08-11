@@ -119,20 +119,6 @@ static void layerwindowunit_render(LayerWindowUnit * unit, LineConverter * pendi
   }
 }
 
-// // Pull up to max_draw out of the current pending line into the drawlines vector. Returns
-// // the amount pulled into the array. Sorts the lines into the proper layer vector
-// static inline size_t layerwindow_dump_pending(LayerWindow * lw, size_t max_draw) {
-//   size_t pull_count = JD_MIN(max_draw, lw->pending.length - lw->pending_next);
-//   linecontainer_to_renderlines(&lw->pending, lw->pending_next, pull_count, 
-//                                lw->drawlines.array + lw->pending.layer);
-//   lw->pending_next += pull_count;
-//   max_draw -= pull_count;
-//   if(lw->pending_next >= lw->pending.length) {
-//     layerwindow_reset_pending(lw);
-//   }
-//   return pull_count;
-// }
-
 int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, page_t page, page_t offset) {
   page_t increment = offset < 0 ? -1 : 1;
   // Can't wrap around multiple times, that's bad. Offset is inclusive! 0 = pull one page!
@@ -146,6 +132,7 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, page_t 
     if(lw->units[unit].scanner.page != pg) {
       LOGTRC("Resetting page unit %d (pg %d)", unit, pg);
       layerwindow_reset_unit(lw, unit);
+      lw->units[unit].scanner.page = pg;
     }
   }
   // Clear all the layer drawlines for safety (shouldn't be anything left but...)
@@ -153,7 +140,7 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, page_t 
   // For simplicity: if we still have a pending unit, clear that out first
   if(lw->pending_unit) {
     max_draw -= lineconverter_convert(&lw->pending, max_draw);
-    // ALWAYS render what we pulled out
+    // ALWAYS render what we pulled out (also clears converted lines)
     layerwindowunit_render(lw->pending_unit, &lw->pending, 1);
     // No use continuing... we already ran out of draw calls
     if(max_draw == 0) {
@@ -170,52 +157,24 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, page_t 
     lw->pending_unit = lw->units + JDLC_UNIT(lw, pg);
     // Skip a lot of work if we literally have nothing...
     if(datascanner_at_end(&lw->pending_unit->scanner)) { continue; }
-    // Begin pulling out whole strokes
+    // Begin pulling out whole strokes on given page
     while(datascanner_next_loop(&lw->pending_unit->scanner, &dsr)) {
-      // Convert what we have
       lineconverter_reset_pending(&lw->pending);
       if(datascannerresult_parseline(&dsr, &lw->pending.pending)) {
         LOGWRN("BAD STROKE, exit render early");
         break;
       }
+      // This will either convert the entire stroke or not. We exit
+      // early if it could not convert the whole thing (otherwise we
+      // lose lines!)
       max_draw -= lineconverter_convert(&lw->pending, max_draw);
-      // Don't keep pulling strokes if we're out of lines to store
-      if(max_draw <= 0) { break; }
+      if(!lineconverter_done(&lw->pending)) { break; }
     }
     // Render what we got before moving on to the next page
     layerwindowunit_render(lw->pending_unit, &lw->pending, 1);
     // NEED to break out early to preserve pending unit!
     if(max_draw <= 0) { break; }
   }
-  // // Now draw as much as possible from pages in order from user's current page then going backwards.
-  // while(max_draw > 0) {
-  //   // No target? Move onto the next one, starting with user current requested page
-  //   if(!lw->pending_unit) {
-  //     // Already past the last page? oh well, nothing to do
-  //     if(page == end) { break; }
-  //     lw->pending_unit = lw->units + JDLC_UNIT(lw, page);
-  //     page += increment;
-  //   }
-  //   max_draw -= lineconverter_convert(&lw->pending, max_draw);
-  //   // It is OK to exit early: the next time we call we will simply convert nothing on first loop
-  //   if(max_draw <= 0) {
-  //     layerwindowunit_render(lw->pending_unit, &lw->pending, 1);
-  //     break;
-  //   }
-  //   // Nothing left to convert in current batch (stroke)
-  //   if(lineconverter_done(&lw->pending)) {
-  //     lineconverter_reset_pending(&lw->pending);
-  //     if(skip_first_repull || !datascanner_next_loop(&lw->pending_unit->scanner, &dsr)) {
-  //       // On to the next, render what we have. The datascanner had nothing or 
-  //       // we're skipping first repull (and not scanning)
-  //       layerwindowunit_render(lw->pending_unit, &lw->pending, 1);
-  //       lw->pending_unit = NULL;
-  //       skip_first_repull = 0;
-  //     } else {
-  //       // We were able to rescan,
-  //     }
-  //   }
-  // }
   return 0;
 }
 
