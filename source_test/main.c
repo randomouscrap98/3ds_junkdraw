@@ -257,7 +257,7 @@ error:
 
 
 // Helper function to append a sample stroke to a container on a specified page
-static int helper_add_sample_stroke(DataContainer *dc, page_t page, color_t color) {
+static int helper_add_sample_stroke(DataContainer *dc, page_t page, u16 color) {
   LineContainer lc;
   if (linecontainer_init_stroke(&lc) != 0) return 1;
 
@@ -279,7 +279,7 @@ static int helper_add_sample_stroke(DataContainer *dc, page_t page, color_t colo
 
 // Helper function to count strokes and sum colors on a given page
 static int helper_check_page_strokes(DataContainer *dc, page_t page, 
-                                     u32 *out_count, color_t *out_color_sum) {
+                                     u32 *out_count, u16 *out_color_sum) {
   LineContainer lc;
   if (linecontainer_init_stroke(&lc) != 0) return 1;
 
@@ -313,7 +313,7 @@ int run_edit_test_suite(void) {
   }
 
   u32 count = 0;
-  color_t color_sum = 0;
+  u16 color_sum = 0;
 
   // Populate initial data: Page 0 (color 0x1111), Page 1 (color 0x2222)
   if (helper_add_sample_stroke(&dc, 0, 0x1111) != 0 ||
@@ -525,6 +525,21 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   // SPECIFICALLY use the old function!!!!
   if(swcolor != basecolor) {
     LOGERR("Cyan mismatches base color!");
+    goto ERROR;
+  }
+
+  swcolor = layer_querycolor(&sw_layer, 180, 80);
+  hwcolor = layer_querycolor(&hw_layer, 180, 80);
+  basecolor = rgb24_to_rgba32c(0xFFFF00);
+  LOGTRC("SWCOL: %08X HWCOL: %08X BCOL: %08X", swcolor, hwcolor, basecolor);
+
+  if(swcolor != hwcolor) {
+    LOGERR("Yellow soft/hard mismatches!");
+    goto ERROR;
+  }
+  // SPECIFICALLY use the old function!!!!
+  if(swcolor != basecolor) {
+    LOGERR("CYellow mismatches base color!");
     goto ERROR;
   }
 

@@ -6,7 +6,7 @@
 // These types are defined here because it is up to the data
 // container how big/etc these types ultimately are
 typedef s16 page_t;
-typedef u16 color_t;
+// typedef u16 color_t;
 typedef s8 resolutionid_t;
 typedef s8 onion_t;
 typedef s8 layer_t;
@@ -50,7 +50,7 @@ typedef u16 lineidx_t;
 
 typedef struct {
   resolutionid_t resolution_id;
-  color_t bgcolor;
+  u16 bgcolor;
   layer_t layer_count;
   onion_t onion_count;
 } DataHeader;
@@ -91,7 +91,7 @@ typedef struct {
    u16 capacity;
    u16 length;
    page_t page;
-   color_t color;
+   u16 color;
    style_t style;
    layer_t layer;
    width_t width;
@@ -128,6 +128,7 @@ DataScannerResult datascanner_next(DataScanner * ds);
 // Useful for loop: scan while strokes are found
 int datascanner_next_loop(DataScanner * ds, DataScannerResult * dsr);
 int datascanner_at_end(DataScanner * ds);
+void datascanner_reset(DataScanner * ds);
 
 void datascannerresult_overwritepage(DataScannerResult * dsr, page_t page);
 int datascannerresult_parseline(DataScannerResult * dsr, LineContainer * lc);

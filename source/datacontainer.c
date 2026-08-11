@@ -424,6 +424,10 @@ int datascanner_next_loop(DataScanner * ds, DataScannerResult * dsr) {
   return dsr->stroke_start != NULL;
 }
 
+void datascanner_reset(DataScanner * ds) {
+  ds->current = ds->parent->start;
+}
+
 int datascanner_at_end(DataScanner * ds) {
   return ds->current >= ds->parent->end;
 }

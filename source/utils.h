@@ -73,23 +73,23 @@ typedef struct {
 
 // Calculates the byte offset of pixel (x, y) inside an 8x8 tiled texture
 static inline u32 get_tiled_pixel_offset(u32 x, u32 y, u32 width) {
-  // 1. Identify which 8x8 tile (tile_x, tile_y) contains (x, y)
+  // Identify which 8x8 tile (tile_x, tile_y) contains (x, y)
   u32 tile_x = x / 8;
   u32 tile_y = y / 8;
   u32 tiles_per_row = width / 8;
   u32 tile_index = (tile_y * tiles_per_row) + tile_x;
 
-  // 2. Local coordinates within the 8x8 tile (0..7)
+  // Local coordinates within the 8x8 tile (0..7)
   u32 local_x = x % 8;
   u32 local_y = y % 8;
 
-  // 3. PICA200 Morton curve bit interleaving for an 8x8 tile:
+  // PICA200 Morton curve bit interleaving for an 8x8 tile:
   // Bit 0 = X0, Bit 1 = Y0, Bit 2 = X1, Bit 3 = Y1, Bit 4 = X2, Bit 5 = Y2
   u32 pixel_in_tile = ((local_x & 1) << 0) | ((local_y & 1) << 1) |
     ((local_x & 2) << 1) | ((local_y & 2) << 2) |
     ((local_x & 4) << 2) | ((local_y & 4) << 3);
 
-  // 4. Combine tile offset + intra-tile pixel offset
+  // Combine tile offset + intra-tile pixel offset
   u32 total_pixel_index = (tile_index * 64) + pixel_in_tile;
   return total_pixel_index;
 }
