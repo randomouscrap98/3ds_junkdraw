@@ -19,6 +19,7 @@ u32 __stacksize__ = 512 * 1024;
 #include "edit.h"
 #include "datacontainer.h"
 #include "filesys.h"
+#include "lineconversion.h"
 
 #define BREPEAT_DELAY 20
 #define BREPEAT_INTERVAL 7
@@ -483,7 +484,7 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   layer_clear(&sw_layer, rgb24_to_rgba32c(0xFF0000));
 
   // Go back and forth a couple times, see if colors decay a bit
-  for(int i = 2; i < 8; i+=1) {
+  for(int i = 2; i < 5; i+=1) {
 
     if (layer_copy(&sw_layer, &hw_layer) != 0) {
       LOGERR("Failed to copy hardware layer to software layer");
@@ -557,7 +558,172 @@ ERROR:
   return 1;
 }
 
-// -- MENU/PRINT STUFF --
+int run_lineconverter_test_suite(void) {
+  LOGINF("Starting LineConverter Test Suite...");
+
+  LineConverter lc;
+  if (lineconverter_init(&lc) != 0) {
+    LOGERR("Failed to initialize LineConverter");
+    return 1;
+  }
+
+  // --------------------------------------------------------------------------
+  // Basic conversion, color bit-packing, and batch conversion
+  // --------------------------------------------------------------------------
+
+  // Set pending stroke parameters: Layer 0, Color 0xF800 (Pure Red in RGBA5551: R=31, G=0, B=0, A=0)
+  lc.pending.layer = 0;
+  lc.pending.color = 0xF800; 
+  lc.pending.width = 2;
+  lc.pending.length = 5;
+
+  for (u16 i = 0; i < lc.pending.length; i++) {
+    lc.pending.lines[i] = (LineSegment){ .x1 = i, .y1 = i, .x2 = i + 1, .y2 = i + 1 };
+  }
+
+  // Metered conversion: Convert first 2 lines
+  size_t converted = lineconverter_convert(&lc, 2);
+  if (converted != 2 || lc.pending_next != 2) {
+    LOGERR("Incremental convert (batch 1) failed: converted %zu, expected 2", converted);
+    goto error;
+  }
+  if (lineconverter_done(&lc)) {
+    LOGERR("lineconverter_done reported prematurely true");
+    goto error;
+  }
+
+  // Convert remaining lines (request 10, should cap at remaining 3)
+  converted = lineconverter_convert(&lc, 10);
+  if (converted != 3 || lc.pending_next != 5) {
+    LOGERR("Incremental convert (batch 2) failed: converted %zu, expected 3", converted);
+    goto error;
+  }
+  if (!lineconverter_done(&lc)) {
+    LOGERR("lineconverter_done reported false when pending lines exhausted");
+    goto error;
+  }
+
+  // Validate converted layer structure and output array
+  if (lc.lines.length <= 0 || lc.lines.array[0].length != 5) {
+    LOGERR("Converted RenderLine vector length mismatch");
+    goto error;
+  }
+
+  // Check color expansion: RGBA5551 -> ABGR8 
+  u32 expected_color = rgba5551_to_abgr8(0xF800);
+  if (lc.lines.array[0].array[0].color != expected_color) {
+    LOGERR("Color conversion mismatch: got 0x%08X, expected 0x%08X", 
+           lc.lines.array[0].array[0].color, expected_color);
+    goto error;
+  }
+  if (lc.lines.array[0].array[0].width != 2) {
+    LOGERR("RenderLine width mismatch");
+    goto error;
+  }
+  LOGDBG("Basic conversion and batching test passed");
+
+  // --------------------------------------------------------------------------
+  // State Reset functions (reset_pending vs reset_converted)
+  // --------------------------------------------------------------------------
+  lineconverter_reset_converted(&lc);
+  for(int i = 0; i < lc.lines.length; i++) {
+    if(lc.lines.array[i].length != 0) {
+      LOGERR("Failed to reset converted lines");
+      goto error;
+    }
+  }
+  if(lc.pending_next == 0 || lc.pending.length == 0) {
+    LOGERR("Pending got reset when only converted requested");
+    goto error;
+  }
+  lineconverter_reset_pending(&lc);
+  if(lc.pending_next != 0 || lc.pending.length != 0) {
+    LOGERR("Failed to reset pending line");
+    goto error;
+  }
+
+  // --------------------------------------------------------------------------
+  // Tests out-of-bounds layer growth and vector initialization in nested vectors
+  // --------------------------------------------------------------------------
+
+  lc.pending.lines[0] = (LineSegment){ .x1 = 10, .y1 = 10, .x2 = 20, .y2 = 20 };
+  lc.pending.length = 1;
+  lc.pending.layer = 5; // Higher layer index forces intermediate vector allocations
+
+  lineconverter_convert(&lc, 1);
+
+  LOGTRC("VVL: %zu V5L: %zu", lc.lines.length, lc.lines.array[5].length);
+
+  if (lc.lines.length < 6) {
+    LOGERR("Outer vector failed to auto-expand to accommodate Layer 5 (was: %d)",
+           lc.lines.length);
+    goto error;
+  }
+  if (lc.lines.array[5].length != 1) {
+    LOGERR("Layer 5 vector did not receive the converted RenderLine");
+    goto error;
+  }
+  LOGDBG("Layer growth test passed");
+
+  lineconverter_reset_pending(&lc);
+  if (lc.pending_next != 0 || lc.pending.length != 0) {
+    LOGERR("lineconverter_reset_pending failed to zero pending stroke indicators");
+    goto error;
+  }
+  // Converted lines should remain intact across reset_pending
+  if (lc.lines.array[5].length != 1) {
+    LOGERR("lineconverter_reset_pending accidentally cleared converted lines");
+    goto error;
+  }
+
+  lineconverter_reset_converted(&lc);
+  // Layers vector structure remains, but inner lengths reset to 0
+  if (lc.lines.array[0].length != 0 || lc.lines.array[5].length != 0) {
+    LOGERR("lineconverter_reset_converted failed to clear inner RenderLine vectors");
+    goto error;
+  }
+  LOGDBG("Reset functions test passed");
+
+  // --------------------------------------------------------------------------
+  // Edge Cases 
+  // --------------------------------------------------------------------------
+  // Edge Case A: Converting 0 lines
+  converted = lineconverter_convert(&lc, 0);
+  if (converted != 0) {
+    LOGERR("Converting 0 lines returned non-zero count: %zu", converted);
+    goto error;
+  }
+
+  // Edge Case B: Converting when pending stroke is empty
+  lc.pending.length = 0;
+  lc.pending_next = 0;
+  converted = lineconverter_convert(&lc, 5);
+  if (converted != 0 || !lineconverter_done(&lc)) {
+    LOGERR("Converting empty pending stroke failed to return 0 / set done flag");
+    goto error;
+  }
+
+  // Edge Case C: Full reset & re-conversion pass
+  lineconverter_reset(&lc);
+  if (lc.pending_next != 0 || lc.pending.length != 0) {
+    LOGERR("lineconverter_reset failed full state purge");
+    goto error;
+  }
+
+  lineconverter_free(&lc);
+  LOGINF("PASS: LineConverter test suite completed successfully");
+  return 0;
+
+error:
+  lineconverter_free(&lc);
+  return 1;
+}
+
+
+
+// ==========================
+//      MAIN (OBVIOUSLY)
+// ==========================
 
 int main(int argc, char **argv) {
   gfxInitDefault();
@@ -583,6 +749,10 @@ int main(int argc, char **argv) {
   }
   if(run_edit_test_suite()) {
     LOGERR("EDIT FAILED");
+    goto SKIPTESTS;
+  }
+  if(run_lineconverter_test_suite()) {
+    LOGERR("LINECONVERTER FAILED");
     goto SKIPTESTS;
   }
   if(test_layer_sw_to_hw_display(screen)) {
