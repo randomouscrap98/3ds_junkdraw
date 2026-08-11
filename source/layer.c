@@ -92,8 +92,17 @@ u32 layer_querycolor(Layer * layer, layerdim_t x, layerdim_t y) {
 
 void layer_clear(Layer * layer, u32 color) {
   if(layer->type == JDL_TYPE_HARDWARE) {
-    u16 col16 = abgr8_to_rgba5551(color);
-    C2D_TargetClear(layer->texture.hw.target, col16 | ((u32)col16 << 16));
+    if(color == 0) { 
+    // IDK I just know this works for 0 and not sure for drawrect
+      C2D_TargetClear(layer->texture.hw.target, 0); 
+    } else {
+      C2D_SceneBegin(layer->texture.hw.target);
+      C2D_DrawRectSolid(0, 0, 0.5, 
+                        layer->texture.hw.subtex.width,
+                        layer->texture.hw.subtex.height,
+                        color);
+      C2D_Flush();
+    }
   } else if(layer->type == JDL_TYPE_SOFTWARE) {
     size_t max = layer_pixelcount(layer);
     // reverse color for DMA transfer speed

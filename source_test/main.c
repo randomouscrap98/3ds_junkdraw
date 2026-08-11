@@ -31,9 +31,9 @@ u32 __stacksize__ = 512 * 1024;
 #define STATUS_WARNING 33   // yellow?
 #define STATUS_ERROR 31     // red?
 
-// #define LWP_SOFT
-#define LWP_SKIP
-#define LSH_NOCOPY
+#define LWP_SOFT
+// #define LWP_SKIP
+// #define LSH_NOCOPY
 
 
 // So apparently printf doesn't work unless you do the standard Citro3D frame
@@ -452,7 +452,7 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_ALL);
   C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE,
                  GPU_ZERO);
-  layer_clear(&hw_layer, rgb24_to_rgba32c(0x444444));
+  layer_clear(&hw_layer, rgb24_to_rgba32c(0xFF0000));
   layer_drawlines(&hw_layer, lines, line_count);
   C2D_Flush();
   C3D_FrameEnd(0);
@@ -572,6 +572,29 @@ ERROR:
   return 1;
 }
 
+
+
+int utils_test(void) {
+  LOGINF("Starting Utils Test...");
+  // Let's see if some crazy numbers are the same in both directions...
+  for(u16 i = 0; i < 65535; i++) {
+    u32 col = rgba5551_to_abgr8(i);
+    u16 back = abgr8_to_rgba5551(col);
+    if(back != i) {
+      LOGERR("FAILED AT 0x%04X != 0x%04X", i, back);
+      return 1;
+    }
+    u32 col2 = rgba16_to_abgr8(i);
+    u32 back2 = abgr8_to_rgba16(col2);
+    if(back2 != i) {
+      LOGERR("FAILED(2) AT 0x%04X != 0x%04X", i, back2);
+      return 1;
+    }
+  }
+
+  LOGINF("PASS: Utils Test");
+  return 0;
+}
 
 
 
@@ -1022,6 +1045,10 @@ int main(int argc, char **argv) {
   }
   if(run_edit_test_suite()) {
     LOGERR("EDIT FAILED");
+    goto SKIPTESTS;
+  }
+  if(utils_test()) {
+    LOGERR("UTILS FAILED");
     goto SKIPTESTS;
   }
   if(run_lineconverter_test_suite()) {

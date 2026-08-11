@@ -85,7 +85,14 @@ static inline u16 abgr8_to_rgba5551(u32 col) {
   //32 : 0b AAAAAAAA BBBBBBBB GGGGGGGG RRRRRRRR
   //16 : 0b                   RRRRRGGG GGBBBBBA
   COL8888TO5551(0, 8, 16, 24);
-  return a1 | (b5 << 1) | (g5 << 6) | (r5 << 11);
+  return (r5 << 11) | (g5 << 6) | (b5 << 1) | a1;
+}
+
+static inline u16 abgr8_to_rgba16(u32 col) {
+  //32 : 0b AAAAAAAA BBBBBBBB GGGGGGGG RRRRRRRR
+  //16 : 0b                   ARRRRRGG GGGBBBBB
+  COL8888TO5551(0, 8, 16, 24);
+  return (a1 << 15) | (r5 << 10) | (g5 << 5) | b5;
 }
 
 
