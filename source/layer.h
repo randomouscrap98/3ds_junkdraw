@@ -5,6 +5,8 @@
 #include <citro3d.h>
 #include <citro2d.h>
 
+#include "utils.h"
+
 #define JDL_EDGEERROR 8
 #define JDL_EDGEBUF   10
 #define JDL_FORMAT GPU_RGBA5551
@@ -13,8 +15,7 @@
 
 // TODO: see if this system is even needed anymore...
 #define JDL_MAXOBJECTS 8192 // Default is 4096, and 8192 is extremely pushing it
-#define JDL_FLUSHOBJECTS (JDL_MAXOBJECTS - 100)
-
+#define JDL_SAFETYFLUSH (JDL_MAXOBJECTS - 200)
 
 typedef u16 layerdim_t;
 
@@ -59,8 +60,10 @@ typedef struct {
 //void layer_create_wh(Layer * layer, int width, int height);
 int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type); //Tex3DS_SubTexture subtex);
 void layer_free(Layer * layer);
-void layer_realsize(Layer * layer, layerdim_t * width, layerdim_t * height);
+// Sometimes a layer's actual area inside is different (because of citro bugs)
+void layer_mapped_area(Layer * layer, U32Bounds * bounds);
 size_t layer_pixelcount(Layer * layer);
+u32 layer_querycolor(Layer * layer, layerdim_t x, layerdim_t y);
 size_t layer_estimate_pixelcount(u8 type, layerdim_t width, layerdim_t height);
 
 // Copy from one layer into another. Can perform conversions while copying.
@@ -72,7 +75,7 @@ void layer_drawlines(Layer * layer, RenderLine * lines, size_t count);
 // WARN: make sure you're in a render scene before clearing! Target not set...
 void layer_clear(Layer * layer, u32 color);
 // Put source layer onto dest layer, ONLY works for software layers!
-void layer_composite_onto(Layer * dest, Layer * source);
+int layer_composite_onto(Layer * dest, Layer * source);
 
 
 #endif

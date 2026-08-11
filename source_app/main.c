@@ -1243,7 +1243,7 @@ int export_page(struct ScreenState *scrst, page_num page, char *data,
   PRINTINFO("Exporting page %d: converting to png...", page + 1);
 
   if (write_citropng(exported, scrst->layer_info.layer_width, scrst->layer_info.layer_height,
-                     last_savepath) == 0) {
+                     last_savepath, 0) == 0) {
     PRINTINFO("Exported page to: %s", last_savepath);
   } else {
     PRINTERR("FAILED to export: %s", last_savepath);

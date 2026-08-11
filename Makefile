@@ -33,9 +33,9 @@ include $(DEVKITARM)/3ds_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
-SOURCES		:=	source source_app
+SOURCES		:=	source source_app source_deprecated
 DATA		:=	data
-INCLUDES	:=	include source
+INCLUDES	:=	include source source_deprecated
 GRAPHICS	:=	gfx
 ROMFS		:=	romfs
 GFXBUILD	:=	$(ROMFS)/gfx

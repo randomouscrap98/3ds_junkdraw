@@ -53,7 +53,7 @@ int layerwindow_reset(LayerWindow * lw, layerdim_t width, layerdim_t height,
     lw->unit_count = JD_MIN(max_units, max_units_by_pixels);
   }
   if(lw->unit_count == 0) {
-    LOGDBG("ERR: NOT ENOUGH SPACE FOR LAYER UNITS!");
+    LOGERR("NOT ENOUGH SPACE FOR LAYER UNITS!");
     return 1;
   }
   // Allocate junk
@@ -61,13 +61,13 @@ int layerwindow_reset(LayerWindow * lw, layerdim_t width, layerdim_t height,
   size_t pending_layer_length = max_units * layer_count;
   lw->master_layers = malloc(sizeof(Layer) * lw->master_layers_length);
   if(!lw->master_layers) {
-    LOGDBG("ERR: NO MEMORY TO ALLOCATE MASTER LAYERS");
+    LOGERR("NO MEMORY TO ALLOCATE MASTER LAYERS");
     layerwindow_free_partial(lw);
     return 1;
   }
   lw->units = malloc(sizeof(LayerWindowUnit) * lw->unit_count);
   if(!lw->master_layers) {
-    LOGDBG("ERR: NO MEMORY TO ALLOCATE LAYER UNITS");
+    LOGERR("NO MEMORY TO ALLOCATE LAYER UNITS");
     layerwindow_free_partial(lw);
     return 1;
   }
@@ -77,7 +77,7 @@ int layerwindow_reset(LayerWindow * lw, layerdim_t width, layerdim_t height,
       lw->master_layers_length++) {
     int err = layer_init(lw->master_layers + lw->master_layers_length, width, height, lw->layer_type);
     if(err) {
-      LOGDBG("ERR: FAILED TO ALLOCATE LAYER %d", lw->master_layers_length);
+      LOGERR("FAILED TO ALLOCATE LAYER %d", lw->master_layers_length);
       layerwindow_free_partial(lw);
       return err;
     }

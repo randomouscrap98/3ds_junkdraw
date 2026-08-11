@@ -6,4 +6,5 @@ CompileFlags:
     -I/opt/devkitpro/devkitARM/arm-none-eabi/include,
     -I../include,
     -I../source,
+    -I../source_deprecated,
   ]

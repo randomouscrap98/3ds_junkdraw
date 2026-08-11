@@ -179,7 +179,7 @@ void datacontainer_getheader(DataContainer * dc, DataHeader * dh) {
 page_t datacontainer_last_used_page(DataContainer * dc) {
   size_t length = datacontainer_length(dc);
   if (length < 2) {
-    LOGTRACE("DATA TOO SMALL, assuming last page 0");
+    LOGTRC("DATA TOO SMALL, assuming last page 0");
     return 0; // Just safety
   }
   // Simple: start at one before the end and search backwards for the '.'
@@ -188,7 +188,7 @@ page_t datacontainer_last_used_page(DataContainer * dc) {
       return chars_to_int(pos + 1, JDDC_PAGEBYTES);
     }
   }
-  LOGTRACE("NO DATA FOUND, assuming last page 0");
+  LOGTRC("NO DATA FOUND, assuming last page 0");
   return 0;
 }
 
@@ -235,7 +235,7 @@ void linecontainer_free(LineContainer * lc) {
 
 #define JDDC_LINECHECK(dc, v) { \
   if (!datacontainer_enough(dc, (v))) { \
-    LOGDBG("ERROR: OUT OF SPACE, can't store stroke data!\n"); \
+    LOGERR("OUT OF SPACE, can't store stroke data!\n"); \
     return 1; \
   } \
 }
@@ -298,7 +298,7 @@ static inline int datacontainer_addline_stroke(DataContainer * dc, LineContainer
     }
   } else {
     // We DON'T support this!
-    LOGDBG("ERR: L2D UNSUPPORTED STROKE: %d\n", lc->style);
+    LOGERR("L2D UNSUPPORTED STROKE: %d\n", lc->style);
     return 1;
   }
 
@@ -311,7 +311,7 @@ int datacontainer_addline(DataContainer * dc, LineContainer * lc) {
   char * prev_end = dc->end;
 
   if (lc->length < 1) {
-    LOGDBG("WARN: NO LINES TO STORE!\n");
+    LOGWRN("NO LINES TO STORE!\n");
     return 1;
   }
   
@@ -358,7 +358,7 @@ DataScannerResult datascanner_next(DataScanner * ds) {
   result.page = -1;
 
   if (ds->current >= ds->parent->end) {
-    LOGDBG("WARN: scanner run at or past end of data! Diff: %d\n",
+    LOGWRN("Scanner run at or past end of data! Diff: %d\n",
            ds->parent->end - ds->current);
     result.data_end = ds->parent->end;
     return result;
@@ -366,15 +366,15 @@ DataScannerResult datascanner_next(DataScanner * ds) {
 
   // Perform a pre-check to realign ourselves if we're not aligned
   if (*ds->current != JDDC_ALIGNMENT) {
-    LOGDBG("SCAN ERROR: OUT OF ALIGNMENT!, linear scanning for next stroke\n");
+    LOGWRN("SCAN OUT OF ALIGNMENT!, linear scanning for next stroke\n");
     char * tempptr = memchr(ds->current, JDDC_ALIGNMENT, ds->parent->end - ds->current);
 
     if (tempptr == NULL) {
-      LOGDBG("SCAN ERROR: NO MORE ALIGNMENT CHARS! Skipping all the way to end\n");
+      LOGWRN("SCAN: NO MORE ALIGNMENT CHARS! Skipping all the way to end\n");
       result.data_end = ds->parent->end;
       return result;
     } else {
-      LOGDBG("SCAN SKIP: fast-forwarding %d characters to next alignment\n",
+      LOGWRN("SCAN: fast-forwarding %d characters to next alignment\n",
              tempptr - ds->current);
       ds->current = tempptr;
     }

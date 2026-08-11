@@ -20,7 +20,7 @@ int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type) {
     layer->texture.hw.subtex = layer_new_subtexture(width, height);
     if(layer->texture.hw.subtex.width > JDL_MAXHWLAYERDIM || 
        layer->texture.hw.subtex.height > JDL_MAXHWLAYERDIM) {
-      LOGDBG("ERR: HW LAYER TOO LARGE! MAX: %d", JDL_MAXHWLAYERDIM);
+      LOGERR("HW LAYER TOO LARGE! MAX: %d", JDL_MAXHWLAYERDIM);
       return 1;
     }
     C3D_TexInitVRAM(&(layer->texture.hw.texture), 
@@ -40,23 +40,23 @@ int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type) {
       return 1;
     }
   } else {
-    LOGDBG("ERR: UNKNOWN LAYER TYPE %d", type);
+    LOGERR("UNKNOWN LAYER TYPE %d", type);
     return 1;
   }
   return 0;
 }
 
-void layer_realsize(Layer * layer, layerdim_t * width, layerdim_t * height) {
+void layer_mapped_area(Layer * layer, U32Bounds * bounds) {
+  bounds->x1 = 0;
+  bounds->y1 = 0;
+  bounds->x2 = layer->width;
+  bounds->y2 = layer->height;
   if(layer->type == JDL_TYPE_HARDWARE) {
-    *width = layer->texture.hw.subtex.width - JDL_EDGEBUF;
-    *height = layer->texture.hw.subtex.height - JDL_EDGEBUF;
-  } else if(layer->type == JDL_TYPE_SOFTWARE) {
-    *width = layer->texture.sf.width;
-    *height = layer->texture.sf.height;
-  } else {
-    *width = 0;
-    *height = 0;
-  }
+    bounds->x1 += JDL_EDGEBUF;
+    bounds->y1 += JDL_EDGEBUF;
+    bounds->x2 += JDL_EDGEBUF;
+    bounds->y2 += JDL_EDGEBUF;
+  } 
 }
 
 size_t layer_pixelcount(Layer * layer) {
@@ -74,6 +74,17 @@ size_t layer_estimate_pixelcount(u8 type, layerdim_t width, layerdim_t height) {
     return subtex.width * subtex.height;
   } else if(type == JDL_TYPE_SOFTWARE) {
     return width * height;
+  } 
+  return 0;
+}
+
+u32 layer_querycolor(Layer * layer, layerdim_t x, layerdim_t y) {
+  if(layer->type == JDL_TYPE_HARDWARE) {
+    return rgba5551_to_abgr8(((u16*)layer->texture.hw.texture.data)[
+      get_tiled_pixel_offset(x, y, layer->texture.hw.subtex.width)
+    ]);
+  } else if(layer->type == JDL_TYPE_SOFTWARE) {
+    return JD_REVERSE32(layer->texture.sf.buf[x + y * layer->texture.sf.width]);
   } 
   return 0;
 }
@@ -115,7 +126,7 @@ int layer_copy(Layer * dest, Layer * source) {
       memcpy(dest->texture.sf.buf, source->texture.sf.buf, 
              layer_pixelcount(source) * sizeof(u32));
     } else {
-      LOGDBG("ERR: Unsupported texture type!");
+      LOGERR("Unsupported texture type!");
       return 1;
     }
   } else {
@@ -152,7 +163,7 @@ int layer_copy(Layer * dest, Layer * source) {
       // Flush cache for the source buffer in FCRAM
       GSPGPU_FlushDataCache(dest->texture.sf.buf, destpixelcount * sizeof(u32));
     } else {
-      LOGDBG("ERR: Unsupported layer conversion type!");
+      LOGERR("Unsupported layer conversion type!");
       return 1;
     }
   }
@@ -161,23 +172,30 @@ int layer_copy(Layer * dest, Layer * source) {
 
 #define BRESENHAM_PRE(rl, layer) { \
   float ofs = (rl.width / 2.0f) - 0.5f; \
+  /* For speed, clip line... it deforms lines and looks bad but.. */ \
+  if(ofs > rl.x1) rl.x1 = ofs; \
+  if(ofs > rl.x2) rl.x2 = ofs; \
+  if(ofs > rl.y1) rl.y1 = ofs; \
+  if(ofs > rl.y2) rl.y2 = ofs; \
+  /* The normal shift since points are in the middle */ \
   rl.x1 = floor(rl.x1 - ofs); \
   rl.x2 = floor(rl.x2 - ofs); \
   rl.y1 = floor(rl.y1 - ofs); \
   rl.y2 = floor(rl.y2 - ofs); \
+  /* More line clipping */ \
+  if(rl.x1 + rl.width > layer->width) rl.x1 = layer->width - rl.width; \
+  if(rl.x2 + rl.width > layer->width) rl.x2 = layer->width - rl.width; \
+  if(rl.y1 + rl.width > layer->height) rl.y1 = layer->height - rl.width; \
+  if(rl.y2 + rl.width > layer->height) rl.y2 = layer->height - rl.width; \
   int16_t dx = abs(rl.x2 - rl.x1); \
   int16_t sx = rl.x1 < rl.x2 ? 1 : -1; \
   int16_t dy = -abs(rl.y2 - rl.y1); \
   int16_t sy = rl.y1 < rl.y2 ? 1 : -1; \
   int16_t error = dx + dy; \
   while(1) { \
-    /* Because of the safety buffer (a citro bug), we don't allow squares which even partially */ \
-    /* go off the left side of the screen. Right side is ok (apparently), */ \
-    /* but clamp to the "apparent" bounds of the texture (may be different in reality) */ \
-    if (rl.x1 >= 0 && rl.y1 >= 0 && rl.x1 < layer->width && rl.y1 < layer->height) {
+    /* Your box drawing code or whatever goes here */
 
 #define BRESENHAM_POST(rl) \
-    } \
     int16_t e2 = 2 * error; \
     if (e2 >= dy) { \
       if (rl.x1 == rl.x2) break; \
@@ -193,22 +211,28 @@ int layer_copy(Layer * dest, Layer * source) {
 }
 
 static inline void layer_drawlines_hardware(Layer * layer, RenderLine * lines, size_t count) {
-  static u32 command_count = 0; // GLOBAL TRACKING, kind of scary but yeah...
+  //static u32 command_count = 0; // GLOBAL TRACKING, kind of scary but yeah...
+  u32 command_count = 0;
   //  WARN: this flushes, be careful when calling!
   C2D_SceneBegin(layer->texture.hw.target);
   for(size_t i = 0; i < count; i++) {
     BRESENHAM_PRE(lines[i], layer) {
       C2D_DrawRectSolid(lines[i].x1 + JDL_EDGEBUF, lines[i].y1 + JDL_EDGEBUF, 
                         0.5, lines[i].width, lines[i].width, lines[i].color);
-      if(++command_count >= JDL_FLUSHOBJECTS) {
+      if(++command_count >= (JDL_MAXOBJECTS - 1)) {
         //LOGTRACE("FLUSHING %ld DRAW CMDS PREMATURELY\n", ct->draw_cmd_count); 
         // ALTERNATIVE: Try C2D_Flush()? That might be why it flashes all weird...
-        C3D_FrameEnd(0);
-        C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+        //C3D_FrameEnd(0);
+        //C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+        C2D_Flush();
         command_count = 0;
       }
     }
     BRESENHAM_POST(lines[i]);
+  }
+  // Leave a buffer for other people (if we're too close to the max object). It's not a lot...
+  if(command_count >= JDL_SAFETYFLUSH) {
+    C2D_Flush();
   }
 }
 
@@ -237,7 +261,7 @@ void layer_drawlines(Layer * layer, RenderLine * lines, size_t count) {
   }
 }
 
-void layer_composite_onto(Layer * dest, Layer * source) {
+int layer_composite_onto(Layer * dest, Layer * source) {
   if(dest->type == JDL_TYPE_SOFTWARE && source->type == JDL_TYPE_SOFTWARE &&
     dest->width == source->width && dest->height == source->height) {
     size_t max = layer_pixelcount(dest);
@@ -247,8 +271,10 @@ void layer_composite_onto(Layer * dest, Layer * source) {
         dest->texture.sf.buf[i] = source->texture.sf.buf[i];
       }
     }
+    return 0;
   } else {
-    LOGDBG("UNSUPPORTED LAYER COMPOSITION");
+    LOGERR("UNSUPPORTED LAYER COMPOSITION");
+    return 1;
   }
 }
 
