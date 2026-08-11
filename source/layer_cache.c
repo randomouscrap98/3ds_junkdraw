@@ -1,6 +1,8 @@
 #include "layer_cache.h"
+
 #include "datacontainer.h"
 #include "layer.h"
+#include "lineconversion.h"
 #include "utils.h"
 
 #include <stdlib.h>
@@ -9,7 +11,6 @@
 // which page you start at
 #define JDLC_UNIT(lw, page) ((page) % (lw)->unit_count)
 
-VECTOR_DEFINE(RenderLine);
 
 int layerwindow_init(LayerWindow * lw, DataContainer * dc, u8 layer_type) {
   lw->master_layers = NULL;
@@ -19,11 +20,7 @@ int layerwindow_init(LayerWindow * lw, DataContainer * dc, u8 layer_type) {
   lw->dc = dc;
   lw->layer_type = layer_type;
   lw->pending_unit = NULL;
-  lw->pending_next = 0;
-
-  int err = vector_vector_RenderLine_init(&lw->drawlines);
-  if(err) return err;
-  return linecontainer_init_stroke(&lw->pending);
+  return lineconverter_init(&lw->pending);
 }
 
 static void layerwindow_free_partial(LayerWindow * lw) {
@@ -38,41 +35,18 @@ static void layerwindow_free_partial(LayerWindow * lw) {
     free(lw->units);
     lw->units = NULL;
   }
-  // Free the inner vectors
-  for(size_t i = 0; i < lw->drawlines.length; i++) {
-    vector_RenderLine_free(lw->drawlines.array + i);
-  }
-  // Not necessary but... makes it a little nicer (the inner vectors 
-  // are invalid)
-  vector_vector_RenderLine_clear(&lw->drawlines);
-}
-
-static inline void layerwindow_reset_pending(LayerWindow * lw) {
-  // Clear out pending...
-  lw->pending_next = 0;
-  lw->pending.length = 0;
-  lw->pending_unit = NULL;
 }
 
 void layerwindow_free(LayerWindow * lw) {
   layerwindow_free_partial(lw);
-  linecontainer_free(&lw->pending);
-  // Free the vector container (free_partial frees inner)
-  vector_vector_RenderLine_free(&lw->drawlines);
+  lineconverter_free(&lw->pending);
 }
 
 int layerwindow_reset(LayerWindow * lw, layerdim_t width, layerdim_t height, 
     layer_t layer_count, size_t max_units) {
   // Start by resetting... kinda scary
   layerwindow_free_partial(lw);
-  layerwindow_reset_pending(lw);
-  // The inner vectors are freed, so just rebuild from scratch
-  vector_vector_RenderLine_reserve(&lw->drawlines, layer_count);
-  for(layer_t i = 0; i < layer_count; i++) {
-    size_t index;
-    vector_vector_RenderLine_increment(&lw->drawlines, &index);
-    vector_RenderLine_init(lw->drawlines.array + index);
-  }
+  lineconverter_reset(&lw->pending);
   // Calculate total pixels of apparent layers and estimate maximum layer count.
   size_t layerpixels = layer_estimate_pixelcount(lw->layer_type, width, height);
   size_t max_layers = JDLC_MAXPIXELS / layerpixels;
@@ -130,58 +104,34 @@ static void layerwindow_reset_unit(LayerWindow * lw, size_t unit_id) {
   if(lw->pending_unit == unit) {
     // Clear out the pending line in the master window, it was for this unit
     // and is no longer needed
-    lw->pending_unit = NULL;
-    lw->pending_next = 0;
-    lw->pending.length = 0;
+    lineconverter_reset(&lw->pending);
   }
 }
 
-static inline void layerwindow_clear_drawlines(LayerWindow * lw, size_t reserve) {
-  for(size_t i = 0; i < lw->drawlines.length; i++) {
-    vector_RenderLine_clear(lw->drawlines.array + i);
-    vector_RenderLine_reserve(lw->drawlines.array + i, reserve);
-  }
-}
-
-static void layerwindow_render_unit(LayerWindow * lw, size_t unit_id, vector_vector_RenderLine * lines) {
-  // Only render the minimum of whichever layers are thing
-  LayerWindowUnit * unit = lw->units + unit_id;
-  size_t layer_count = JD_MIN(lines->length, unit->layer_count);
+static void layerwindowunit_render(LayerWindowUnit * unit, LineConverter * pending,
+                                   int clear_lines) {
+  size_t layer_count = JD_MIN(unit->layer_count, pending->lines.length);
   for(size_t i = 0; i < layer_count; i++) {
-    layer_drawlines(unit->layers + i, lines->array[i].array, lines->array[i].length);
+    layer_drawlines(unit->layers + i, pending->lines.array[i].array, pending->lines.array[i].length);
+  }
+  if(clear_lines) { // So common, easier to do it in render
+    lineconverter_reset_converted(pending);
   }
 }
 
-// Convert a region of lines from the line container into a renderline vector.
-static inline void linecontainer_to_renderlines(
-    LineContainer * lc, size_t start, size_t count, vector_RenderLine * rl) {
-  // TODO: is this the correct conversion? The output is correct but is 5551 correct?
-  u32 color = rgba5551_to_abgr8(lc->color);
-  for(size_t i = 0; i < count; i++) {
-    size_t rlidx;
-    vector_RenderLine_increment(rl, &rlidx);
-    rl->array[rlidx].width = lc->width;
-    rl->array[rlidx].color = color;
-    rl->array[rlidx].x1 = lc->lines[i + start].x1;
-    rl->array[rlidx].x2 = lc->lines[i + start].x2;
-    rl->array[rlidx].y1 = lc->lines[i + start].y1;
-    rl->array[rlidx].y2 = lc->lines[i + start].y2;
-  }
-}
-
-// Pull up to max_draw out of the current pending line into the drawlines vector. Returns
-// the amount pulled into the array. Sorts the lines into the proper layer vector
-static inline size_t layerwindow_dump_pending(LayerWindow * lw, size_t max_draw) {
-  size_t pull_count = JD_MIN(max_draw, lw->pending.length - lw->pending_next);
-  linecontainer_to_renderlines(&lw->pending, lw->pending_next, pull_count, 
-                               lw->drawlines.array + lw->pending.layer);
-  lw->pending_next += pull_count;
-  max_draw -= pull_count;
-  if(lw->pending_next >= lw->pending.length) {
-    layerwindow_reset_pending(lw);
-  }
-  return pull_count;
-}
+// // Pull up to max_draw out of the current pending line into the drawlines vector. Returns
+// // the amount pulled into the array. Sorts the lines into the proper layer vector
+// static inline size_t layerwindow_dump_pending(LayerWindow * lw, size_t max_draw) {
+//   size_t pull_count = JD_MIN(max_draw, lw->pending.length - lw->pending_next);
+//   linecontainer_to_renderlines(&lw->pending, lw->pending_next, pull_count, 
+//                                lw->drawlines.array + lw->pending.layer);
+//   lw->pending_next += pull_count;
+//   max_draw -= pull_count;
+//   if(lw->pending_next >= lw->pending.length) {
+//     layerwindow_reset_pending(lw);
+//   }
+//   return pull_count;
+// }
 
 int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, page_t page, page_t offset) {
   page_t increment = offset < 0 ? -1 : 1;
@@ -198,21 +148,74 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, page_t 
       layerwindow_reset_unit(lw, unit);
     }
   }
-  // Clear all the layer drawlines
-  layerwindow_clear_drawlines(lw, max_draw);
+  // Clear all the layer drawlines for safety (shouldn't be anything left but...)
+  lineconverter_reset_converted(&lw->pending);
   // For simplicity: if we still have a pending unit, clear that out first
   if(lw->pending_unit) {
-    max_draw -= layerwindow_dump_pending(lw, max_draw);
-  }
-  // Now draw as much as possible from pages in order from user's current page then going backwards.
-  while(max_draw > 0) {
-    if(!lw->pending_unit) {
+    max_draw -= lineconverter_convert(&lw->pending, max_draw);
+    // ALWAYS render what we pulled out
+    layerwindowunit_render(lw->pending_unit, &lw->pending, 1);
+    // No use continuing... we already ran out of draw calls
+    if(max_draw == 0) {
+      LOGTRC("Overloaded pre-window pending lines");
+      // Don't leave garbage behind for next time (not necessarily required?)
+      if(lineconverter_done(&lw->pending)) { lw->pending_unit = NULL; } 
+      return 0;
     }
   }
-  // Now that we know the units are correct, if there happens to still be a pending
-  // unit, that gets first dibs on drawing
-    // while(lw->pending_next < lw->pending.length) {
-    // }
+  // Now iterate over the user's requested pages again!
+  DataScannerResult dsr;
+  for(page_t pg = page; pg != end; pg += increment) {
+    // Set which unit we're working on (in case we exit early)
+    lw->pending_unit = lw->units + JDLC_UNIT(lw, pg);
+    // Skip a lot of work if we literally have nothing...
+    if(datascanner_at_end(&lw->pending_unit->scanner)) { continue; }
+    // Begin pulling out whole strokes
+    while(datascanner_next_loop(&lw->pending_unit->scanner, &dsr)) {
+      // Convert what we have
+      lineconverter_reset_pending(&lw->pending);
+      if(datascannerresult_parseline(&dsr, &lw->pending.pending)) {
+        LOGWRN("BAD STROKE, exit render early");
+        break;
+      }
+      max_draw -= lineconverter_convert(&lw->pending, max_draw);
+      // Don't keep pulling strokes if we're out of lines to store
+      if(max_draw <= 0) { break; }
+    }
+    // Render what we got before moving on to the next page
+    layerwindowunit_render(lw->pending_unit, &lw->pending, 1);
+    // NEED to break out early to preserve pending unit!
+    if(max_draw <= 0) { break; }
+  }
+  // // Now draw as much as possible from pages in order from user's current page then going backwards.
+  // while(max_draw > 0) {
+  //   // No target? Move onto the next one, starting with user current requested page
+  //   if(!lw->pending_unit) {
+  //     // Already past the last page? oh well, nothing to do
+  //     if(page == end) { break; }
+  //     lw->pending_unit = lw->units + JDLC_UNIT(lw, page);
+  //     page += increment;
+  //   }
+  //   max_draw -= lineconverter_convert(&lw->pending, max_draw);
+  //   // It is OK to exit early: the next time we call we will simply convert nothing on first loop
+  //   if(max_draw <= 0) {
+  //     layerwindowunit_render(lw->pending_unit, &lw->pending, 1);
+  //     break;
+  //   }
+  //   // Nothing left to convert in current batch (stroke)
+  //   if(lineconverter_done(&lw->pending)) {
+  //     lineconverter_reset_pending(&lw->pending);
+  //     if(skip_first_repull || !datascanner_next_loop(&lw->pending_unit->scanner, &dsr)) {
+  //       // On to the next, render what we have. The datascanner had nothing or 
+  //       // we're skipping first repull (and not scanning)
+  //       layerwindowunit_render(lw->pending_unit, &lw->pending, 1);
+  //       lw->pending_unit = NULL;
+  //       skip_first_repull = 0;
+  //     } else {
+  //       // We were able to rescan,
+  //     }
+  //   }
+  // }
   return 0;
 }
 
