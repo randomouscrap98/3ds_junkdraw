@@ -30,9 +30,15 @@ typedef struct {
   u8 layer_type;            // When resetting, which type of layer to use
 } LayerWindow;
 
+typedef struct {
+  page_t page;
+  page_t offset;
+  page_t loop_point;
+} PageRange;
+
 int layerwindow_init(LayerWindow * lw, DataContainer * dc, u8 layer_type);
 void layerwindow_free(LayerWindow * lw);
-int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, page_t page, page_t offset);
+int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, PageRange range);
 
 // pass 0 for max_units if you don't want to limit the number of units except by max pixel
 // (system requirement). Amount of actual units may be smaller than max_units

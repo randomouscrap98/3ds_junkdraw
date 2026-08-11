@@ -55,8 +55,8 @@ void lineconverter_reset(LineConverter * lc) {
 // TODO: If this function is too expensive, consider redoing a lot of these function calls
 // into raw vector manip (bad) plus assuming pre-fab vector_vector construction?
 size_t lineconverter_convert(LineConverter * lc, size_t count) {
-  // TODO: is this the correct conversion? The output is correct but is 5551 correct?
-  u32 color = rgba5551_to_abgr8(lc->pending.color);
+  // TODO: is this the correct conversion?
+  u32 color = rgba16_to_abgr8(lc->pending.color);
   vector_vector_RenderLine_reserve(&lc->lines, lc->pending.layer + 1);
   while(lc->lines.length <= lc->pending.layer) {
     size_t next;

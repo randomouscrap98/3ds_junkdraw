@@ -43,18 +43,49 @@ static inline u32 next_power_of_2(u32 v) {
 //        COLOR 
 // =====================
 
-static inline u32 rgba5551_to_abgr8(u16 pixel) {
-  u32 r5 = (pixel >> 11) & 0x1F;
-  u32 g5 = (pixel >> 6)  & 0x1F;
-  u32 b5 = (pixel >> 1)  & 0x1F;
-  u32 a1 =  pixel        & 0x01;
-
-  u32 r8 = (r5 << 3) | (r5 >> 2);
-  u32 g8 = (g5 << 3) | (g5 >> 2);
-  u32 b8 = (b5 << 3) | (b5 >> 2);
+#define COL5551TO8888(rs, gs, bs, as) \
+  u32 r5 = (col >> rs) & 0x1F; \
+  u32 g5 = (col >> gs) & 0x1F; \
+  u32 b5 = (col >> bs) & 0x1F; \
+  u32 a1 = (col >> as) & 0x01; \
+  u32 r8 = (r5 << 3) | (r5 >> 2); \
+  u32 g8 = (g5 << 3) | (g5 >> 2); \
+  u32 b8 = (b5 << 3) | (b5 >> 2); \
   u32 a8 = a1 ? 0xFF : 0x00;
 
+#define COL8888TO5551(rs, gs, bs, as) \
+  u32 r8 = (col >> rs) & 0xFF; \
+  u32 g8 = (col >> gs) & 0xFF; \
+  u32 b8 = (col >> bs) & 0xFF; \
+  u32 a8 = (col >> as) & 0xFF; \
+  u16 r5 = r8 >> 3; \
+  u16 g5 = g8 >> 3; \
+  u16 b5 = b8 >> 3; \
+  u16 a1 = a8 >> 7;
+
+// Used to convert from SPECIFICALLY texture 16 bit format to 
+// SPECIFICALLY the format used for PNG/DrawRect/etc
+static inline u32 rgba5551_to_abgr8(u16 col) {
+  //16 : 0b                   RRRRRGGG GGBBBBBA
+  //32 : 0b AAAAAAAA BBBBBBBB GGGGGGGG RRRRRRRR
+  COL5551TO8888(11, 6, 1, 0);
   return (a8 << 24) | (b8 << 16) | (g8 << 8) | r8;
+}
+
+// Used to convert from SPECIFICALLY my 16 bit format to
+// SPECIFICALLY the format used for PNG/DrawRect/etc
+static inline u32 rgba16_to_abgr8(u16 col) {
+  //16 : 0b                   ARRRRRGG GGGBBBBB
+  //32 : 0b AAAAAAAA BBBBBBBB GGGGGGGG RRRRRRRR
+  COL5551TO8888(10, 5, 0, 15);
+  return (a8 << 24) | (b8 << 16) | (g8 << 8) | r8;
+}
+
+static inline u16 abgr8_to_rgba5551(u32 col) {
+  //32 : 0b AAAAAAAA BBBBBBBB GGGGGGGG RRRRRRRR
+  //16 : 0b                   RRRRRGGG GGBBBBBA
+  COL8888TO5551(0, 8, 16, 24);
+  return a1 | (b5 << 1) | (g5 << 6) | (r5 << 11);
 }
 
 

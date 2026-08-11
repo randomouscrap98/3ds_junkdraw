@@ -11,6 +11,8 @@
 // which page you start at
 #define JDLC_UNIT(lw, page) ((page) % (lw)->unit_count)
 
+#define JDLC_DEBUG
+
 
 int layerwindow_init(LayerWindow * lw, DataContainer * dc, u8 layer_type) {
   lw->master_layers = NULL;
@@ -45,6 +47,7 @@ void layerwindow_free(LayerWindow * lw) {
 int layerwindow_reset(LayerWindow * lw, layerdim_t width, layerdim_t height, 
     layer_t layer_count, size_t max_units) {
   // Start by resetting... kinda scary
+  lw->pending_unit = NULL;
   layerwindow_free_partial(lw);
   lineconverter_reset(&lw->pending);
   // Calculate total pixels of apparent layers and estimate maximum layer count.
@@ -62,15 +65,15 @@ int layerwindow_reset(LayerWindow * lw, layerdim_t width, layerdim_t height,
   }
   // Allocate contiguous arrays (master_layers and units)
   lw->master_layers_length = 0; 
-  size_t total_layer_count = max_units * layer_count;
-  lw->master_layers = malloc(sizeof(Layer) * lw->master_layers_length);
+  size_t total_layer_count = lw->unit_count * layer_count;
+  lw->master_layers = malloc(sizeof(Layer) * total_layer_count);
   if(!lw->master_layers) {
     LOGERR("NO MEMORY TO ALLOCATE MASTER LAYERS");
     layerwindow_free_partial(lw);
     return 1;
   }
   lw->units = malloc(sizeof(LayerWindowUnit) * lw->unit_count);
-  if(!lw->master_layers) {
+  if(!lw->units) {
     LOGERR("NO MEMORY TO ALLOCATE LAYER UNITS");
     layerwindow_free_partial(lw);
     return 1;
@@ -111,21 +114,34 @@ static void layerwindow_reset_unit(LayerWindow * lw, size_t unit_id) {
 static void layerwindowunit_render(LayerWindowUnit * unit, LineConverter * pending,
                                    int clear_lines) {
   size_t layer_count = JD_MIN(unit->layer_count, pending->lines.length);
+  //LOGTRC("Rendering %d layers on page %d", layer_count, unit->scanner.page);
   for(size_t i = 0; i < layer_count; i++) {
+    //LOGTRC("Rendering %d lines", pending->lines.array[i].length);
     layer_drawlines(unit->layers + i, pending->lines.array[i].array, pending->lines.array[i].length);
   }
   if(clear_lines) { // So common, easier to do it in render
+    //LOGTRC("Clearing converted lines");
     lineconverter_reset_converted(pending);
   }
 }
 
-int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, page_t page, page_t offset) {
-  page_t increment = offset < 0 ? -1 : 1;
+int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, PageRange range) {
+  page_t increment = range.offset < 0 ? -1 : 1;
   // Can't wrap around multiple times, that's bad. Offset is inclusive! 0 = pull one page!
-  if(abs(offset) >= lw->unit_count) offset = increment * (lw->unit_count - 1);
-  page_t end = page + offset + increment; // EXCLUSIVE (to make loops simpler)
+  if(abs(range.offset) >= lw->unit_count) range.offset = increment * (lw->unit_count - 1);
+  page_t end = range.page + range.offset + increment; // EXCLUSIVE (to make loops simpler)
+  // Oops, don't go past the start!
+  if(-range.offset > range.page) { 
+    if(range.loop_point > 0) { // looping
+      // very non performant but only if you pass in stupid values (nobody will)
+      while(end < 0) { end += range.loop_point; }
+    } else {
+      end = 0;  // just clamp
+    }
+  }
   // First, need to go through and clear out any invalid pages
-  for(page_t pg = page; pg != end; pg += increment) {
+  for(page_t pg = range.page; pg != end; pg += increment) {
+    if(pg < 0) pg += range.loop_point;
     size_t unit = JDLC_UNIT(lw, pg);
     // Fill all the scanners with max_draw. Maybe kinda bad?
     lw->units[unit].scanner.max_scan = max_scan;
@@ -139,6 +155,9 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, page_t 
   lineconverter_reset_converted(&lw->pending);
   // For simplicity: if we still have a pending unit, clear that out first
   if(lw->pending_unit) {
+#ifdef JDLC_DEBUG
+    LOGTRC("Pending lines: %d/%d", lw->pending.pending_next, lw->pending.pending.length);
+#endif
     max_draw -= lineconverter_convert(&lw->pending, max_draw);
     // ALWAYS render what we pulled out (also clears converted lines)
     layerwindowunit_render(lw->pending_unit, &lw->pending, 1);
@@ -150,9 +169,15 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, page_t 
       return 0;
     }
   }
+// #ifdef JDLC_DEBUG
+//   else {
+//     LOGTRC("NO PENDING LINES (normal?)");
+//   }
+// #endif
   // Now iterate over the user's requested pages again!
   DataScannerResult dsr;
-  for(page_t pg = page; pg != end; pg += increment) {
+  for(page_t pg = range.page; pg != end; pg += increment) {
+    if(pg < 0) pg += range.loop_point;
     // Set which unit we're working on (in case we exit early)
     lw->pending_unit = lw->units + JDLC_UNIT(lw, pg);
     // Skip a lot of work if we literally have nothing...
@@ -164,6 +189,7 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, page_t 
         LOGWRN("BAD STROKE, exit render early");
         break;
       }
+      LOGTRC("CONVERTED STROKE, PG %d", pg);
       // This will either convert the entire stroke or not. We exit
       // early if it could not convert the whole thing (otherwise we
       // lose lines!)

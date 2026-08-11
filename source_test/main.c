@@ -20,6 +20,7 @@ u32 __stacksize__ = 512 * 1024;
 #include "datacontainer.h"
 #include "filesys.h"
 #include "lineconversion.h"
+#include "layer_cache.h"
 
 #define BREPEAT_DELAY 20
 #define BREPEAT_INTERVAL 7
@@ -29,6 +30,11 @@ u32 __stacksize__ = 512 * 1024;
 #define STATUS_INFO 37      // white?
 #define STATUS_WARNING 33   // yellow?
 #define STATUS_ERROR 31     // red?
+
+// #define LWP_SOFT
+#define LWP_SKIP
+#define LSH_NOCOPY
+
 
 // So apparently printf doesn't work unless you do the standard Citro3D frame
 // stuff. It only SOMETIMES works, IDK. So, this will wait a full frame to show
@@ -420,7 +426,8 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   // Define lines to draw numbers "1" and "2"
   RenderLine lines[] = {
     // Digit "1" (Cyan) - X offset ~ 100
-    { .x1 = 110, .y1 = 80,  .x2 = 110, .y2 = 160, .width = 4, .color = rgb24_to_rgba32c(0x00FFFF) },
+    { .x1 = 110, .y1 = 80,  .x2 = 110, .y2 = 160, .width = 4, 
+      .color = rgb24_to_rgba32c(0x00FFFF) },
 
     // Digit "2" (inverted top to bottom, oops) (Yellow) - X offset ~ 180
     { .x1 = 180, .y1 = 80,  .x2 = 220, .y2 = 80,  .width = 4, 
@@ -437,19 +444,26 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
 
   size_t line_count = sizeof(lines) / sizeof(lines[0]);
 
-  //TickCounter timer;
-  //osTickCounterStart(&timer);
-  // Draw lines onto the SOFTWARE layer
   layer_drawlines(&sw_layer, lines, line_count);
-  // osTickCounterUpdate(&timer);
-  // double ms = osTickCounterRead(&timer);
-  // printf("TIMEDRAW: %0.3fms\n", ms);
+
+  // Also, see if the hardware layers work (they crash)
+  aptMainLoop();
+  C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+  C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_ALL);
+  C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE,
+                 GPU_ZERO);
+  layer_clear(&hw_layer, rgb24_to_rgba32c(0x444444));
+  layer_drawlines(&hw_layer, lines, line_count);
+  C2D_Flush();
+  C3D_FrameEnd(0);
 
   // Copy/Convert Software layer -> Hardware layer (VRAM)
+#ifndef LSH_NOCOPY
   if (layer_copy(&hw_layer, &sw_layer) != 0) {
     LOGERR("Failed to copy software layer to hardware layer");
     goto ERROR;
   }
+#endif
 
   char outpath[80] = "/3dsjunkdrawtest1.png";
   LOGTRC("Writing png to %s", outpath);
@@ -470,6 +484,7 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
       break;
     }
 
+    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
     C2D_TargetClear(bottom_target, C2D_Color32(0, 0, 0, 255));
     C2D_SceneBegin(bottom_target);
 
@@ -477,7 +492,6 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
     C2D_DrawImageAt(hw_layer.texture.hw.image, 0.0f, 0.0f, 0.5f, NULL, 1.0f, 1.0f);
 
     C3D_FrameEnd(0);
-    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
   }
 
   // Make a really obvious clear color on sw
@@ -558,6 +572,10 @@ ERROR:
   return 1;
 }
 
+
+
+
+
 int run_lineconverter_test_suite(void) {
   LOGINF("Starting LineConverter Test Suite...");
 
@@ -610,7 +628,7 @@ int run_lineconverter_test_suite(void) {
   }
 
   // Check color expansion: RGBA5551 -> ABGR8 
-  u32 expected_color = rgba5551_to_abgr8(0xF800);
+  u32 expected_color = rgba16_to_abgr8(0xF800);
   if (lc.lines.array[0].array[0].color != expected_color) {
     LOGERR("Color conversion mismatch: got 0x%08X, expected 0x%08X", 
            lc.lines.array[0].array[0].color, expected_color);
@@ -721,6 +739,261 @@ error:
 
 
 
+
+#ifdef LWP_SOFT
+#define LWP_TYPE JDL_TYPE_SOFTWARE
+#else
+#define LWP_TYPE JDL_TYPE_HARDWARE
+#endif
+
+int test_layerwindow_cache_and_pull(C3D_RenderTarget *bottom_target) {
+  LOGINF("Starting LayerWindow Cache and Pull Test...");
+
+  LOGTRC("Testing basic initialization");
+  DataContainer dc;
+  LayerWindow lw;
+  int ret = 0;
+
+  // Initialize Data Container with sufficient space
+  if (datacontainer_init(&dc, 65536) != 0) {
+    LOGERR("Failed to initialize DataContainer");
+    return 1;
+  }
+
+  // Initialize LayerWindow using HARDWARE layers
+  if (layerwindow_init(&lw, &dc, LWP_TYPE) != 0) {
+    LOGERR("Failed to initialize LayerWindow");
+    datacontainer_free(&dc);
+    return 1;
+  }
+
+  LOGTRC("Testing reset (layer creation)");
+
+  // Allocate 3 units, each having 2 layers (64x64)
+  if (layerwindow_reset(&lw, 64, 64, 2, 3) != 0) {
+    LOGERR("Failed to reset LayerWindow with 3 units of 2 layers");
+    ret = 1;
+    goto CLEANUP;
+  }
+
+  if(lw.unit_count != 3) {
+    LOGERR("LayerWindow not 3 units");
+    ret = 1;
+    goto CLEANUP;
+  }
+  for(int i = 0; i < 3; i++) {
+    if(lw.units[i].layer_count != 2) {
+      LOGERR("Unit[%d] not 2 layers", i);
+      ret = 1;
+      goto CLEANUP;
+    }
+    for(int j = 0; j < 2; j++) {
+      if(lw.units[i].layers[j].type != LWP_TYPE) {
+        LOGERR("Layer[%d][%d] not hardware", i, j);
+        ret = 1;
+        goto CLEANUP;
+      }
+      if(lw.units[i].layers[j].width != 64 || 
+         lw.units[i].layers[j].height != 64) {
+        LOGERR("Layer[%d][%d] not 64x64", i, j);
+        ret = 1;
+        goto CLEANUP;
+      }
+    }
+  }
+
+  // My weird color format is specifically high bit A: ARRR RRGG GGGB BBBB
+  u16 col_red    = 0xFC00;
+  u16 col_green  = 0x83E0;
+  u16 col_blue   = 0x801F;
+  u16 col_yellow = 0xFFE0;
+  u16 col_cyan   = 0x83FF;
+  u16 col_magenta= 0xFC1F;
+
+  // Set up lines across 3 pages (0, 1, 2) and 2 layers (0, 1) interleaved
+  struct {
+    page_t page;
+    layer_t layer;
+    LineSegment segment;
+    u16 color;
+  } test_strokes[] = {
+    // Page 0, Layer 1: Horizontal Bar
+    { .page = 0, .layer = 1, .segment = {10, 32, 54, 32}, .color = col_green },
+    // Page 2, Layer 0: Main Diagonal
+    { .page = 2, .layer = 0, .segment = {10, 10, 54, 54}, .color = col_cyan },
+    // Page 1, Layer 0: Vertical Bar
+    { .page = 1, .layer = 0, .segment = {32, 10, 32, 54}, .color = col_blue },
+    // Page 0, Layer 0: Top-Left Cross
+    { .page = 0, .layer = 0, .segment = {10, 10, 30, 30}, .color = col_red },
+    // Page 2, Layer 1: Box Border Edge
+    { .page = 2, .layer = 1, .segment = {10, 50, 54, 50}, .color = col_magenta },
+    // Page 1, Layer 1: Anti-Diagonal
+    { .page = 1, .layer = 1, .segment = {54, 10, 10, 54}, .color = col_yellow },
+  };
+
+  LOGTRC("Adding strokes to data container");
+  size_t stroke_count = sizeof(test_strokes) / sizeof(test_strokes[0]);
+
+  for (size_t i = 0; i < stroke_count; i++) {
+    LineContainer lc;
+    if (linecontainer_init_stroke(&lc) != 0) {
+      LOGERR("Failed to init LineContainer stroke");
+      ret = 1;
+      goto CLEANUP;
+    }
+
+    lc.page = test_strokes[i].page;
+    lc.layer = test_strokes[i].layer;
+    lc.color = test_strokes[i].color;
+    lc.width = 3;
+    lc.style = JDDC_LINESTYLE_STROKE;
+    lc.lines[0] = test_strokes[i].segment;
+    lc.length = 1;
+
+    if (datacontainer_addline(&dc, &lc) != 0) {
+      LOGERR("Failed to add line to DataContainer");
+      linecontainer_free(&lc);
+      ret = 1;
+      goto CLEANUP;
+    }
+    linecontainer_free(&lc);
+  }
+
+  LOGTRC("Pulling lines...");
+
+  PageRange prange = { .page = 0, .offset = 2, .loop_point = 0 };
+  // Initial All-at-Once Pull: pull 3 pages starting at page 0
+  if (layerwindow_pull(&lw, 100000, 1000, prange) != 0) {
+    LOGERR("Failed initial full layerwindow_pull");
+    ret = 1;
+    goto CLEANUP;
+  }
+
+#ifdef LWP_SOFT
+  char outpath[80];
+  for(int i = 0; i < lw.master_layers_length; i++) {
+    sprintf(outpath, "/3dsjunkdrawtest_pull%d.png", i);
+    LOGTRC("Writing png to %s", outpath);
+
+    // Export the png
+    Layer * layer = lw.master_layers + i;
+    write_citropng(layer->texture.sf.buf, layer->texture.sf.width, 
+                   layer->texture.sf.height, outpath, 1);
+  }
+#else
+  LOGINF("Initial pull complete. Displaying 2x3 grid on bottom target.");
+  LOGINF("Press 'A' to proceed to metered draw verification...");
+
+  // Render Loop: Display 3 pages (rows) x 2 layers (cols) grid
+  while (aptMainLoop()) {
+    hidScanInput();
+    u32 kDown = hidKeysDown();
+
+    if (kDown & KEY_A) {
+      LOGDBG("A pressed, continuing metered draw test.");
+      break;
+    }
+
+    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+    C2D_TargetClear(bottom_target, C2D_Color32(20, 20, 20, 255));
+    C2D_SceneBegin(bottom_target);
+
+    // Grid config: 64x64 sub-textures drawn across bottom screen (320x240)
+    for (int p = 0; p < 3; p++) {
+      size_t unit_idx = p % lw.unit_count;
+      LayerWindowUnit *unit = &lw.units[unit_idx];
+
+      for (int l = 0; l < 2; l++) {
+        float posX = 40.0f + (l * 120.0f);
+        float posY = 10.0f + (p * 75.0f);
+
+        if (unit->layers[l].type == JDL_TYPE_HARDWARE) {
+          C2D_DrawImageAt(unit->layers[l].texture.hw.image, posX, posY, 0.5f, NULL, 1.0f, 1.0f);
+        }
+      }
+    }
+
+    C3D_FrameEnd(0);
+  }
+#endif
+
+  // --- Step 2: Metered Pull & Pending Unit Test ---
+  LOGINF("Resetting layer cache to test metered pull/pending functionality...");
+
+  // Reset layer window without freeing data container
+  if (layerwindow_reset(&lw, 64, 64, 2, 3) != 0) {
+    LOGERR("Failed to reset LayerWindow for metered draw");
+    ret = 1;
+    goto CLEANUP;
+  }
+
+  // Perform small metered pulls (limit max_draw to 1 line per call)
+  // Call pull multiple times until all items are drawn into cache
+  int pull_attempts = 0;
+  while (pull_attempts < 20) {
+    layerwindow_pull(&lw, 5000, 1, prange);
+    pull_attempts++;
+
+    // Break early if pending unit cleared and scanners reached end of data
+    int all_done = (lw.pending_unit == NULL);
+    if (all_done) {
+      for (size_t i = 0; i < lw.unit_count; i++) {
+        if (!datascanner_at_end(&lw.units[i].scanner)) {
+          all_done = 0;
+          break;
+        }
+      }
+    }
+    if (all_done) break;
+  }
+
+  LOGTRC("Metered pulls executed: %d attempts", pull_attempts);
+
+  // Verification using layer_querycolor on expected drawn points
+  LOGDBG("Verifying pixel colors on metered drawn layers...");
+
+  // Test Page 0, Layer 0 (Top-left cross point at 20, 20)
+  size_t p0_unit = 0 % lw.unit_count;
+  u32 color_p0_l0 = layer_querycolor(&lw.units[p0_unit].layers[0], 20, 20);
+
+  // Test Page 1, Layer 0 (Vertical bar point at 32, 32)
+  size_t p1_unit = 1 % lw.unit_count;
+  u32 color_p1_l0 = layer_querycolor(&lw.units[p1_unit].layers[0], 32, 32);
+
+  // Test Page 2, Layer 1 (Box border edge point at 32, 50)
+  size_t p2_unit = 2 % lw.unit_count;
+  u32 color_p2_l1 = layer_querycolor(&lw.units[p2_unit].layers[1], 32, 50);
+
+  LOGTRC("P0L0 Col: 0x%08X, P1L0 Col: 0x%08X, P2L1 Col: 0x%08X", 
+         color_p0_l0, color_p1_l0, color_p2_l1);
+
+  // Verify non-zero/non-clear color exists at target drawn pixels
+  if (color_p0_l0 == JDLC_CLEAR) {
+    LOGERR("Color Query Failed: Page 0 Layer 0 line missing!");
+    ret = 1;
+    goto CLEANUP;
+  }
+  if (color_p1_l0 == JDLC_CLEAR) {
+    LOGERR("Color Query Failed: Page 1 Layer 0 line missing!");
+    ret = 1;
+    goto CLEANUP;
+  }
+  if (color_p2_l1 == JDLC_CLEAR) {
+    LOGERR("Color Query Failed: Page 2 Layer 1 line missing!");
+    ret = 1;
+    goto CLEANUP;
+  }
+
+  LOGINF("PASS: LayerWindow cache, metered pull, and pending unit tests passed!");
+
+CLEANUP:
+  layerwindow_free(&lw);
+  datacontainer_free(&dc);
+  return ret;
+}
+
+
+
 // ==========================
 //      MAIN (OBVIOUSLY)
 // ==========================
@@ -755,6 +1028,12 @@ int main(int argc, char **argv) {
     LOGERR("LINECONVERTER FAILED");
     goto SKIPTESTS;
   }
+#ifndef LWP_SKIP
+  if(test_layerwindow_cache_and_pull(screen)) {
+    LOGERR("LAYERWINDOW FAILED");
+    goto SKIPTESTS;
+  }
+#endif
   if(test_layer_sw_to_hw_display(screen)) {
     LOGERR("LAYER FAILED");
     goto SKIPTESTS;

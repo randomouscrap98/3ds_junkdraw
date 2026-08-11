@@ -1,5 +1,6 @@
 #include "layer.h"
 #include "3ds/gpu/gx.h"
+#include "c2d/base.h"
 #include "utils.h"
 
 #include <stdlib.h>
@@ -91,7 +92,8 @@ u32 layer_querycolor(Layer * layer, layerdim_t x, layerdim_t y) {
 
 void layer_clear(Layer * layer, u32 color) {
   if(layer->type == JDL_TYPE_HARDWARE) {
-    C2D_TargetClear(layer->texture.hw.target, color);
+    u16 col16 = abgr8_to_rgba5551(color);
+    C2D_TargetClear(layer->texture.hw.target, col16 | ((u32)col16 << 16));
   } else if(layer->type == JDL_TYPE_SOFTWARE) {
     size_t max = layer_pixelcount(layer);
     // reverse color for DMA transfer speed
@@ -121,6 +123,7 @@ int layer_copy(Layer * dest, Layer * source) {
       // VRAM to VRAM Copy
       C2D_SceneBegin(dest->texture.hw.target);
       C2D_DrawImageAt(source->texture.hw.image, 0.0f, 0.0f, 0.5f, NULL, 1.0f, 1.0f);
+      C2D_Flush();
     } else if(dest->type == JDL_TYPE_SOFTWARE) {
       // We can straight copy the whole pix buffer
       memcpy(dest->texture.sf.buf, source->texture.sf.buf, 
@@ -170,42 +173,42 @@ int layer_copy(Layer * dest, Layer * source) {
   return 0;
 }
 
-#define BRESENHAM_PRE(rl, layer) { \
+#define BRESENHAM_PRE(rl, x1n, y1n, x2n, y2n, layer) { \
   float ofs = (rl.width / 2.0f) - 0.5f; \
   /* For speed, clip line... it deforms lines and looks bad but.. */ \
-  if(ofs > rl.x1) rl.x1 = ofs; \
-  if(ofs > rl.x2) rl.x2 = ofs; \
-  if(ofs > rl.y1) rl.y1 = ofs; \
-  if(ofs > rl.y2) rl.y2 = ofs; \
+  int16_t x1n = ofs > rl.x1 ? ofs : rl.x1; \
+  int16_t y1n = ofs > rl.y1 ? ofs : rl.y1; \
+  int16_t x2n = ofs > rl.x2 ? ofs : rl.x2; \
+  int16_t y2n = ofs > rl.y2 ? ofs : rl.y2; \
   /* The normal shift since points are in the middle */ \
-  rl.x1 = floor(rl.x1 - ofs); \
-  rl.x2 = floor(rl.x2 - ofs); \
-  rl.y1 = floor(rl.y1 - ofs); \
-  rl.y2 = floor(rl.y2 - ofs); \
+  x1n = floor(x1n - ofs); \
+  x2n = floor(x2n - ofs); \
+  y1n = floor(y1n - ofs); \
+  y2n = floor(y2n - ofs); \
   /* More line clipping */ \
-  if(rl.x1 + rl.width > layer->width) rl.x1 = layer->width - rl.width; \
-  if(rl.x2 + rl.width > layer->width) rl.x2 = layer->width - rl.width; \
-  if(rl.y1 + rl.width > layer->height) rl.y1 = layer->height - rl.width; \
-  if(rl.y2 + rl.width > layer->height) rl.y2 = layer->height - rl.width; \
-  int16_t dx = abs(rl.x2 - rl.x1); \
-  int16_t sx = rl.x1 < rl.x2 ? 1 : -1; \
-  int16_t dy = -abs(rl.y2 - rl.y1); \
-  int16_t sy = rl.y1 < rl.y2 ? 1 : -1; \
+  if(x1n + rl.width > layer->width) x1n = layer->width - rl.width; \
+  if(x2n + rl.width > layer->width) x2n = layer->width - rl.width; \
+  if(y1n + rl.width > layer->height) y1n = layer->height - rl.width; \
+  if(y2n + rl.width > layer->height) y2n = layer->height - rl.width; \
+  int16_t dx = abs(x2n - x1n); \
+  int16_t sx = x1n < x2n ? 1 : -1; \
+  int16_t dy = -abs(y2n - y1n); \
+  int16_t sy = y1n < y2n ? 1 : -1; \
   int16_t error = dx + dy; \
   while(1) { \
     /* Your box drawing code or whatever goes here */
 
-#define BRESENHAM_POST(rl) \
+#define BRESENHAM_POST(rl, x1n, y1n, x2n, y2n) \
     int16_t e2 = 2 * error; \
     if (e2 >= dy) { \
-      if (rl.x1 == rl.x2) break; \
+      if (x1n == x2n) break; \
       error = error + dy; \
-      rl.x1 = rl.x1 + sx; \
+      x1n = x1n + sx; \
     } \
     if (e2 <= dx) { \
-      if (rl.y1 == rl.y2) break; \
+      if (y1n == y2n) break; \
       error = error + dx; \
-      rl.y1 = rl.y1 + sy; \
+      y1n = y1n + sy; \
     } \
   } \
 }
@@ -216,11 +219,11 @@ static inline void layer_drawlines_hardware(Layer * layer, RenderLine * lines, s
   //  WARN: this flushes, be careful when calling!
   C2D_SceneBegin(layer->texture.hw.target);
   for(size_t i = 0; i < count; i++) {
-    BRESENHAM_PRE(lines[i], layer) {
-      C2D_DrawRectSolid(lines[i].x1 + JDL_EDGEBUF, lines[i].y1 + JDL_EDGEBUF, 
+    BRESENHAM_PRE(lines[i], x, y, x2, y2, layer) {
+      C2D_DrawRectSolid(x + JDL_EDGEBUF, y + JDL_EDGEBUF, 
                         0.5, lines[i].width, lines[i].width, lines[i].color);
       if(++command_count >= (JDL_MAXOBJECTS - 1)) {
-        //LOGTRACE("FLUSHING %ld DRAW CMDS PREMATURELY\n", ct->draw_cmd_count); 
+        LOGTRC("FLUSHING %ld DRAW CMDS PREMATURELY\n", command_count); 
         // ALTERNATIVE: Try C2D_Flush()? That might be why it flashes all weird...
         //C3D_FrameEnd(0);
         //C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
@@ -228,7 +231,7 @@ static inline void layer_drawlines_hardware(Layer * layer, RenderLine * lines, s
         command_count = 0;
       }
     }
-    BRESENHAM_POST(lines[i]);
+    BRESENHAM_POST(lines[i], x, y, x2, y2);
   }
   // Leave a buffer for other people (if we're too close to the max object). It's not a lot...
   if(command_count >= JDL_SAFETYFLUSH) {
@@ -240,16 +243,12 @@ static inline void layer_drawlines_software(Layer * layer, RenderLine * lines, s
   for(size_t i = 0; i < count; i++) {
     // Store reversed so DMA transfer is fast
     u32 color = JD_REVERSE32(lines[i].color);
-    BRESENHAM_PRE(lines[i], layer) {
-      // We know we reject stuff on the left side for safety reasons, but the right
-      // side is allowed to run off, so we must clamp
-      u32 maxx = JD_MIN(lines[i].x1 + lines[i].width, layer->texture.sf.width);
-      u32 maxy = JD_MIN(lines[i].y1 + lines[i].width, layer->texture.sf.height);
-      for (u32 yi = lines[i].y1; yi < maxy; yi++)
-        for (u32 xi = lines[i].x1; xi < maxx; xi++)
-          layer->texture.sf.buf[yi * layer->texture.sf.width + xi] = color;
+    BRESENHAM_PRE(lines[i], x, y, x2, y2, layer) {
+      for (u32 yi = 0; yi < lines[i].width; yi++)
+        for (u32 xi = 0; xi < lines[i].width; xi++)
+          layer->texture.sf.buf[(yi + y) * layer->texture.sf.width + xi + x] = color;
     }
-    BRESENHAM_POST(lines[i]);
+    BRESENHAM_POST(lines[i], x, y, x2, y2);
   }
 }
 
