@@ -38,7 +38,7 @@ int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type) {
     }
     // NOTE: -1 depth means none
     layer->texture.hw.target = C3D_RenderTargetCreateFromTex(
-      &(layer->texture.hw.texture), GPU_TEXFACE_2D, 0, -1);
+      &(layer->texture.hw.texture), GPU_TEXFACE_2D, 0, GPU_RB_DEPTH16);
     if(!layer->texture.hw.target) {
       LOGERR("Can't create target from texture! W: %d H: %d",
              layer->texture.hw.subtex.width,

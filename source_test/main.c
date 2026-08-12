@@ -47,6 +47,7 @@ void start_frame() {
   // C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_ALL);
   C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
   //C3D_EarlyDepthTest(false, 0, 0);
+  C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_COLOR);
   C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE,
                  GPU_ZERO);
 }
@@ -63,7 +64,6 @@ void end_frame() {
 // do a long running task.
 void printf_flush(const char *format, ...) {
   start_frame();
-  C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
   va_list args;
   va_start(args, format);
   vprintf(format, args);
@@ -80,7 +80,7 @@ static inline void logbase(u8 color, const char * fmt, va_list args) {
   struct tm *timeinfo = localtime(&rawtime);
   printf("[%02d|%02d:%02d] ", _db_prnt_num, timeinfo->tm_hour, timeinfo->tm_min);
   vprintf(fmt, args);
-  printf_flush("\n");
+  printf("\n");
 }
 
 void LOGERR(const char *fmt, ...) {
@@ -88,6 +88,7 @@ void LOGERR(const char *fmt, ...) {
   va_start(args, fmt);
   logbase(STATUS_ERROR, fmt, args);
   va_end(args);
+  printf_flush("");
 }
 
 void LOGWRN(const char *fmt, ...) {
@@ -95,6 +96,7 @@ void LOGWRN(const char *fmt, ...) {
   va_start(args, fmt);
   logbase(STATUS_WARNING, fmt, args);
   va_end(args);
+  printf_flush("");
 }
 
 void LOGINF(const char *fmt, ...) {
@@ -102,6 +104,7 @@ void LOGINF(const char *fmt, ...) {
   va_start(args, fmt);
   logbase(STATUS_INFO, fmt, args);
   va_end(args);
+  printf_flush("");
 }
 
 void LOGDBG(const char *fmt, ...) {
@@ -477,7 +480,7 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   aptMainLoop();
   start_frame();
   LOGTRC("Clearing hardware layer");
-  layer_clear(&hw_layer, 0); //rgb24_to_rgba32c(0xFF0000));
+  layer_clear(&hw_layer, rgb24_to_rgba32c(0xFF0000));
   LOGTRC("Drawing lines on hardware layer");
   layer_drawlines(&hw_layer, lines, line_count);
   end_frame();
@@ -1058,7 +1061,7 @@ int main(int argc, char **argv) {
   C2D_Init(C2D_DEFAULT_MAX_OBJECTS);
   C2D_Prepare();
 
-  C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_ALL);
+  C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_COLOR);
 
   //PrintConsole * console_ptr = 
   consoleInit(GFX_TOP, NULL);
