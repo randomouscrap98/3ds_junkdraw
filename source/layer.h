@@ -17,6 +17,9 @@
 #define JDL_MAXOBJECTS 8192 // Default is 4096, and 8192 is extremely pushing it
 #define JDL_SAFETYFLUSH (JDL_MAXOBJECTS - 200)
 
+// Whether to generate the png export function
+#define JDL_EXPORTPNG
+
 typedef u16 layerdim_t;
 
 typedef struct {
@@ -61,7 +64,7 @@ typedef struct {
 int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type); //Tex3DS_SubTexture subtex);
 void layer_free(Layer * layer);
 // Sometimes a layer's actual area inside is different (because of citro bugs)
-void layer_mapped_area(Layer * layer, U32Bounds * bounds);
+void layer_mapped_area(Layer * layer, S32Bounds * bounds);
 size_t layer_pixelcount(Layer * layer);
 u32 layer_querycolor(Layer * layer, layerdim_t x, layerdim_t y);
 size_t layer_estimate_pixelcount(u8 type, layerdim_t width, layerdim_t height);
@@ -77,5 +80,8 @@ void layer_clear(Layer * layer, u32 color);
 // Put source layer onto dest layer, ONLY works for software layers!
 int layer_composite_onto(Layer * dest, Layer * source);
 
+#ifdef JDL_EXPORTPNG
+int layer_export_png(Layer * layer, const char *filepath);
+#endif
 
 #endif

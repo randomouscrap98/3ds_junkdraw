@@ -54,10 +54,11 @@ int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type) {
     int err = layer_create_texture(layer, width, height);
     if(err) return err;
   } else if(type == JDL_TYPE_SOFTWARE) {
-    layer->texture.sf.width = width;
-    layer->texture.sf.height = height;
+    layer->texture.sf.width = width + JDL_EDGEBUF;
+    layer->texture.sf.height = height + JDL_EDGEBUF;
     // WARN: will linearAlloc become a problem? Something something fragmented...
-    layer->texture.sf.buf = linearAlloc(sizeof(u32) * width * height);
+    layer->texture.sf.buf = linearAlloc(
+      sizeof(u32) * layer->texture.sf.width * layer->texture.sf.height);
     if(!layer->texture.sf.buf) {
       LOGERR("OUT OF MEMORY: Can't create software layer!");
       return 1;
@@ -69,17 +70,17 @@ int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type) {
   return 0;
 }
 
-void layer_mapped_area(Layer * layer, U32Bounds * bounds) {
-  bounds->x1 = 0;
-  bounds->y1 = 0;
-  bounds->x2 = layer->width;
-  bounds->y2 = layer->height;
-  if(layer->type == JDL_TYPE_HARDWARE) {
-    bounds->x1 += JDL_EDGEBUF;
-    bounds->y1 += JDL_EDGEBUF;
-    bounds->x2 += JDL_EDGEBUF;
-    bounds->y2 += JDL_EDGEBUF;
-  } 
+void layer_mapped_area(Layer * layer, S32Bounds * bounds) {
+  bounds->x1 = JDL_EDGEBUF;
+  bounds->y1 = JDL_EDGEBUF;
+  bounds->x2 = layer->width + JDL_EDGEBUF;
+  bounds->y2 = layer->height + JDL_EDGEBUF;
+  // if(layer->type == JDL_TYPE_HARDWARE) {
+  //   bounds->x1 += JDL_EDGEBUF;
+  //   bounds->y1 += JDL_EDGEBUF;
+  //   bounds->x2 += JDL_EDGEBUF;
+  //   bounds->y2 += JDL_EDGEBUF;
+  // } 
 }
 
 size_t layer_pixelcount(Layer * layer) {
@@ -96,12 +97,14 @@ size_t layer_estimate_pixelcount(u8 type, layerdim_t width, layerdim_t height) {
     Tex3DS_SubTexture subtex = layer_new_subtexture(width, height);
     return subtex.width * subtex.height;
   } else if(type == JDL_TYPE_SOFTWARE) {
-    return width * height;
+    return (width + JDL_EDGEBUF) * (height + JDL_EDGEBUF);
   } 
   return 0;
 }
 
 u32 layer_querycolor(Layer * layer, layerdim_t x, layerdim_t y) {
+  x += JDL_EDGEBUF;
+  y += JDL_EDGEBUF;
   if(layer->type == JDL_TYPE_HARDWARE) {
     return rgba5551_to_abgr8(((u16*)layer->texture.hw.texture.data)[
       get_tiled_pixel_offset(x, y, layer->texture.hw.subtex.width)
@@ -149,8 +152,11 @@ void layer_free(Layer * layer) {
 // Copy from one layer into another. Can perform conversions while copying.
 // CAREFUL: will begin a scene / flush etc to copy vram! Does NOT init!!
 int layer_copy(Layer * dest, Layer * source) {
-  // Simple init the dest texture
-  // layer_init(dest, source->width, source->height, type);
+  // Make sure the dest/source can even do this
+  if(dest->width != source->width || dest->height != source->height) {
+    LOGERR("Layers not the same dimensions!");
+    return 1;
+  }
   if(dest->type == source->type) {
     if(dest->type == JDL_TYPE_HARDWARE) {
       // VRAM to VRAM Copy
@@ -224,6 +230,10 @@ int layer_copy(Layer * dest, Layer * source) {
   if(x2n + rl.width > layer->width) x2n = layer->width - rl.width; \
   if(y1n + rl.width > layer->height) y1n = layer->height - rl.width; \
   if(y2n + rl.width > layer->height) y2n = layer->height - rl.width; \
+  x1n += JDL_EDGEBUF; \
+  x2n += JDL_EDGEBUF; \
+  y1n += JDL_EDGEBUF; \
+  y2n += JDL_EDGEBUF; \
   int16_t dx = abs(x2n - x1n); \
   int16_t sx = x1n < x2n ? 1 : -1; \
   int16_t dy = -abs(y2n - y1n); \
@@ -253,8 +263,7 @@ static inline void layer_drawlines_hardware(Layer * layer, RenderLine * lines, s
   C2D_SceneBegin(layer->texture.hw.target);
   for(size_t i = 0; i < count; i++) {
     BRESENHAM_PRE(lines[i], x, y, x2, y2, layer) {
-      C2D_DrawRectSolid(x + JDL_EDGEBUF, y + JDL_EDGEBUF, 
-                         0.5, lines[i].width, lines[i].width, lines[i].color);
+      C2D_DrawRectSolid(x, y, 0.5, lines[i].width, lines[i].width, lines[i].color);
       if(++command_count >= (JDL_MAXOBJECTS - 1)) {
         LOGTRC("FLUSHING %ld DRAW CMDS PREMATURELY\n", command_count); 
         C2D_Flush();
@@ -305,3 +314,95 @@ int layer_composite_onto(Layer * dest, Layer * source) {
   }
 }
 
+#ifdef JDL_EXPORTPNG
+
+#include <png.h>
+#define JDL_PNG_FORMAT PNG_COLOR_TYPE_RGBA
+#define JDL_PNG_BYTESPER 4
+
+int layer_export_png(Layer * layer, const char *filepath) {
+
+  if(layer->type != JDL_TYPE_SOFTWARE) {
+    LOGERR("Can only export software layers!");
+    return 1;
+  }
+
+  // A lot of this is taken from
+  // http://www.labbookpages.co.uk/software/imgProc/libPNG.html
+  int code = 0;
+  FILE *fp = NULL;
+  png_structp png_ptr = NULL;
+  png_infop info_ptr = NULL;
+
+  // Open file for writing (binary mode)
+  fp = fopen(filepath, "wb");
+  if (fp == NULL) {
+    LOGERR("Couldn't open png for writing: %s\n", filepath);
+    code = 1;
+    goto finalise;
+  }
+
+  // Initialize write structure
+  png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+  if (png_ptr == NULL) {
+    LOGERR("Could not allocate png write struct\n");
+    code = 1;
+    goto finalise;
+  }
+
+  // Initialize info structure
+  info_ptr = png_create_info_struct(png_ptr);
+  if (info_ptr == NULL) {
+    LOGERR("Could not allocate png info struct\n");
+    code = 1;
+    goto finalise;
+  }
+
+  // Setup Exception handling
+  if (setjmp(png_jmpbuf(png_ptr))) {
+    LOGERR("Can't set png jmpbuf (internal error)\n");
+    code = 1;
+    goto finalise;
+  }
+
+  // Use the filepointer we got before for png io
+  png_init_io(png_ptr, fp);
+
+  // Write header (8 bit colour depth)
+  png_set_IHDR(png_ptr, info_ptr, layer->width, layer->height, 8, 
+               JDL_PNG_FORMAT, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE,
+               PNG_FILTER_TYPE_BASE);
+
+  png_write_info(png_ptr, info_ptr);
+
+  S32Bounds lb;
+  layer_mapped_area(layer, &lb);
+
+  // Write image data
+  for (u32 y = lb.y1; y < lb.y2; y++) {
+    for(u32 x = lb.x1; x < lb.x2; x++) {
+      u32 pix = x + y * layer->texture.sf.width;
+      layer->texture.sf.buf[pix] = JD_REVERSE32(layer->texture.sf.buf[pix]);
+    }
+    png_write_row(png_ptr, (png_bytep)(layer->texture.sf.buf + lb.x1 + y * layer->texture.sf.width));
+    for(u32 x = lb.x1; x < lb.x2; x++) {
+      u32 pix = x + y * layer->texture.sf.width;
+      layer->texture.sf.buf[pix] = JD_REVERSE32(layer->texture.sf.buf[pix]);
+    }
+  }
+
+  // End write
+  png_write_end(png_ptr, NULL);
+
+finalise:
+  if (fp != NULL)
+    fclose(fp);
+  if (info_ptr != NULL)
+    png_free_data(png_ptr, info_ptr, PNG_FREE_ALL, -1);
+  if (png_ptr != NULL)
+    png_destroy_write_struct(&png_ptr, (png_infopp)NULL);
+
+  return code;
+}
+
+#endif

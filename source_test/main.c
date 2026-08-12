@@ -17,7 +17,6 @@ u32 __stacksize__ = 512 * 1024;
 #include "layer.h"
 #include "edit.h"
 #include "datacontainer.h"
-#include "filesys.h"
 #include "lineconversion.h"
 #include "layer_cache.h"
 
@@ -489,7 +488,7 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   LOGTRC("Writing png to %s", outpath);
 
   // Export the png
-  write_citropng(sw_layer.texture.sf.buf, sw_layer.texture.sf.width, sw_layer.texture.sf.height, outpath, 1);
+  layer_export_png(&sw_layer, outpath);
 
   LOGINF("Render ready! Press A on the 3DS to exit test...");
 
@@ -507,7 +506,10 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
     C2D_TargetClear(bottom_target, C2D_Color32(0, 0, 0, 255));
     C2D_SceneBegin(bottom_target);
     // Draw the converted hardware layer texture onto the screen target
-    C2D_DrawImageAt(hw_layer.texture.hw.image, 0.0f, 0.0f, 0.5f, NULL, 1.0f, 1.0f);
+    S32Bounds bounds;
+    layer_mapped_area(&hw_layer, &bounds);
+    //LOGTRC("BX1: %d BY1: %d", bounds.x1, bounds.y1);
+    C2D_DrawImageAt(hw_layer.texture.hw.image, -bounds.x1, -bounds.y1, 0.5f, NULL, 1.0f, 1.0f);
     end_frame();
   }
 
@@ -526,8 +528,7 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
     LOGTRC("Writing png to %s", outpath);
 
     // Export the png
-    write_citropng(sw_layer.texture.sf.buf, sw_layer.texture.sf.width, 
-                   sw_layer.texture.sf.height, outpath, 1);
+    layer_export_png(&sw_layer, outpath);
 
     if (layer_copy(&hw_layer, &sw_layer) != 0) {
       LOGERR("Failed to copy software layer to hardware layer %d", i);

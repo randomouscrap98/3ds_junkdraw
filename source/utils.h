@@ -109,6 +109,13 @@ typedef struct {
   u32 y2; // Exclusive
 } U32Bounds;
 
+typedef struct {
+  s32 x1;
+  s32 y1;
+  s32 x2; // Exclusive
+  s32 y2; // Exclusive
+} S32Bounds;
+
 // Calculates the byte offset of pixel (x, y) inside an 8x8 tiled texture
 static inline u32 get_tiled_pixel_offset(u32 x, u32 y, u32 width) {
   // Identify which 8x8 tile (tile_x, tile_y) contains (x, y)
