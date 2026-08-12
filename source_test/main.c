@@ -31,9 +31,30 @@ u32 __stacksize__ = 512 * 1024;
 #define STATUS_WARNING 33   // yellow?
 #define STATUS_ERROR 31     // red?
 
-#define LWP_SOFT
-// #define LWP_SKIP
+// #define LWP_SOFT
+#define LWP_SKIP
 // #define LSH_NOCOPY
+#define DC_SKIP
+#define EDIT_SKIP
+#define LC_SKIP
+#define UTILS_SKIP
+
+#define LWP_WIDTH 64 //(64 - JDL_EDGEBUF)
+#define LWP_HEIGHT 64 //(64 - JDL_EDGEBUF)
+
+
+void start_frame() {
+  // C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_ALL);
+  C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+  //C3D_EarlyDepthTest(false, 0, 0);
+  C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE,
+                 GPU_ZERO);
+}
+
+void end_frame() {
+  C2D_Flush();
+  C3D_FrameEnd(0);
+}
 
 
 // So apparently printf doesn't work unless you do the standard Citro3D frame
@@ -41,12 +62,13 @@ u32 __stacksize__ = 512 * 1024;
 // the given message, basically forcing it to be shown even if you're about to
 // do a long running task.
 void printf_flush(const char *format, ...) {
+  start_frame();
   C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
   va_list args;
   va_start(args, format);
   vprintf(format, args);
   va_end(args);
-  C3D_FrameEnd(0);
+  end_frame();
 }
 
 static inline void logbase(u8 color, const char * fmt, va_list args) {
@@ -95,7 +117,6 @@ void LOGTRC(const char *fmt, ...) {
   logbase(STATUS_TRACE, fmt, args);
   va_end(args);
 }
-
 
 
 int run_datacontainer_test_suite(void) {
@@ -409,10 +430,10 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   int ret = 0;
 
   // Initialize Software Layer (320x240 for 3DS Bottom Screen)
-  if (layer_init(&sw_layer, 320, 240, JDL_TYPE_SOFTWARE) != 0) {
-    LOGERR("Failed to initialize software layer");
-    return 1;
-  }
+  // if (layer_init(&sw_layer, 320, 240, JDL_TYPE_SOFTWARE) != 0) {
+  //   LOGERR("Failed to initialize software layer");
+  //   return 1;
+  // }
 
   if (layer_init(&hw_layer, 320, 240, JDL_TYPE_HARDWARE) != 0) {
     LOGERR("Failed to initialize hardware layer");
@@ -421,7 +442,8 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   }
 
   // Clear software layer to fully opaque dark gray
-  layer_clear(&sw_layer, rgb24_to_rgba32c(0x444444));
+  // LOGTRC("Clearing software layer");
+  // layer_clear(&sw_layer, rgb24_to_rgba32c(0x444444));
 
   // Define lines to draw numbers "1" and "2"
   RenderLine lines[] = {
@@ -444,33 +466,35 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
 
   size_t line_count = sizeof(lines) / sizeof(lines[0]);
 
-  layer_drawlines(&sw_layer, lines, line_count);
+  aptMainLoop();
+  start_frame();
+  end_frame();
+  
+  LOGTRC("Drawing lines on software layer");
+  // layer_drawlines(&sw_layer, lines, line_count);
 
   // Also, see if the hardware layers work (they crash)
   aptMainLoop();
-  C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-  C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_ALL);
-  C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE,
-                 GPU_ZERO);
-  layer_clear(&hw_layer, rgb24_to_rgba32c(0xFF0000));
+  start_frame();
+  LOGTRC("Clearing hardware layer");
+  layer_clear(&hw_layer, 0); //rgb24_to_rgba32c(0xFF0000));
+  LOGTRC("Drawing lines on hardware layer");
   layer_drawlines(&hw_layer, lines, line_count);
-  C2D_Flush();
-  C3D_FrameEnd(0);
+  end_frame();
 
   // Copy/Convert Software layer -> Hardware layer (VRAM)
-#ifndef LSH_NOCOPY
-  if (layer_copy(&hw_layer, &sw_layer) != 0) {
-    LOGERR("Failed to copy software layer to hardware layer");
-    goto ERROR;
-  }
-#endif
+// #ifndef LSH_NOCOPY
+//   if (layer_copy(&hw_layer, &sw_layer) != 0) {
+//     LOGERR("Failed to copy software layer to hardware layer");
+//     goto ERROR;
+//   }
+// #endif
 
   char outpath[80] = "/3dsjunkdrawtest1.png";
   LOGTRC("Writing png to %s", outpath);
 
   // Export the png
-  write_citropng(sw_layer.texture.sf.buf, sw_layer.texture.sf.width, 
-                 sw_layer.texture.sf.height, outpath, 1);
+  // write_citropng(sw_layer.texture.sf.buf, sw_layer.texture.sf.width, sw_layer.texture.sf.height, outpath, 1);
 
   LOGINF("Render ready! Press A on the 3DS to exit test...");
 
@@ -484,14 +508,12 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
       break;
     }
 
-    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+    start_frame();
     C2D_TargetClear(bottom_target, C2D_Color32(0, 0, 0, 255));
     C2D_SceneBegin(bottom_target);
-
     // Draw the converted hardware layer texture onto the screen target
     C2D_DrawImageAt(hw_layer.texture.hw.image, 0.0f, 0.0f, 0.5f, NULL, 1.0f, 1.0f);
-
-    C3D_FrameEnd(0);
+    end_frame();
   }
 
   // Make a really obvious clear color on sw
@@ -792,8 +814,8 @@ int test_layerwindow_cache_and_pull(C3D_RenderTarget *bottom_target) {
 
   LOGTRC("Testing reset (layer creation)");
 
-  // Allocate 3 units, each having 2 layers (64x64)
-  if (layerwindow_reset(&lw, 64, 64, 2, 3) != 0) {
+  // Allocate 3 units, each having 2 layers 
+  if (layerwindow_reset(&lw, LWP_WIDTH, LWP_HEIGHT, 2, 3) != 0) {
     LOGERR("Failed to reset LayerWindow with 3 units of 2 layers");
     ret = 1;
     goto CLEANUP;
@@ -816,9 +838,9 @@ int test_layerwindow_cache_and_pull(C3D_RenderTarget *bottom_target) {
         ret = 1;
         goto CLEANUP;
       }
-      if(lw.units[i].layers[j].width != 64 || 
-         lw.units[i].layers[j].height != 64) {
-        LOGERR("Layer[%d][%d] not 64x64", i, j);
+      if(lw.units[i].layers[j].width != LWP_WIDTH|| 
+         lw.units[i].layers[j].height != LWP_HEIGHT) {
+        LOGERR("Layer[%d][%d] not %dx%d", i, j, LWP_WIDTH, LWP_HEIGHT);
         ret = 1;
         goto CLEANUP;
       }
@@ -884,6 +906,7 @@ int test_layerwindow_cache_and_pull(C3D_RenderTarget *bottom_target) {
 
   LOGTRC("Pulling lines...");
 
+  start_frame();
   PageRange prange = { .page = 0, .offset = 2, .loop_point = 0 };
   // Initial All-at-Once Pull: pull 3 pages starting at page 0
   if (layerwindow_pull(&lw, 100000, 1000, prange) != 0) {
@@ -891,6 +914,7 @@ int test_layerwindow_cache_and_pull(C3D_RenderTarget *bottom_target) {
     ret = 1;
     goto CLEANUP;
   }
+  end_frame();
 
 #ifdef LWP_SOFT
   char outpath[80];
@@ -917,11 +941,11 @@ int test_layerwindow_cache_and_pull(C3D_RenderTarget *bottom_target) {
       break;
     }
 
-    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+    start_frame();
     C2D_TargetClear(bottom_target, C2D_Color32(20, 20, 20, 255));
     C2D_SceneBegin(bottom_target);
 
-    // Grid config: 64x64 sub-textures drawn across bottom screen (320x240)
+    // Grid config: sub-textures drawn across bottom screen (320x240)
     for (int p = 0; p < 3; p++) {
       size_t unit_idx = p % lw.unit_count;
       LayerWindowUnit *unit = &lw.units[unit_idx];
@@ -936,7 +960,7 @@ int test_layerwindow_cache_and_pull(C3D_RenderTarget *bottom_target) {
       }
     }
 
-    C3D_FrameEnd(0);
+    end_frame();
   }
 #endif
 
@@ -952,6 +976,7 @@ int test_layerwindow_cache_and_pull(C3D_RenderTarget *bottom_target) {
 
   // Perform small metered pulls (limit max_draw to 1 line per call)
   // Call pull multiple times until all items are drawn into cache
+  start_frame();
   int pull_attempts = 0;
   while (pull_attempts < 20) {
     layerwindow_pull(&lw, 5000, 1, prange);
@@ -969,6 +994,7 @@ int test_layerwindow_cache_and_pull(C3D_RenderTarget *bottom_target) {
     }
     if (all_done) break;
   }
+  end_frame();
 
   LOGTRC("Metered pulls executed: %d attempts", pull_attempts);
 
@@ -1026,11 +1052,13 @@ int main(int argc, char **argv) {
   hidSetRepeatParameters(BREPEAT_DELAY, BREPEAT_INTERVAL);
 
   // Enable the higher clock speed on New 3DS
-  osSetSpeedupEnable(true);
+  // osSetSpeedupEnable(true);
 
   C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
   C2D_Init(C2D_DEFAULT_MAX_OBJECTS);
   C2D_Prepare();
+
+  C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_ALL);
 
   //PrintConsole * console_ptr = 
   consoleInit(GFX_TOP, NULL);
@@ -1039,22 +1067,30 @@ int main(int argc, char **argv) {
   LOGTRC("INITIALIZED");
 
   // Run tests... here?? Or run some amount of tests per frame maybe...
+#ifndef DC_SKIP
   if(run_datacontainer_test_suite()) {
     LOGERR("DATA CONTAINER FAILED");
     goto SKIPTESTS;
   }
+#endif
+#ifndef EDIT_SKIP
   if(run_edit_test_suite()) {
     LOGERR("EDIT FAILED");
     goto SKIPTESTS;
   }
+#endif
+#ifndef UTILS_SKIP
   if(utils_test()) {
     LOGERR("UTILS FAILED");
     goto SKIPTESTS;
   }
+#endif
+#ifndef LC_SKIP
   if(run_lineconverter_test_suite()) {
     LOGERR("LINECONVERTER FAILED");
     goto SKIPTESTS;
   }
+#endif
 #ifndef LWP_SKIP
   if(test_layerwindow_cache_and_pull(screen)) {
     LOGERR("LAYERWINDOW FAILED");
@@ -1089,13 +1125,8 @@ SKIPTESTS:;
     // =======================================
     // Render the scene
     // =======================================
-    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+    start_frame();
 
-    // -- LAYER DRAW SECTION --
-    C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE,
-                   GPU_ZERO);
-
-    C2D_Flush();
 
     // -- OTHER DRAW SECTION --
     C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA,
@@ -1109,7 +1140,7 @@ SKIPTESTS:;
     // draw_scrollbars(&sys.screen_state);
     // draw_colorpicker(&sys.colors, !sstate.palette_active);
 
-    C3D_FrameEnd(0);
+    end_frame();
   }
 // ENDMAINLOOP:;
 

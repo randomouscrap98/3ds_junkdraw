@@ -102,7 +102,7 @@ static void layerwindow_reset_unit(LayerWindow * lw, size_t unit_id) {
   LayerWindowUnit * unit = lw->units + unit_id;
   datascanner_reset(&unit->scanner);
   for(int i = 0; i < unit->layer_count; i++) {
-    layer_clear(&unit->layers[i], JDLC_CLEAR);
+    layer_clear(&unit->layers[i], 0xFFFFFFFF); //JDLC_CLEAR);
   }
   if(lw->pending_unit == unit) {
     // Clear out the pending line in the master window, it was for this unit

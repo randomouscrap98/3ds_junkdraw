@@ -65,8 +65,8 @@ size_t lineconverter_convert(LineConverter * lc, size_t count) {
   }
   size_t end = JD_MIN(lc->pending_next + count, lc->pending.length);
   count = end - lc->pending_next;
-  vector_RenderLine * rl = lc->lines.array + lc->pending.layer;
   // Reserve some space in the vector (for speed)
+  vector_RenderLine * rl = lc->lines.array + lc->pending.layer;
   vector_RenderLine_reserve(rl, rl->length + count);
   for(; lc->pending_next < end; lc->pending_next++) {
     size_t rlidx;

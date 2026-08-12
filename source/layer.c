@@ -24,12 +24,27 @@ int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type) {
       LOGERR("HW LAYER TOO LARGE! MAX: %d", JDL_MAXHWLAYERDIM);
       return 1;
     }
-    C3D_TexInitVRAM(&(layer->texture.hw.texture), 
+    LOGTRC("Creating VRAM texture W: %d H: %d",
+           layer->texture.hw.subtex.width,
+           layer->texture.hw.subtex.height);
+    if(!C3D_TexInitVRAM(&(layer->texture.hw.texture), 
                     layer->texture.hw.subtex.width, 
                     layer->texture.hw.subtex.height, 
-                    JDL_FORMAT);
+                    JDL_FORMAT)) {
+      LOGERR("Can't create VRAM texture! W: %d H: %d",
+             layer->texture.hw.subtex.width,
+             layer->texture.hw.subtex.height);
+      return 1;
+    }
+    // NOTE: -1 depth means none
     layer->texture.hw.target = C3D_RenderTargetCreateFromTex(
       &(layer->texture.hw.texture), GPU_TEXFACE_2D, 0, -1);
+    if(!layer->texture.hw.target) {
+      LOGERR("Can't create target from texture! W: %d H: %d",
+             layer->texture.hw.subtex.width,
+             layer->texture.hw.subtex.height);
+      return 1;
+    }
     layer->texture.hw.image.tex = &(layer->texture.hw.texture);
     layer->texture.hw.image.subtex = &(layer->texture.hw.subtex);
   } else if(type == JDL_TYPE_SOFTWARE) {
@@ -93,13 +108,15 @@ u32 layer_querycolor(Layer * layer, layerdim_t x, layerdim_t y) {
 void layer_clear(Layer * layer, u32 color) {
   if(layer->type == JDL_TYPE_HARDWARE) {
     if(color == 0) { 
-    // IDK I just know this works for 0 and not sure for drawrect
+      // IDK I just know this works for 0 and not sure for drawrect
+      // NOTE: this does a flush but switches to the target so be careful
       C2D_TargetClear(layer->texture.hw.target, 0); 
     } else {
+      LOGTRC("Clearing HW texture with solid rect");
       C2D_SceneBegin(layer->texture.hw.target);
-      C2D_DrawRectSolid(0, 0, 0.5, 
-                        layer->texture.hw.subtex.width,
-                        layer->texture.hw.subtex.height,
+      C2D_DrawRectSolid(JDL_EDGEBUF, JDL_EDGEBUF, 0.5, 
+                        layer->texture.hw.subtex.width - JDL_EDGEBUF,
+                        layer->texture.hw.subtex.height - JDL_EDGEBUF,
                         color);
       C2D_Flush();
     }
@@ -223,29 +240,32 @@ int layer_copy(Layer * dest, Layer * source) {
 }
 
 static inline void layer_drawlines_hardware(Layer * layer, RenderLine * lines, size_t count) {
-  //static u32 command_count = 0; // GLOBAL TRACKING, kind of scary but yeah...
   u32 command_count = 0;
-  //  WARN: this flushes, be careful when calling!
+  //  WARN: this flushes (which is required but can be slow?), be careful when calling!
   C2D_SceneBegin(layer->texture.hw.target);
   for(size_t i = 0; i < count; i++) {
     BRESENHAM_PRE(lines[i], x, y, x2, y2, layer) {
+      //LOGTRC("RECT X: %d Y: %d", x, y);
       C2D_DrawRectSolid(x + JDL_EDGEBUF, y + JDL_EDGEBUF, 
-                        0.5, lines[i].width, lines[i].width, lines[i].color);
+                         0.5, lines[i].width, lines[i].width, lines[i].color);
       if(++command_count >= (JDL_MAXOBJECTS - 1)) {
         LOGTRC("FLUSHING %ld DRAW CMDS PREMATURELY\n", command_count); 
-        // ALTERNATIVE: Try C2D_Flush()? That might be why it flashes all weird...
         //C3D_FrameEnd(0);
         //C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+        // ALTERNATIVE: Try C2D_Flush()? That might be why it flashes all weird...
         C2D_Flush();
         command_count = 0;
       }
     }
     BRESENHAM_POST(lines[i], x, y, x2, y2);
   }
-  // Leave a buffer for other people (if we're too close to the max object). It's not a lot...
-  if(command_count >= JDL_SAFETYFLUSH) {
-    C2D_Flush();
-  }
+  //LOGTRC("COMPLETE: %d hw lines", count);
+  // Just go ahead and flush now to get all the stuff onto the layer
+  C2D_Flush();
+  // // Leave a buffer for other people (if we're too close to the max object). It's not a lot...
+  // if(command_count >= JDL_SAFETYFLUSH) {
+  //   C2D_Flush();
+  // }
 }
 
 static inline void layer_drawlines_software(Layer * layer, RenderLine * lines, size_t count) {
