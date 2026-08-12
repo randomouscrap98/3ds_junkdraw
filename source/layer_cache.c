@@ -11,7 +11,7 @@
 // which page you start at
 #define JDLC_UNIT(lw, page) ((page) % (lw)->unit_count)
 
-#define JDLC_DEBUG
+// #define JDLC_DEBUG
 
 
 int layerwindow_init(LayerWindow * lw, DataContainer * dc, u8 layer_type) {
@@ -102,7 +102,7 @@ static void layerwindow_reset_unit(LayerWindow * lw, size_t unit_id) {
   LayerWindowUnit * unit = lw->units + unit_id;
   datascanner_reset(&unit->scanner);
   for(int i = 0; i < unit->layer_count; i++) {
-    layer_clear(&unit->layers[i], 0xFFFFFFFF); //JDLC_CLEAR);
+    layer_clear(&unit->layers[i], JDLC_CLEAR);
   }
   if(lw->pending_unit == unit) {
     // Clear out the pending line in the master window, it was for this unit
@@ -114,13 +114,10 @@ static void layerwindow_reset_unit(LayerWindow * lw, size_t unit_id) {
 static void layerwindowunit_render(LayerWindowUnit * unit, LineConverter * pending,
                                    int clear_lines) {
   size_t layer_count = JD_MIN(unit->layer_count, pending->lines.length);
-  //LOGTRC("Rendering %d layers on page %d", layer_count, unit->scanner.page);
   for(size_t i = 0; i < layer_count; i++) {
-    //LOGTRC("Rendering %d lines", pending->lines.array[i].length);
     layer_drawlines(unit->layers + i, pending->lines.array[i].array, pending->lines.array[i].length);
   }
   if(clear_lines) { // So common, easier to do it in render
-    //LOGTRC("Clearing converted lines");
     lineconverter_reset_converted(pending);
   }
 }
@@ -189,7 +186,6 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, PageRan
         LOGWRN("BAD STROKE, exit render early");
         break;
       }
-      LOGTRC("CONVERTED STROKE, PG %d", pg);
       // This will either convert the entire stroke or not. We exit
       // early if it could not convert the whole thing (otherwise we
       // lose lines!)

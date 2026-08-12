@@ -13,46 +13,53 @@ static Tex3DS_SubTexture layer_new_subtexture(layerdim_t width, layerdim_t heigh
   };
 }
 
+static int layer_create_texture(Layer * layer, layerdim_t width, layerdim_t height) {
+  layer->texture.hw.subtex = layer_new_subtexture(width, height);
+  if(layer->texture.hw.subtex.width > JDL_MAXHWLAYERDIM || 
+    layer->texture.hw.subtex.height > JDL_MAXHWLAYERDIM) {
+    LOGERR("HW LAYER TOO LARGE! MAX: %d", JDL_MAXHWLAYERDIM);
+    return 1;
+  }
+  LOGTRC("Creating VRAM texture W: %d H: %d",
+         layer->texture.hw.subtex.width,
+         layer->texture.hw.subtex.height);
+  if(!C3D_TexInitVRAM(&(layer->texture.hw.texture), 
+                      layer->texture.hw.subtex.width, 
+                      layer->texture.hw.subtex.height, 
+                      JDL_FORMAT)) {
+    LOGERR("Can't create VRAM texture! W: %d H: %d",
+           layer->texture.hw.subtex.width,
+           layer->texture.hw.subtex.height);
+    return 1;
+  }
+  // NOTE: -1 depth means none
+  layer->texture.hw.target = C3D_RenderTargetCreateFromTex(
+    &(layer->texture.hw.texture), GPU_TEXFACE_2D, 0, -1);
+  if(!layer->texture.hw.target) {
+    LOGERR("Can't create target from texture! W: %d H: %d",
+           layer->texture.hw.subtex.width,
+           layer->texture.hw.subtex.height);
+    return 1;
+  }
+  layer->texture.hw.image.tex = &(layer->texture.hw.texture);
+  layer->texture.hw.image.subtex = &(layer->texture.hw.subtex);
+  return 0;
+}
+
 int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type) {
   layer->type = type;
   layer->width = width;
   layer->height = height;
   if(type == JDL_TYPE_HARDWARE) {
-    layer->texture.hw.subtex = layer_new_subtexture(width, height);
-    if(layer->texture.hw.subtex.width > JDL_MAXHWLAYERDIM || 
-       layer->texture.hw.subtex.height > JDL_MAXHWLAYERDIM) {
-      LOGERR("HW LAYER TOO LARGE! MAX: %d", JDL_MAXHWLAYERDIM);
-      return 1;
-    }
-    LOGTRC("Creating VRAM texture W: %d H: %d",
-           layer->texture.hw.subtex.width,
-           layer->texture.hw.subtex.height);
-    if(!C3D_TexInitVRAM(&(layer->texture.hw.texture), 
-                    layer->texture.hw.subtex.width, 
-                    layer->texture.hw.subtex.height, 
-                    JDL_FORMAT)) {
-      LOGERR("Can't create VRAM texture! W: %d H: %d",
-             layer->texture.hw.subtex.width,
-             layer->texture.hw.subtex.height);
-      return 1;
-    }
-    // NOTE: -1 depth means none
-    layer->texture.hw.target = C3D_RenderTargetCreateFromTex(
-      &(layer->texture.hw.texture), GPU_TEXFACE_2D, 0, GPU_RB_DEPTH16);
-    if(!layer->texture.hw.target) {
-      LOGERR("Can't create target from texture! W: %d H: %d",
-             layer->texture.hw.subtex.width,
-             layer->texture.hw.subtex.height);
-      return 1;
-    }
-    layer->texture.hw.image.tex = &(layer->texture.hw.texture);
-    layer->texture.hw.image.subtex = &(layer->texture.hw.subtex);
+    int err = layer_create_texture(layer, width, height);
+    if(err) return err;
   } else if(type == JDL_TYPE_SOFTWARE) {
     layer->texture.sf.width = width;
     layer->texture.sf.height = height;
     // WARN: will linearAlloc become a problem? Something something fragmented...
     layer->texture.sf.buf = linearAlloc(sizeof(u32) * width * height);
     if(!layer->texture.sf.buf) {
+      LOGERR("OUT OF MEMORY: Can't create software layer!");
       return 1;
     }
   } else {
@@ -165,8 +172,9 @@ int layer_copy(Layer * dest, Layer * source) {
       GSPGPU_FlushDataCache(source->texture.sf.buf, sourcepixelcount * sizeof(u32));
       // Perform Display Transfer from FCRAM (RGBA8) to VRAM (RGBA5551)
       C3D_SyncDisplayTransfer(
-          (u32*)source->texture.sf.buf, GX_BUFFER_DIM(source->texture.sf.width, source->texture.sf.height),
-          (u32*)dest->texture.hw.texture.data,  GX_BUFFER_DIM(
+          (u32*)source->texture.sf.buf, GX_BUFFER_DIM(
+            source->texture.sf.width, source->texture.sf.height),
+          (u32*)dest->texture.hw.texture.data, GX_BUFFER_DIM(
             dest->texture.hw.subtex.width, dest->texture.hw.subtex.height),
           (GX_TRANSFER_OUT_TILED(1) | 
            GX_TRANSFER_RAW_COPY(0) |
@@ -245,27 +253,18 @@ static inline void layer_drawlines_hardware(Layer * layer, RenderLine * lines, s
   C2D_SceneBegin(layer->texture.hw.target);
   for(size_t i = 0; i < count; i++) {
     BRESENHAM_PRE(lines[i], x, y, x2, y2, layer) {
-      //LOGTRC("RECT X: %d Y: %d", x, y);
       C2D_DrawRectSolid(x + JDL_EDGEBUF, y + JDL_EDGEBUF, 
                          0.5, lines[i].width, lines[i].width, lines[i].color);
       if(++command_count >= (JDL_MAXOBJECTS - 1)) {
         LOGTRC("FLUSHING %ld DRAW CMDS PREMATURELY\n", command_count); 
-        //C3D_FrameEnd(0);
-        //C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-        // ALTERNATIVE: Try C2D_Flush()? That might be why it flashes all weird...
         C2D_Flush();
         command_count = 0;
       }
     }
     BRESENHAM_POST(lines[i], x, y, x2, y2);
   }
-  //LOGTRC("COMPLETE: %d hw lines", count);
   // Just go ahead and flush now to get all the stuff onto the layer
   C2D_Flush();
-  // // Leave a buffer for other people (if we're too close to the max object). It's not a lot...
-  // if(command_count >= JDL_SAFETYFLUSH) {
-  //   C2D_Flush();
-  // }
 }
 
 static inline void layer_drawlines_software(Layer * layer, RenderLine * lines, size_t count) {

@@ -1,4 +1,3 @@
-#include "3ds/os.h"
 #include <3ds.h>
 
 u32 __stacksize__ = 512 * 1024;
@@ -32,21 +31,19 @@ u32 __stacksize__ = 512 * 1024;
 #define STATUS_ERROR 31     // red?
 
 // #define LWP_SOFT
-#define LWP_SKIP
+// #define LWP_SKIP
 // #define LSH_NOCOPY
-#define DC_SKIP
-#define EDIT_SKIP
-#define LC_SKIP
-#define UTILS_SKIP
+//#define DC_SKIP
+// #define EDIT_SKIP
+// #define LC_SKIP
+// #define UTILS_SKIP
 
 #define LWP_WIDTH 64 //(64 - JDL_EDGEBUF)
 #define LWP_HEIGHT 64 //(64 - JDL_EDGEBUF)
 
 
 void start_frame() {
-  // C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_ALL);
   C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-  //C3D_EarlyDepthTest(false, 0, 0);
   C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_COLOR);
   C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE,
                  GPU_ZERO);
@@ -58,24 +55,19 @@ void end_frame() {
 }
 
 
-// So apparently printf doesn't work unless you do the standard Citro3D frame
-// stuff. It only SOMETIMES works, IDK. So, this will wait a full frame to show
-// the given message, basically forcing it to be shown even if you're about to
-// do a long running task.
-void printf_flush(const char *format, ...) {
-  start_frame();
-  va_list args;
-  va_start(args, format);
-  vprintf(format, args);
-  va_end(args);
-  end_frame();
-}
+// void printf_flush(const char *format, ...) {
+//   start_frame();
+//   va_list args;
+//   va_start(args, format);
+//   vprintf(format, args);
+//   va_end(args);
+//   end_frame();
+// }
 
 static inline void logbase(u8 color, const char * fmt, va_list args) {
   static u8 _db_prnt_num = 0;
-  //printf("\x1b[%d;1H%50s", _db_prnt_row + DEBUG_PRINT_MINROW, "");
-  printf("\x1b[%dm", color);
   _db_prnt_num = (_db_prnt_num + 1) % 100;
+  printf("\x1b[%dm", color);
   time_t rawtime = time(NULL);
   struct tm *timeinfo = localtime(&rawtime);
   printf("[%02d|%02d:%02d] ", _db_prnt_num, timeinfo->tm_hour, timeinfo->tm_min);
@@ -88,7 +80,7 @@ void LOGERR(const char *fmt, ...) {
   va_start(args, fmt);
   logbase(STATUS_ERROR, fmt, args);
   va_end(args);
-  printf_flush("");
+  //printf_flush("");
 }
 
 void LOGWRN(const char *fmt, ...) {
@@ -96,7 +88,7 @@ void LOGWRN(const char *fmt, ...) {
   va_start(args, fmt);
   logbase(STATUS_WARNING, fmt, args);
   va_end(args);
-  printf_flush("");
+  //printf_flush("");
 }
 
 void LOGINF(const char *fmt, ...) {
@@ -104,7 +96,7 @@ void LOGINF(const char *fmt, ...) {
   va_start(args, fmt);
   logbase(STATUS_INFO, fmt, args);
   va_end(args);
-  printf_flush("");
+  //printf_flush("");
 }
 
 void LOGDBG(const char *fmt, ...) {
@@ -433,10 +425,10 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   int ret = 0;
 
   // Initialize Software Layer (320x240 for 3DS Bottom Screen)
-  // if (layer_init(&sw_layer, 320, 240, JDL_TYPE_SOFTWARE) != 0) {
-  //   LOGERR("Failed to initialize software layer");
-  //   return 1;
-  // }
+  if (layer_init(&sw_layer, 320, 240, JDL_TYPE_SOFTWARE) != 0) {
+    LOGERR("Failed to initialize software layer");
+    return 1;
+  }
 
   if (layer_init(&hw_layer, 320, 240, JDL_TYPE_HARDWARE) != 0) {
     LOGERR("Failed to initialize hardware layer");
@@ -445,8 +437,8 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   }
 
   // Clear software layer to fully opaque dark gray
-  // LOGTRC("Clearing software layer");
-  // layer_clear(&sw_layer, rgb24_to_rgba32c(0x444444));
+  LOGTRC("Clearing software layer");
+  layer_clear(&sw_layer, rgb24_to_rgba32c(0x444444));
 
   // Define lines to draw numbers "1" and "2"
   RenderLine lines[] = {
@@ -474,7 +466,7 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   end_frame();
   
   LOGTRC("Drawing lines on software layer");
-  // layer_drawlines(&sw_layer, lines, line_count);
+  layer_drawlines(&sw_layer, lines, line_count);
 
   // Also, see if the hardware layers work (they crash)
   aptMainLoop();
@@ -486,18 +478,18 @@ int test_layer_sw_to_hw_display(C3D_RenderTarget *bottom_target) {
   end_frame();
 
   // Copy/Convert Software layer -> Hardware layer (VRAM)
-// #ifndef LSH_NOCOPY
-//   if (layer_copy(&hw_layer, &sw_layer) != 0) {
-//     LOGERR("Failed to copy software layer to hardware layer");
-//     goto ERROR;
-//   }
-// #endif
+#ifndef LSH_NOCOPY
+  if (layer_copy(&hw_layer, &sw_layer) != 0) {
+    LOGERR("Failed to copy software layer to hardware layer");
+    goto ERROR;
+  }
+#endif
 
   char outpath[80] = "/3dsjunkdrawtest1.png";
   LOGTRC("Writing png to %s", outpath);
 
   // Export the png
-  // write_citropng(sw_layer.texture.sf.buf, sw_layer.texture.sf.width, sw_layer.texture.sf.height, outpath, 1);
+  write_citropng(sw_layer.texture.sf.buf, sw_layer.texture.sf.width, sw_layer.texture.sf.height, outpath, 1);
 
   LOGINF("Render ready! Press A on the 3DS to exit test...");
 
@@ -1055,7 +1047,7 @@ int main(int argc, char **argv) {
   hidSetRepeatParameters(BREPEAT_DELAY, BREPEAT_INTERVAL);
 
   // Enable the higher clock speed on New 3DS
-  // osSetSpeedupEnable(true);
+  osSetSpeedupEnable(true);
 
   C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
   C2D_Init(C2D_DEFAULT_MAX_OBJECTS);
@@ -1145,7 +1137,6 @@ SKIPTESTS:;
 
     end_frame();
   }
-// ENDMAINLOOP:;
 
   C3D_RenderTargetDelete(screen);
 
