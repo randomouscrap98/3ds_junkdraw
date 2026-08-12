@@ -917,11 +917,8 @@ int test_layerwindow_cache_and_pull(C3D_RenderTarget *bottom_target) {
   for(int i = 0; i < lw.master_layers_length; i++) {
     sprintf(outpath, "/3dsjunkdrawtest_pull%d.png", i);
     LOGTRC("Writing png to %s", outpath);
-
-    // Export the png
     Layer * layer = lw.master_layers + i;
-    write_citropng(layer->texture.sf.buf, layer->texture.sf.width, 
-                   layer->texture.sf.height, outpath, 1);
+    layer_export_png(layer, outpath);
   }
 #else
   LOGINF("Initial pull complete. Displaying 2x3 grid on bottom target.");
