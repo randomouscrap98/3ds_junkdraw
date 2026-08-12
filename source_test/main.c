@@ -23,11 +23,11 @@ u32 __stacksize__ = 512 * 1024;
 #define BREPEAT_DELAY 20
 #define BREPEAT_INTERVAL 7
 
-#define STATUS_TRACE 35     // magenta?   //34     // blue?
-#define STATUS_DEBUG 36     // teal?
-#define STATUS_INFO 37      // white?
-#define STATUS_WARNING 33   // yellow?
-#define STATUS_ERROR 31     // red?
+// #define STATUS_TRACE 35     // magenta?   //34     // blue?
+// #define STATUS_DEBUG 36     // teal?
+// #define STATUS_INFO 37      // white?
+// #define STATUS_WARNING 33   // yellow?
+// #define STATUS_ERROR 31     // red?
 
 // #define LWP_SOFT
 // #define LWP_SKIP
@@ -74,42 +74,22 @@ static inline void logbase(u8 color, const char * fmt, va_list args) {
   printf("\n");
 }
 
+LogBuffer logbuf;
+
 void LOGERR(const char *fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  logbase(STATUS_ERROR, fmt, args);
-  va_end(args);
-  //printf_flush("");
+  JDU_LOGBUFFER_STD((&logbuf), JDU_LOGCOLOR_ERR, 1, fmt);
 }
-
 void LOGWRN(const char *fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  logbase(STATUS_WARNING, fmt, args);
-  va_end(args);
-  //printf_flush("");
+  JDU_LOGBUFFER_STD((&logbuf), JDU_LOGCOLOR_WRN, 1, fmt);
 }
-
 void LOGINF(const char *fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  logbase(STATUS_INFO, fmt, args);
-  va_end(args);
-  //printf_flush("");
+  JDU_LOGBUFFER_STD((&logbuf), JDU_LOGCOLOR_INF, 1, fmt);
 }
-
 void LOGDBG(const char *fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  logbase(STATUS_DEBUG, fmt, args);
-  va_end(args);
+  JDU_LOGBUFFER_STD((&logbuf), JDU_LOGCOLOR_DBG, 1, fmt);
 }
-
 void LOGTRC(const char *fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  logbase(STATUS_TRACE, fmt, args);
-  va_end(args);
+  JDU_LOGBUFFER_STD((&logbuf), JDU_LOGCOLOR_TRC, 1, fmt);
 }
 
 
@@ -1043,6 +1023,8 @@ CLEANUP:
 int main(int argc, char **argv) {
   gfxInitDefault();
   hidSetRepeatParameters(BREPEAT_DELAY, BREPEAT_INTERVAL);
+
+  logbuffer_init(&logbuf, 100, 128);
 
   // Enable the higher clock speed on New 3DS
   osSetSpeedupEnable(true);

@@ -2,14 +2,58 @@
 #define __HEADER_JUNKDRAW_UTILS__
 
 #include <3ds.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+
+// =====================
+//       LOGGING
+// =====================
 
 // Logging is a utility I guess...
-// void LOGERR(const char *, ...);
 void LOGERR(const char *, ...);
 void LOGWRN(const char *, ...);
 void LOGINF(const char *, ...);
 void LOGDBG(const char *, ...);
 void LOGTRC(const char *, ...);
+
+typedef struct {
+  char * buffer;
+  size_t head;
+  size_t slot_count;
+  size_t slot_size;
+} LogBuffer;
+
+int logbuffer_init(LogBuffer * lb, size_t slots, size_t slot_size);
+void logbuffer_free(LogBuffer * lb);
+// Get the real string within the global buffer for slot pos
+char * logbuffer_str(LogBuffer * lb, size_t slot);
+
+// Allows log with color and time
+#define JDU_LOGBUFFER_STD(lb, color, printnow, fmt, ...) { \
+  char * next = logbuffer_str(lb, lb->head); \
+  time_t rawtime = time(NULL); \
+  struct tm *timeinfo = localtime(&rawtime); \
+  snprintf(next, lb->slot_size, "\x1b[%dm[%02d:%02d] ",  \
+      color, timeinfo->tm_hour, timeinfo->tm_min); \
+  size_t len = strlen(next); \
+  if(len >= lb->slot_size) return; \
+  va_list args; \
+  va_start(args, fmt); \
+  vsnprintf(next + len, lb->slot_size - len, fmt, args); \
+  va_end(args); \
+  if(printnow) printf("%s\n", next); \
+  lb->head = (lb->head + 1) % lb->slot_count; \
+}
+
+// Some suggested colors for the messages
+#define JDU_LOGCOLOR_TRC 35     // magenta?   //34     // blue?
+#define JDU_LOGCOLOR_DBG 36     // teal?
+#define JDU_LOGCOLOR_INF 37     // white?
+#define JDU_LOGCOLOR_WRN 33     // yellow?
+#define JDU_LOGCOLOR_ERR 31     // red?
+
 
 // =====================
 //        MATH
@@ -42,7 +86,6 @@ static inline u32 next_power_of_2(u32 v) {
 // =====================
 //        COLOR 
 // =====================
-
 #define COL5551TO8888(rs, gs, bs, as) \
   u32 r5 = (col >> rs) & 0x1F; \
   u32 g5 = (col >> gs) & 0x1F; \
