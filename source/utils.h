@@ -32,19 +32,19 @@ char * logbuffer_str(LogBuffer * lb, size_t slot);
 
 // Allows log with color and time
 #define JDU_LOGBUFFER_STD(lb, color, printnow, fmt, ...) { \
-  char * next = logbuffer_str(lb, lb->head); \
+  char * next = logbuffer_str((lb), (lb)->head); \
   time_t rawtime = time(NULL); \
   struct tm *timeinfo = localtime(&rawtime); \
-  snprintf(next, lb->slot_size, "\x1b[%dm[%02d:%02d] ",  \
+  snprintf(next, (lb)->slot_size, "\x1b[%dm[%02d:%02d] ",  \
       color, timeinfo->tm_hour, timeinfo->tm_min); \
   size_t len = strlen(next); \
-  if(len >= lb->slot_size) return; \
+  if(len >= (lb)->slot_size) return; \
   va_list args; \
   va_start(args, fmt); \
-  vsnprintf(next + len, lb->slot_size - len, fmt, args); \
+  vsnprintf(next + len, (lb)->slot_size - len, fmt, args); \
   va_end(args); \
   if(printnow) printf("%s\n", next); \
-  lb->head = (lb->head + 1) % lb->slot_count; \
+  (lb)->head = ((lb)->head + 1) % (lb)->slot_count; \
 }
 
 // Some suggested colors for the messages

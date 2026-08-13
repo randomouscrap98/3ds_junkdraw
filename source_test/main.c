@@ -23,16 +23,10 @@ u32 __stacksize__ = 512 * 1024;
 #define BREPEAT_DELAY 20
 #define BREPEAT_INTERVAL 7
 
-// #define STATUS_TRACE 35     // magenta?   //34     // blue?
-// #define STATUS_DEBUG 36     // teal?
-// #define STATUS_INFO 37      // white?
-// #define STATUS_WARNING 33   // yellow?
-// #define STATUS_ERROR 31     // red?
-
 // #define LWP_SOFT
 // #define LWP_SKIP
 // #define LSH_NOCOPY
-//#define DC_SKIP
+// #define DC_SKIP
 // #define EDIT_SKIP
 // #define LC_SKIP
 // #define UTILS_SKIP
@@ -53,43 +47,22 @@ void end_frame() {
   C3D_FrameEnd(0);
 }
 
-
-// void printf_flush(const char *format, ...) {
-//   start_frame();
-//   va_list args;
-//   va_start(args, format);
-//   vprintf(format, args);
-//   va_end(args);
-//   end_frame();
-// }
-
-static inline void logbase(u8 color, const char * fmt, va_list args) {
-  static u8 _db_prnt_num = 0;
-  _db_prnt_num = (_db_prnt_num + 1) % 100;
-  printf("\x1b[%dm", color);
-  time_t rawtime = time(NULL);
-  struct tm *timeinfo = localtime(&rawtime);
-  printf("[%02d|%02d:%02d] ", _db_prnt_num, timeinfo->tm_hour, timeinfo->tm_min);
-  vprintf(fmt, args);
-  printf("\n");
-}
-
 LogBuffer logbuf;
 
 void LOGERR(const char *fmt, ...) {
-  JDU_LOGBUFFER_STD((&logbuf), JDU_LOGCOLOR_ERR, 1, fmt);
+  JDU_LOGBUFFER_STD(&logbuf, JDU_LOGCOLOR_ERR, 1, fmt);
 }
 void LOGWRN(const char *fmt, ...) {
-  JDU_LOGBUFFER_STD((&logbuf), JDU_LOGCOLOR_WRN, 1, fmt);
+  JDU_LOGBUFFER_STD(&logbuf, JDU_LOGCOLOR_WRN, 1, fmt);
 }
 void LOGINF(const char *fmt, ...) {
-  JDU_LOGBUFFER_STD((&logbuf), JDU_LOGCOLOR_INF, 1, fmt);
+  JDU_LOGBUFFER_STD(&logbuf, JDU_LOGCOLOR_INF, 1, fmt);
 }
 void LOGDBG(const char *fmt, ...) {
-  JDU_LOGBUFFER_STD((&logbuf), JDU_LOGCOLOR_DBG, 1, fmt);
+  JDU_LOGBUFFER_STD(&logbuf, JDU_LOGCOLOR_DBG, 1, fmt);
 }
 void LOGTRC(const char *fmt, ...) {
-  JDU_LOGBUFFER_STD((&logbuf), JDU_LOGCOLOR_TRC, 1, fmt);
+  JDU_LOGBUFFER_STD(&logbuf, JDU_LOGCOLOR_TRC, 1, fmt);
 }
 
 
@@ -1119,6 +1092,7 @@ SKIPTESTS:;
   }
 
   C3D_RenderTargetDelete(screen);
+  logbuffer_free(&logbuf);
 
   C2D_Fini();
   C3D_Fini();

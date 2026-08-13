@@ -20,10 +20,3 @@ void logbuffer_free(LogBuffer * lb) {
 char * logbuffer_str(LogBuffer * lb, size_t slot) {
   return lb->buffer + (lb->slot_size * slot);
 }
-
-// void lobbuffer_log_std(LogBuffer * lb, const char * str, u8 color) {
-//   printf("\x1b[%dm", color);
-//   //printf("[%02d|%02d:%02d] ", _db_prnt_num, timeinfo->tm_hour, timeinfo->tm_min);
-//   vprintf(fmt, args);
-//   printf("\n");
-// }
