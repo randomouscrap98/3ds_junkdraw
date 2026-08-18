@@ -1,0 +1,187 @@
+#include "littlemenu.h"
+
+void tui_menu_init(tui_menu * tm, tui_menu_unit_t height) {
+  tm->items = NULL;
+  tm->maxitems = 0;
+  tm->numitems = 0;
+  tm->height = height;
+  tm->valuewidth = TUIMENU_VALUEWIDTH;
+  tm->name_padleft = TUIMENU_NAMEPADLEFT;
+  tm->name_padright = TUIMENU_NAMEPADRIGHT;
+  tm->ui_start[0] = 0;
+  tm->ui_empty = TUIMENU_UI_EMPTY;
+  tm->loop = TUIMENU_LOOP;
+  strcpy(tm->ui_left, TUIMENU_UI_LEFT);
+  strcpy(tm->ui_right, TUIMENU_UI_RIGHT);
+  strcpy(tm->ui_listedge, TUIMENU_UI_LISTEDGE);
+  strcpy(tm->ui_nametruncate, TUIMENU_UI_NAMETRUNCATE);
+  //strcpy(tm->ui_empty, TUIMENU_UI_EMPTY);
+  tui_menu_reset(tm);
+}
+
+void tui_menu_reset(tui_menu * tm) {
+  tm->top = 0;
+  tm->current = 0;
+}
+
+void tui_menu_free(tui_menu * tm) {
+  if(tm->items) {
+    free(tm->items);
+    tm->items = NULL;
+  }
+}
+
+int tui_menu_push(tui_menu * tm, tui_menu_item * item) {
+  if(!tm->items) {
+    tm->maxitems = TUIMENU_ITEMGROW;
+    tm->items = malloc(sizeof(tui_menu_item) * tm->maxitems);
+    if(!tm->items) {
+      return 1;
+    }
+  } else if(tm->numitems >= tm->maxitems) {
+    tm->maxitems += TUIMENU_ITEMGROW;
+    tui_menu_item * tmp = realloc(tm->items, sizeof(tui_menu_item) * tm->maxitems);
+    if(!tmp) {
+      return 1;
+    }
+    tm->items = tmp;
+  }
+  tm->items[tm->numitems++] = *item;
+  return 0;
+}
+
+int tui_menu_iscurrent(tui_menu * tm, tui_menu_unit_t line) {
+  return tm->top + line == tm->current;
+}
+
+void tui_menu_renderline(tui_menu * tm, char * out, tui_menu_unit_t width, tui_menu_unit_t line) {
+  if(line >= tm->height) {
+    out[0] = 0;
+    return;
+  }
+  // Pre-emptively fill with empty.
+  memset(out, tm->ui_empty, width);
+  out[width] = 0;
+  // Only consider the listedge if we're asked to render the edge and there is one
+  if(strlen(tm->ui_listedge) && tm->height < tm->numitems) {
+    if((line == 0 && tm->top > 0) || (line == tm->height - 1 && tm->top + tm->height < tm->numitems)) {
+      strcpy(out, tm->ui_listedge);
+      out[strlen(out)] = tm->ui_empty;
+      return;
+    }
+  }
+  tui_menu_unit_t item_idx = tm->top + line;
+  if(item_idx >= tm->numitems) {
+    return;
+  }
+  tui_menu_item * item = tm->items + item_idx;
+  tui_menu_unit_t namespace = width - tm->valuewidth - tm->name_padleft - tm->name_padright;
+  // Only draw the text if there's enough space to do so.
+  if(namespace > 0) {
+    int namelen = strlen(item->name);
+    char * namepos = out + tm->name_padleft;
+    if(namelen > namespace) {
+      sprintf(namepos, "%.*s%s", 
+              namespace - (int)strlen(tm->ui_nametruncate), item->name, tm->ui_nametruncate);
+    } else {
+      sprintf(namepos, "%s", item->name);
+    }
+    // TODO: Slowwww but ugh... will make it faster later
+    namepos[strlen(namepos)] = tm->ui_empty;
+  }
+  if(tm->valuewidth > 0) {
+    char * valuepos = out + (width - tm->valuewidth);
+    // TODO: For now, we don't actually use the left/right
+    if(item->type == TUIMENU_TYPE_NUMBER) {
+      snprintf(valuepos, tm->valuewidth, "%ld", *item->data.number.value);
+    }
+    else if(item->type == TUIMENU_TYPE_FLOAT) {
+      snprintf(valuepos, tm->valuewidth, "%.*f", item->data.floatingpoint.precision,
+               *item->data.floatingpoint.value);
+    }
+    else if(item->type == TUIMENU_TYPE_ENUM) {
+      // Need to find the string inside... slow and may expectedly fail (thus leaving empty)
+      int pos = 0;
+      char * next = item->data.enumerator.values;
+      while(next[0] && (next - item->data.enumerator.values) < TUIMENU_MAXENUMTOTAL) {
+        if(pos == *item->data.enumerator.value) {
+          snprintf(valuepos, tm->valuewidth, "%s", next);
+          break;
+        }
+        next += (strlen(next) + 1);
+        pos++;
+      }
+    }
+    int valuelen = strlen(valuepos);
+    if(valuelen < tm->valuewidth) {
+      valuepos[valuelen] = tm->ui_empty;
+    }
+  }
+  out[width] = 0;
+}
+
+tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action) {
+  tui_menu_result result;
+  result.running = 1;
+  result.result = -1;
+  if(action.action & (TUIMENU_ACTION_MOVE | TUIMENU_ACTION_POSITION)) {
+    if(action.action & TUIMENU_ACTION_POSITION) {
+      tm->current = action.offset;
+      action.offset = 0;
+    } 
+    // Whether forcing a position or moving with an offset, still want to loop (safety)
+    TUIMENU_LOOP_VALUE(tm->current, action.offset, 0, tm->numitems - 1, tm->loop);
+    uint8_t has_listedge = strlen(tm->ui_listedge) > 0;
+    if(tm->height < tm->numitems) { // Only worry about "top" if there's too many items
+      tui_menu_unit_t topmin = 0; // inclusive
+      tui_menu_unit_t topmax = tm->numitems - tm->height; // inclusive
+      if(tm->top >= tm->current) { // If cursor past top
+        tm->top = tm->current;
+        // current is not allowed to be AT top if there's a list edge
+        if(has_listedge) { tm->top--; }
+        if(tm->top < topmin) tm->top = topmin;
+      }
+      if(tm->top <= tm->current - (tm->height - 1)) { // if cursor past bottom row
+        tm->top = tm->current - (tm->height - 1);
+        // Current is not allowed to be AT the bottom if there's a list edge
+        if(has_listedge) { tm->top++; }
+        if(tm->top > topmax) tm->top = topmax;
+      }
+    } else {
+      tm->top = 0; // Just reset always, might fix some weirdness if menu resized
+    }
+  }
+  tui_menu_item * item = NULL;
+  if(tm->current < tm->numitems && tm->current >= 0) {
+    item = tm->items + tm->current;
+  }
+  if((action.action & TUIMENU_ACTION_VALUE) && item) {
+    if(item->type == TUIMENU_TYPE_ENUM) {
+      TUIMENU_LOOP_VALUE(*item->data.enumerator.value, action.offset, 0, 
+                     item->data.enumerator.numitems - 1, item->loop);
+    } else if(item->type == TUIMENU_TYPE_FLOAT) {
+      TUIMENU_LOOP_VALUE(*item->data.floatingpoint.value, 
+                     action.offset * item->data.floatingpoint.step, 
+                     item->data.floatingpoint.min, 
+                     item->data.floatingpoint.max, 
+                     item->loop);
+    } else if(item->type == TUIMENU_TYPE_NUMBER) {
+      TUIMENU_LOOP_VALUE(*item->data.number.value, 
+                     action.offset * item->data.number.step, 
+                     item->data.number.min, 
+                     item->data.number.max, 
+                     item->loop);
+    }
+  }
+  if(action.action & TUIMENU_ACTION_CANCEL) {
+    result.running = 0;
+  } else if(action.action & TUIMENU_ACTION_ACCEPT && item) {
+    if(item->type == TUIMENU_TYPE_BASIC) {
+      result.running = 0;
+      result.result = item->data.basic.quit ? -1 : tm->current;
+    } else if(item->type == TUIMENU_TYPE_CALLBACK && item->data.callback.callback) {
+      result = item->data.callback.callback(&item->data.callback.data, tm->current, action);
+    }
+  }
+  return result;
+}
