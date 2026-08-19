@@ -79,6 +79,11 @@ typedef TUIMENU_FLOAT_TYPE tui_menu_float_t;
 #define TUIMENU_ACTION_CANCEL   (1 << 3)  // Exit a menu (or... other things?)
 #define TUIMENU_ACTION_POSITION (1 << 4)  // Force an exact position in the menu
 
+// There's a weird circular reference with these, so we typedef them
+// early so we can hold pointers to them without knowing what they are yet
+typedef struct tui_menu tui_menu;
+typedef struct tui_menu_item tui_menu_item;
+
 typedef struct {
   tui_menu_unit_t result;
   uint8_t running;
@@ -89,6 +94,40 @@ typedef struct {
   tui_menu_unit_t offset;
 } tui_menu_action;
 
+struct tui_menu {
+  tui_menu_item * items;
+  char ui_listedge[TUIMENU_MAXUISTRING];
+  char ui_left[TUIMENU_MAXUISTRING];
+  char ui_right[TUIMENU_MAXUISTRING];
+  char ui_start[TUIMENU_MAXUISTRING];
+  char ui_nametruncate[TUIMENU_MAXUISTRING];
+  char ui_empty;
+  tui_menu_unit_t maxitems;
+  tui_menu_unit_t numitems;
+  tui_menu_unit_t current;
+  tui_menu_unit_t top;
+  tui_menu_unit_t height;      // we have a height but no width, as that depends on the size of the render output
+  tui_menu_unit_t valuewidth;  // Yes, you must set this manually
+  tui_menu_unit_t name_padleft;
+  tui_menu_unit_t name_padright;
+  uint8_t loop;
+};
+
+void tui_menu_init(tui_menu * tm, tui_menu_unit_t height);
+void tui_menu_free(tui_menu * tm);
+void tui_menu_reset(tui_menu * tm);
+// COPIES the item into the menu. Note that once a menu is fully constructed,
+// you CAN reuse it, since all values it points back to are pointers.
+int tui_menu_push(tui_menu * tm, tui_menu_item * item);
+// Whether the given RENDER line is the "current" (where the cursor is)
+int tui_menu_iscurrent(tui_menu * tm, tui_menu_unit_t line);
+
+// NOTE: out is expected to have enough capacity to store the render at width
+// PLUS the null terminating character!! Buffer should be width + 1!!
+void tui_menu_renderline(tui_menu * tm, char * out, tui_menu_unit_t width, tui_menu_unit_t line);
+tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action);
+
+
 // Data which can fit snugly inside a mostly-empty menu item (all because enum is so large)
 typedef union {
   void * ptr;
@@ -97,7 +136,6 @@ typedef union {
   char str[TUIMENU_MAXENUMTOTAL];
   uint8_t raw[TUIMENU_MAXENUMTOTAL];
 } tui_menu_item_data;
-
 
 typedef struct {
   tui_menu_item_data data;
@@ -131,20 +169,22 @@ typedef struct {
   tui_menu_item_data data;
 } tui_menu_callback;
 
+
 typedef union {
   tui_menu_number number;
   tui_menu_float floatingpoint;
   tui_menu_basic basic;
   tui_menu_enum enumerator;
   tui_menu_callback callback;
+  tui_menu submenu;
 } tui_menu_data;
 
-typedef struct {
+struct tui_menu_item {
   char name[TUIMENU_MAXNAME];
   tui_menu_data data;
   uint8_t type;
   uint8_t loop; // General: whether items loop or not (if items)
-} tui_menu_item;
+};
 
 // WARN: Max is INCLUSIVE, and this is ALSO not a standard "loop"! Large steps near the edges will
 // only TAKE you to the edge, and large steps at the edge (if looping) will only take you to the first
@@ -235,37 +275,5 @@ typedef struct {
 }
 
 
-typedef struct {
-  tui_menu_item * items;
-  char ui_listedge[TUIMENU_MAXUISTRING];
-  char ui_left[TUIMENU_MAXUISTRING];
-  char ui_right[TUIMENU_MAXUISTRING];
-  char ui_start[TUIMENU_MAXUISTRING];
-  char ui_nametruncate[TUIMENU_MAXUISTRING];
-  char ui_empty;
-  tui_menu_unit_t maxitems;
-  tui_menu_unit_t numitems;
-  tui_menu_unit_t current;
-  tui_menu_unit_t top;
-  tui_menu_unit_t height;      // we have a height but no width, as that depends on the size of the render output
-  tui_menu_unit_t valuewidth;  // Yes, you must set this manually
-  tui_menu_unit_t name_padleft;
-  tui_menu_unit_t name_padright;
-  uint8_t loop;
-} tui_menu;
-
-void tui_menu_init(tui_menu * tm, tui_menu_unit_t height);
-void tui_menu_free(tui_menu * tm);
-void tui_menu_reset(tui_menu * tm);
-// COPIES the item into the menu. Note that once a menu is fully constructed,
-// you CAN reuse it, since all values it points back to are pointers.
-int tui_menu_push(tui_menu * tm, tui_menu_item * item);
-// Whether the given RENDER line is the "current" (where the cursor is)
-int tui_menu_iscurrent(tui_menu * tm, tui_menu_unit_t line);
-
-// NOTE: out is expected to have enough capacity to store the render at width
-// PLUS the null terminating character!! Buffer should be width + 1!!
-void tui_menu_renderline(tui_menu * tm, char * out, tui_menu_unit_t width, tui_menu_unit_t line);
-tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action);
 
 #endif
