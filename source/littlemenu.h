@@ -6,6 +6,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+// ===================================
+//               Const
+// ===================================
+
+// Define this to remove an internal menu from item data.
+//#define TUIMENU_ITEMDATA_NOSUBMENU
+
 #ifndef TUIMENU_MAXNAME
 #define TUIMENU_MAXNAME 128
 #endif
@@ -42,8 +49,14 @@
 #ifndef TUIMENU_UI_RIGHT
 #define TUIMENU_UI_RIGHT ">"
 #endif
+#ifndef TUIMENU_UI_SUBMENU
+#define TUIMENU_UI_SUBMENU ""
+#endif
 #ifndef TUIMENU_UI_EMPTY
 #define TUIMENU_UI_EMPTY ' ' // Difficult to make this not a single char
+#endif
+#ifndef TUIMENU_UI_SUBMENU_PATH
+#define TUIMENU_UI_SUBMENU_PATH " > "
 #endif
 #ifndef TUIMENU_ENUM_SPLIT
 #define TUIMENU_ENUM_SPLIT '\n'
@@ -60,32 +73,51 @@
 #ifndef TUIMENU_LOOP
 #define TUIMENU_LOOP 1
 #endif
+#ifndef TUIMENU_SUBMENU_RESET
+#define TUIMENU_SUBMENU_RESET 1
+#endif
+#ifndef TUIMENU_SUBMENU_FORCEHEIGHT
+#define TUIMENU_SUBMENU_FORCEHEIGHT 1
+#endif
+
+// ===================================
+//            Types/enums
+// ===================================
 
 // Whatever you pick for this, it must be signed....
 typedef TUIMENU_UNIT_TYPE tui_menu_unit_t;
 typedef TUIMENU_NUMBER_TYPE tui_menu_number_t;
 typedef TUIMENU_FLOAT_TYPE tui_menu_float_t;
 
+// There's a weird circular reference with these, so we typedef them
+// early so we can hold pointers to them without knowing what they are yet
+typedef struct tui_menu tui_menu;
+typedef struct tui_menu_item tui_menu_item;
+typedef struct tui_menu_submenu tui_menu_submenu;
+
 #define TUIMENU_TYPE_BASIC    0
 #define TUIMENU_TYPE_NUMBER   1
 #define TUIMENU_TYPE_FLOAT    2
 #define TUIMENU_TYPE_ENUM     3
 #define TUIMENU_TYPE_CALLBACK 4
+#define TUIMENU_TYPE_SUBMENU  5
 
 #define TUIMENU_ACTION_NONE     (0)
 #define TUIMENU_ACTION_MOVE     (1 << 0)  // Up or down (change menu option)
 #define TUIMENU_ACTION_VALUE    (1 << 1)  // Left or right (change value)
 #define TUIMENU_ACTION_ACCEPT   (1 << 2)  // Click on a menu item
-#define TUIMENU_ACTION_CANCEL   (1 << 3)  // Exit a menu (or... other things?)
+#define TUIMENU_ACTION_CANCEL   (1 << 3)  // Exit a menu
 #define TUIMENU_ACTION_POSITION (1 << 4)  // Force an exact position in the menu
+#define TUIMENU_ACTION_FULLSTOP (1 << 5)  // Exit EVERYTHING (subsystems, etc)
 
-// There's a weird circular reference with these, so we typedef them
-// early so we can hold pointers to them without knowing what they are yet
-typedef struct tui_menu tui_menu;
-typedef struct tui_menu_item tui_menu_item;
+
+// ===================================
+//              TUI MENU
+// ===================================
 
 typedef struct {
   tui_menu_unit_t result;
+  int error;
   uint8_t running;
 } tui_menu_result;
 
@@ -96,6 +128,7 @@ typedef struct {
 
 struct tui_menu {
   tui_menu_item * items;
+  tui_menu * parent;  // You can manually manage this even without submenu items defined
   char ui_listedge[TUIMENU_MAXUISTRING];
   char ui_left[TUIMENU_MAXUISTRING];
   char ui_right[TUIMENU_MAXUISTRING];
@@ -115,7 +148,10 @@ struct tui_menu {
 
 void tui_menu_init(tui_menu * tm, tui_menu_unit_t height);
 void tui_menu_free(tui_menu * tm);
-void tui_menu_reset(tui_menu * tm);
+// Reset only the position of the cursor/etc.
+void tui_menu_reset_ui(tui_menu * tm);
+// Clear out the menu items and reset state.
+int tui_menu_clear(tui_menu * tm);
 // COPIES the item into the menu. Note that once a menu is fully constructed,
 // you CAN reuse it, since all values it points back to are pointers.
 int tui_menu_push(tui_menu * tm, tui_menu_item * item);
@@ -127,6 +163,14 @@ int tui_menu_iscurrent(tui_menu * tm, tui_menu_unit_t line);
 void tui_menu_renderline(tui_menu * tm, char * out, tui_menu_unit_t width, tui_menu_unit_t line);
 tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action);
 
+// Render the current path, with the given prefix. If you give prefix 'Root' and we are 
+// in two submenus deep: 'Load' and 'Confirm', this would return something like 
+// 'Root > Load > Confirm'. As with renderline, width is the VISIBLE width, and your out must be +1
+void tui_menu_renderpath(tui_menu* tm, const char * prefix, char * out, tui_menu_unit_t width);
+
+// ===================================
+//              Menu items
+// ===================================
 
 // Data which can fit snugly inside a mostly-empty menu item (all because enum is so large)
 typedef union {
@@ -135,6 +179,10 @@ typedef union {
   tui_menu_float_t flt;
   char str[TUIMENU_MAXENUMTOTAL];
   uint8_t raw[TUIMENU_MAXENUMTOTAL];
+  tui_menu * menu_ptr;
+#ifndef TUIMENU_ITEMDATA_NOSUBMENU
+  tui_menu menu;
+#endif
 } tui_menu_item_data;
 
 typedef struct {
@@ -169,6 +217,15 @@ typedef struct {
   tui_menu_item_data data;
 } tui_menu_callback;
 
+// Like a more well-defined tui_menu_callback. This allows a submenu to subsume the current menu,
+// so actions and rendering directed at the current menu instead go to the submenu. This can be chained
+// indefinitely
+struct tui_menu_submenu {
+  tui_menu * (*create_menu)(tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos);
+  int (*destroy_menu)(tui_menu_item_data * data, tui_menu * menu, tui_menu_unit_t pos);
+  tui_menu_item_data data;
+  tui_menu * menu;  // The CURRENTLY open menu!(?)
+};
 
 typedef union {
   tui_menu_number number;
@@ -176,7 +233,7 @@ typedef union {
   tui_menu_basic basic;
   tui_menu_enum enumerator;
   tui_menu_callback callback;
-  tui_menu submenu;
+  tui_menu_submenu submenu;
 } tui_menu_data;
 
 struct tui_menu_item {
@@ -185,6 +242,28 @@ struct tui_menu_item {
   uint8_t type;
   uint8_t loop; // General: whether items loop or not (if items)
 };
+
+// =================================================
+//            Some item helper functions 
+// =================================================
+
+// Do not create a new menu, only provide an existing one pointed to by
+// the item data. This allows easy submenus with lifetimes you manage
+static inline tui_menu * tui_menu_submenu_create_existing_menu(
+    tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
+  (void)parent;
+  (void)pos;
+  return data->menu_ptr;
+}
+
+// Do nothing: the existing menu is managed by you.
+static inline int tui_menu_submenu_destroy_existing_menu(
+    tui_menu_item_data * data, tui_menu * menu, tui_menu_unit_t pos) {
+  (void)data;
+  (void)menu;
+  (void)pos;
+  return 0;
+}
 
 // WARN: Max is INCLUSIVE, and this is ALSO not a standard "loop"! Large steps near the edges will
 // only TAKE you to the edge, and large steps at the edge (if looping) will only take you to the first
@@ -209,7 +288,7 @@ struct tui_menu_item {
     .type = (_type), \
     .loop = TUIMENU_LOOP, \
   }; \
-  snprintf(var.name, TUIMENU_MAXNAME, "%s", (_name)); \
+  (void)snprintf(var.name, TUIMENU_MAXNAME, "%s", (_name)); \
 
 // Easily push a basic menu item (one you're expected to click on)
 #define TUIMITEM_BASIC(tm, err, _name, _quit) { \
@@ -274,6 +353,20 @@ struct tui_menu_item {
   err = tui_menu_push((tm), &_tmp); \
 }
 
+// Easily push a submenu item that simply points to a menu of your choosing.
+// Lifetime of submenu is managed by YOU; a common usecase is to create your
+// submenu alongside your main menu and simply pass the pointer here, and clean
+// up both menus at the same time.
+#define TUIMITEM_SUBMENU_EXISTING(tm, err, _name, _submenu) { \
+  TUIITEM_COMMON(_tmp, _name, TUIMENU_TYPE_SUBMENU); \
+  _tmp.data.submenu = (tui_menu_submenu) { \
+    .create_menu = tui_menu_submenu_create_existing_menu, \
+    .destroy_menu = tui_menu_submenu_destroy_existing_menu, \
+    .menu = NULL, \
+  }; \
+  _tmp.data.submenu.data.menu_ptr = _submenu; \
+  err = tui_menu_push((tm), &_tmp); \
+}
 
 
 #endif
