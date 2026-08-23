@@ -1,6 +1,7 @@
 #include "3ds/console.h"
 #include "utils.h"
 #include "littlelogbox.h"
+#include "ansi.h"
 
 #include <3ds.h>
 #include <citro3d.h>
@@ -15,7 +16,8 @@ u32 __stacksize__ = 512 * 1024;
 // Console crap
 #define UI_CONSOLE_LOGTOP       20
 #define UI_CONSOLE_LOGHEIGHT    8
-#define UI_CONSOLE_LOGCOLOR     CONSOLE_ESC(30;1m)
+#define UI_CONSOLE_LOGCOLOR     ANSI_FG_BRIGHT_BLACK
+//CONSOLE_ESC(30;1m)
 
 // NOTE: for now, the log can't even scroll, so no need to make it large
 #define MAX_LOGMESSAGES 30
