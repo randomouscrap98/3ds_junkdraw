@@ -16,7 +16,7 @@
 #define JDTM_TABSTYLE_DEFAULT ANSI_INVERT_ON
 #define JDTM_SELECTSTYLE_DEFAULT ANSI_FG_CYAN
 
-typedef int tabmenu_unit_t;
+typedef tui_menu_unit_t tabmenu_unit_t;
 
 typedef struct {
   char name[JDTM_MAXNAME];
@@ -28,8 +28,9 @@ VECTOR_DECLARE(tabmenu_item);
 // A wrapper around multiple menus together in a tabbed interface.
 typedef struct {
   vector_tabmenu_item tabs;       // The top tabs + the menus they represent
+  vector_tabmenu_item submenus;   // Stoarge for menus that are not part of tabs (can also be named?)
   tabmenu_unit_t current;         // Set to -1 to "disable" the menu
-  tabmenu_unit_t height;          // The height of the TOTAL menus
+  tabmenu_unit_t height;          // The height of the TOTAL menus (including tabline)
   char tabstyle[JDTM_MAXSTYLE];
   char selectstyle[JDTM_MAXSTYLE];
   char basicstyle[JDTM_MAXSTYLE];
@@ -38,10 +39,19 @@ typedef struct {
 int tabmenu_init(tabmenu * tm, tabmenu_unit_t height);
 void tabmenu_free(tabmenu * tm);
 
+// Set which tab is now the current tab
+void tabmenu_settab(tabmenu * tm, tabmenu_unit_t tab);
+
 // Grow the menu by one slot, adding the given name, and returning an 
 // initialized pointer to the menu for you to fill out as you please.
-// You can pass NULL for name to initialize a menu WITHOUT a tab
+// WARN: pointer is ONLY VALID until the next call to grow!!!
 tui_menu * tabmenu_grow(tabmenu * tm, const char * name);
+
+// Grow the submenus by one slot, with an optional name, and return
+// an initialized pointer to the submenu for you to fill out. Note
+// that submenus are NOT tabs and will not show up on the root level.
+// WARN: pointer is ONLY VALID until the next call to grow!!!
+tui_menu * tabmenu_grow_submenu(tabmenu * tm, const char * name);
 
 // Tabmenus are just a collection of menus. As such, actions are just tui_menu_actions.
 // HOWEVER, we do intercept a couple "special" action values to allow moving 
