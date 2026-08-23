@@ -109,6 +109,13 @@ void tui_menu_reset_ui(tui_menu * tm) {
   tm->current = 0;
 }
 
+int tui_menu_reset(tui_menu * tm) {
+  int err = tui_menu_exit_submenu_all(tm);
+  if(err) return err;
+  tui_menu_reset_ui(tm);
+  return 0;
+}
+
 int tui_menu_clear(tui_menu * tm) {
   int err = tui_menu_exit_submenu_all(tm);
   if(err) return err;

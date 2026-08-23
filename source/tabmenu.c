@@ -1,27 +1,24 @@
 #include "tabmenu.h"
 #include "littlemenu.h"
+#include "utils.h"
+
+#include <string.h>
 
 VECTOR_DEFINE(tabmenu_item);
 
 int tabmenu_init(tabmenu * tm, tabmenu_unit_t height) {
   int err = vector_tabmenu_item_init(&tm->tabs);
   if(err) goto ERROR_RETURN;
-  err = vector_tabmenu_item_init(&tm->menustack);
-  if(err) goto ERROR_TABS;
   tm->current = -1;
   tm->height = height;
+  strcpy(tm->basicstyle, JDTM_BASICSTYLE_DEFAULT);
+  strcpy(tm->tabstyle, JDTM_TABSTYLE_DEFAULT);
+  strcpy(tm->selectstyle, JDTM_SELECTSTYLE_DEFAULT);
   return 0;
 ERROR_TABS:
   vector_tabmenu_item_free(&tm->tabs);
 ERROR_RETURN:
   return 1;
-}
-
-static inline void tabmenu_clearstack(tabmenu * tm) {
-  for(size_t i = 0; i < tm->menustack.length; i++) {
-    tui_menu_free(&tm->menustack.array[i].menu);
-  }
-  vector_tabmenu_item_clear(&tm->menustack);
 }
 
 static inline void tabmenu_cleartabs(tabmenu * tm) {
@@ -31,16 +28,19 @@ static inline void tabmenu_cleartabs(tabmenu * tm) {
   vector_tabmenu_item_clear(&tm->tabs);
 }
 
-void tabmenu_free(tabmenu * tm) {
-  tabmenu_cleartabs(tm);
-  tabmenu_clearstack(tm);
-  vector_tabmenu_item_free(&tm->tabs);
-  vector_tabmenu_item_free(&tm->menustack);
+static inline tui_menu * tabmenu_currentmenu(tabmenu * tm) {
+
 }
 
-// Set the current tab. Will RESET current tab even if you select the same one
+void tabmenu_free(tabmenu * tm) {
+  tabmenu_cleartabs(tm);
+  vector_tabmenu_item_free(&tm->tabs);
+}
+
 void tabmenu_settab(tabmenu * tm, tabmenu_unit_t tab) {
-  tabmenu_clearstack(tm); // clear out cruft from other tabs
+  // Reset the current menu, then move to the new menu
+  int err = tui_menu_reset(tm);
+  if(err) LOGERR("Can't reset ");
 }
 
 // int tabmenu_grow(tabmenu * tm, const char * name, tui_menu * menu) {

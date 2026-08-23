@@ -150,6 +150,8 @@ void tui_menu_init(tui_menu * tm, tui_menu_unit_t height);
 void tui_menu_free(tui_menu * tm);
 // Reset only the position of the cursor/etc.
 void tui_menu_reset_ui(tui_menu * tm);
+// Fully reset the menu back to square 1, exiting any submenus etc. This may fail
+int tui_menu_reset(tui_menu * tm);
 // Clear out the menu items and reset state.
 int tui_menu_clear(tui_menu * tm);
 // COPIES the item into the menu. Note that once a menu is fully constructed,
