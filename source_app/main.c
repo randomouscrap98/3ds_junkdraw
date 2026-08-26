@@ -2,6 +2,7 @@
 #include "utils.h"
 #include "littlelogbox.h"
 #include "ansi.h"
+#include "controls.h"
 
 #include <3ds.h>
 #include <citro3d.h>
@@ -9,8 +10,6 @@
 
 u32 __stacksize__ = 512 * 1024;
 
-#define BREPEAT_DELAY 20
-#define BREPEAT_INTERVAL 7
 #define MAX_FILENAME 64
 
 // Console crap
@@ -69,7 +68,7 @@ bool isn3ds() {
 
 int main() {
   gfxInitDefault();
-  hidSetRepeatParameters(BREPEAT_DELAY, BREPEAT_INTERVAL);
+  control_setup_defaults();
 
   // Set this up IMMEDIATELY
   if(tui_logbox_init(&logbox, MAX_LOGMESSAGES, MAX_LOGMSGLENGTH)) return 1;
@@ -89,20 +88,13 @@ int main() {
   } 
 
   char save_filename[MAX_FILENAME];
+  control_config ctrlconfig = { .tool = 0, .scheme = 0, };
 
   LOGDBG("STARTING MAIN LOOP");
 
   while (aptMainLoop()) {
-    hidScanInput();
-
-    u32 kDown = hidKeysDown();
-    u32 kUp = hidKeysUp();
-    u32 kRepeat = hidKeysDownRepeat();
-    u32 kHeld = hidKeysHeld();
-    circlePosition pos;
-    touchPosition current_touch;
-    hidTouchRead(&current_touch);
-    hidCircleRead(&pos);
+    control_inputs inputs = control_get_inputs();
+    control_action actions = control_get_action(&ctrlconfig, &inputs);
 
     // =======================================
     // Render the scene
