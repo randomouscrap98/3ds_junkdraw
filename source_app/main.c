@@ -96,6 +96,10 @@ int main() {
     control_inputs inputs = control_get_inputs();
     control_action actions = control_get_action(&ctrlconfig, &inputs);
 
+    if(actions.action == CTRL_MENU) {
+      break;
+    }
+
     // =======================================
     // Render the scene
     // =======================================

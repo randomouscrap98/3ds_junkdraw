@@ -27,7 +27,7 @@ control_action control_get_action(const control_config * config, control_inputs 
     .menuaction.offset = 0,
   };
   u32 kDown = input->kdown;
-  u32 kUp = input->kup;
+  //u32 kUp = input->kup;
   u32 kHeld = input->kheld;
   u32 kRepeat = input->krepeat;
   // Move menu checks outside, even if they're technically the same
