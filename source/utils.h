@@ -7,6 +7,25 @@
 #include <string.h>
 #include <time.h>
 
+#include "vector.h"
+#include "littlemenu.h"
+
+// =====================
+//        Menu
+// =====================
+
+VECTOR_DECLARE(tui_menu);
+
+// // Do not create a new menu, only provide an existing one pointed to by
+// // the item data. This allows easy submenus with lifetimes you manage
+// static inline tui_menu * utils_submenu_create_existing_menu(
+//     tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
+//   (void)parent;
+//   (void)pos;
+//   return data->menu_ptr;
+// }
+
+
 // =====================
 //       LOGGING
 // =====================

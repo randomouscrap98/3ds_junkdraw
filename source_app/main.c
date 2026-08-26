@@ -1,4 +1,5 @@
 #include "3ds/console.h"
+#include "littlemenu.h"
 #include "utils.h"
 #include "littlelogbox.h"
 #include "ansi.h"
@@ -13,6 +14,7 @@ u32 __stacksize__ = 512 * 1024;
 #define MAX_FILENAME 64
 
 // Console crap
+#define UI_CONSOLE_MENUHEIGHT   12
 #define UI_CONSOLE_LOGTOP       20
 #define UI_CONSOLE_LOGHEIGHT    8
 #define UI_CONSOLE_LOGCOLOR     ANSI_FG_BRIGHT_BLACK
@@ -38,6 +40,48 @@ void LOGWRN(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "W", fmt) }
 void LOGINF(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "I", fmt) }
 void LOGDBG(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "D", fmt) }
 void LOGTRC(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "T", fmt) }
+
+// ==========================================
+//                 Menu
+// ==========================================
+
+#define _MENUINIT(mc, mp) { \
+  size_t idx; \
+  vector_tui_menu_increment(mc, &idx); \
+  mp = mc->array + idx; \
+  tui_menu_init(mp, UI_CONSOLE_MENUHEIGHT - 1); \
+}
+
+// Setup the main menu within the given vector. The main menu itself will be the first
+// menu within the container.
+int setup_main_menu(vector_tui_menu * mc) {
+  // Reserve space for all the submenus. Make sure you always reserve
+  // more than enough space so the pointers don't change.
+  int err = vector_tui_menu_reserve(mc, 16);
+  if(err) {
+    LOGERR("Can't allocate space for menu!");
+    return err;
+  }
+  tui_menu * menu;
+  tui_menu * editmenu;
+  // --- MAIN menu ---
+  _MENUINIT(mc, menu);
+  _MENUINIT(mc, editmenu);
+  TUIMITEM_SUBMENU_EXISTING(menu, err, "Edit", editmenu);
+  if(err) { return err; }
+  TUIMITEM_BASIC(menu, err, "Exit App", 0);
+  if(err) { return err; }
+  // --- EDIT menu ---
+  _MENUINIT(mc, editmenu);
+  return 0;
+}
+
+void free_all_menus(vector_tui_menu * mc) {
+  for(size_t i = 0; i < mc->length; i++) {
+    tui_menu_free(mc->array + i);
+  }
+  vector_tui_menu_free(mc);
+}
 
 // ==========================================
 //               Rendering

@@ -2,6 +2,8 @@
 
 #include <stdlib.h>
 
+VECTOR_DEFINE(tui_menu);
+
 int logbuffer_init(LogBuffer * lb, size_t slots, size_t slot_size) {
   lb->slot_size = slot_size;
   lb->slot_count = slots;
