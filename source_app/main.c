@@ -1,19 +1,25 @@
 #include "3ds/console.h"
 #include "littlemenu.h"
 #include "utils.h"
-#include "littlelogbox.h"
 #include "ansi.h"
-#include "controls.h"
 #include "datacontainer.h"
+
+#include "controls.h"
+#include "logging.h"
 
 #include <3ds.h>
 #include <citro3d.h>
 #include <citro2d.h>
 
+
 u32 __stacksize__ = 512 * 1024;
 
 #define MAX_FILENAME 64
 #define MAX_DRAW_DATA ((u32)5000000)
+
+// Version info?
+#define VERSION "0.6.0"
+#define VERSIONSTRING "- Junkdraw "VERSION" -"
 
 // Console crap
 #define UI_CONSOLE_LOGTOP         20
@@ -27,10 +33,6 @@ u32 __stacksize__ = 512 * 1024;
 #define UI_CONSOLE_MENUCOLOR      ANSI_BG_BLACK ANSI_FG_WHITE ANSI_INVERT_OFF
 #define UI_CONSOLE_MENUSELECTCOLOR  ANSI_BG_BLACK ANSI_FG_CYAN ANSI_INVERT_ON
 
-// NOTE: for now, the log can't even scroll, so no need to make it large
-#define MAX_LOGMESSAGES 30
-#define MAX_LOGMSGLENGTH 100
-
 #define SCROLL_WIDTH 3
 #define SCREEN_COLOR C2D_Color32(90, 90, 90, 255)
 #define SCROLL_BG C2D_Color32f(0.8, 0.8, 0.8, 1)
@@ -39,6 +41,7 @@ u32 __stacksize__ = 512 * 1024;
 #define MAIN_MODE_DRAW        0
 #define MAIN_MODE_MENU        1
 #define MAIN_MODE_FAILURE     2
+#define MAIN_MODE_EXIT        3
 
 // ==========================================
 //              Global Data
@@ -68,18 +71,6 @@ void mainsystem_free(MainSystem * ms) {
   vector_tui_menu_free(&ms->menuvec);
   C3D_RenderTargetDelete(ms->drawscreen);
 }
-
-// ==========================================
-//                Logging
-// ==========================================
-
-tui_logbox logbox; // Global makes it easier to implement functions below
-
-void LOGERR(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "E", fmt) }
-void LOGWRN(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "W", fmt) }
-void LOGINF(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "I", fmt) }
-void LOGDBG(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "D", fmt) }
-void LOGTRC(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "T", fmt) }
 
 // ==========================================
 //                 Menu
@@ -152,14 +143,23 @@ void ui_render_menu(tui_menu * menu, int menu_open) {
   ANSI_GOTO(UI_CONSOLE_MENUTOP, 1);
   if(menu_open) {
     char out[51];
+    tui_menu_renderpath(menu, VERSIONSTRING, out, 50);
+    printf(UI_CONSOLE_MENUBARCOLOR "%s", out);
     for(int i = 0; i < UI_CONSOLE_MENUHEIGHT - 1; i++) {
       tui_menu_renderline(menu, out, 50, i);
-      printf("%s", " ");
+      if(tui_menu_iscurrent(menu, i)) {
+        printf(UI_CONSOLE_MENUSELECTCOLOR "%s", out);
+      } else {
+        printf(UI_CONSOLE_MENUCOLOR "%s", out);
+      }
     }
   } else {
+    printf(UI_CONSOLE_MENUCOLOR);
     for(int i = 0; i < UI_CONSOLE_MENUHEIGHT; i++) {
       printf("%50s", " ");
     }
+    ANSI_GOTO(UI_CONSOLE_MENUTOP, 1);
+    printf("%s", VERSIONSTRING);
   }
 }
 
@@ -182,8 +182,7 @@ int main() {
   control_setup_defaults();
 
   // Set this up IMMEDIATELY
-  if(tui_logbox_init(&logbox, MAX_LOGMESSAGES, MAX_LOGMSGLENGTH)) return 1;
-  tui_logbox_unit_t logbox_lasthead = logbox.head;
+  if(logging_init()) return 1;
 
   C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
   C2D_Init(C2D_DEFAULT_MAX_OBJECTS);
@@ -212,6 +211,9 @@ int main() {
     mode = MAIN_MODE_FAILURE;
   }
 
+  ui_render_controls();
+  ui_render_menu(system.menuvec.array, 0);
+
   LOGDBG("STARTING MAIN LOOP");
 
   while (aptMainLoop()) {
@@ -219,18 +221,21 @@ int main() {
     control_action actions = control_get_action(&ctrlconfig, &inputs);
 
     switch(mode) {
-      case MAIN_MODE_DRAW:
+      case MAIN_MODE_DRAW:;
         if(actions.action == CTRL_MENU) {
+          LOGTRC("OPEN MENU");
           mode = MAIN_MODE_MENU;
-          continue;
         }
         break;
-      case MAIN_MODE_MENU:
+      case MAIN_MODE_MENU:;
         // Only run the main menu, unless we stop running
-
-        if(actions.action == CTRL_MENU) {
-          mode = MAIN_MODE_MENU;
-          continue;
+        tui_menu_result mres = tui_menu_run(system.menuvec.array, actions.menuaction);
+        if(mres.error) {
+          LOGERR("Main menu error?");
+        }
+        if(actions.action == CTRL_MENU || !mres.running) {
+          LOGTRC("CLOSE MENU");
+          mode = MAIN_MODE_DRAW;
         }
         break;
     }
@@ -255,10 +260,11 @@ int main() {
     C2D_TargetClear(system.drawscreen, SCREEN_COLOR);
     C2D_SceneBegin(system.drawscreen);
 
-    if(logbox.head != logbox_lasthead) {
-      ui_render_logbox(&logbox);
-      logbox_lasthead = logbox.head;
+    // ---- CONSOLE ----
+    if(actions.menuaction.action) {
+      ui_render_menu(system.menuvec.array, mode == MAIN_MODE_MENU);
     }
+    logging_try_render(ui_render_logbox, 0);
 
     // draw_layers(&layer_window, &sys);
     // draw_scrollbars(&sys.screen_state);
@@ -276,6 +282,6 @@ ENDMAINLOOP:;
   // exitRomfs();
   gfxExit();
 
-  tui_logbox_free(&logbox);
+  logging_free();
   return 0;
 }
