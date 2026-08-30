@@ -98,13 +98,23 @@ int main_menu_init(MainSystem * ms) {
   tui_menu * exportmenu;
   tui_menu * optionsmenu;
   tui_menu * sessionmenu;
+  tui_menu * canvasmenu;
   // --- MAIN menu ---
   _MENUINIT(&ms->menuvec, menu);
   _MENUINIT(&ms->menuvec, editmenu);
   _MENUINIT(&ms->menuvec, exportmenu);
   _MENUINIT(&ms->menuvec, optionsmenu);
   _MENUINIT(&ms->menuvec, sessionmenu);
+  _MENUINIT(&ms->menuvec, canvasmenu);
   TUIMITEM_SUBMENU_EXISTING(menu, err, "Edit", editmenu);
+  if(err) { return err; }
+  TUIMITEM_SUBMENU_EXISTING(menu, err, "Export", exportmenu);
+  if(err) { return err; }
+  TUIMITEM_SUBMENU_EXISTING(menu, err, "Options", optionsmenu);
+  if(err) { return err; }
+  TUIMITEM_SUBMENU_EXISTING(menu, err, "Session Options", sessionmenu);
+  if(err) { return err; }
+  TUIMITEM_SUBMENU_EXISTING(menu, err, "Canvas Options", canvasmenu);
   if(err) { return err; }
   TUIMITEM_BASIC(menu, err, "Exit App", 0);
   if(err) { return err; }
