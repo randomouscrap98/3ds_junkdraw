@@ -4,6 +4,7 @@
 #include "littlelogbox.h"
 #include "ansi.h"
 #include "controls.h"
+#include "datacontainer.h"
 
 #include <3ds.h>
 #include <citro3d.h>
@@ -12,12 +13,14 @@
 u32 __stacksize__ = 512 * 1024;
 
 #define MAX_FILENAME 64
+#define MAX_DRAW_DATA ((u32)5000000)
 
 // Console crap
 #define UI_CONSOLE_MENUHEIGHT   12
 #define UI_CONSOLE_LOGTOP       20
 #define UI_CONSOLE_LOGHEIGHT    8
 #define UI_CONSOLE_LOGCOLOR     ANSI_FG_BRIGHT_BLACK
+#define UI_CONSOLE_CONTROLSCOLOR     ANSI_FG_BRIGHT_BLACK
 //CONSOLE_ESC(30;1m)
 
 // NOTE: for now, the log can't even scroll, so no need to make it large
@@ -28,6 +31,27 @@ u32 __stacksize__ = 512 * 1024;
 #define SCREEN_COLOR C2D_Color32(90, 90, 90, 255)
 #define SCROLL_BG C2D_Color32f(0.8, 0.8, 0.8, 1)
 #define SCROLL_BAR C2D_Color32f(0.5, 0.5, 0.5, 1)
+
+#define MAIN_MODE_DRAW        0
+#define MAIN_MODE_MENU        1
+#define MAIN_MODE_FAILURE     2
+
+// ==========================================
+//              Global Data
+// ==========================================
+
+typedef struct {
+  DataContainer drawdata;
+  vector_tui_menu menuvec;
+} MainSystem;
+
+int mainsystem_init(MainSystem * ms) {
+  int err = datacontainer_init(&ms->drawdata, MAX_DRAW_DATA);
+  if(err) { return err; }
+  err = vector_tui_menu_init(&ms->menuvec);
+  if(err) { return err; }
+  return 0;
+}
 
 // ==========================================
 //                Logging
@@ -45,34 +69,50 @@ void LOGTRC(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "T", fmt) }
 //                 Menu
 // ==========================================
 
+void print_controls() {
+  printf(ANSI_RESET UI_CONSOLE_CONTROLSCOLOR ANSI_INVERT_ON);
+  printf("     L - color picker        R - general modifier\n");
+  printf("LFT/RT - line width     UP/DWN - zoom (+R - page)\n");
+  printf("SELECT - change layers   START - menu\n");
+  printf("  ABXY - change tools    C-PAD - scroll canvas\n");
+  printf(" R+B/A - undo/redo    COLP+L+R - change palette\n");
+  printf(ANSI_RESET);
+}
+
 #define _MENUINIT(mc, mp) { \
   size_t idx; \
   vector_tui_menu_increment(mc, &idx); \
-  mp = mc->array + idx; \
+  mp = (mc)->array + idx; \
   tui_menu_init(mp, UI_CONSOLE_MENUHEIGHT - 1); \
 }
 
 // Setup the main menu within the given vector. The main menu itself will be the first
 // menu within the container.
-int setup_main_menu(vector_tui_menu * mc) {
+int main_menu_init(MainSystem * ms) {
   // Reserve space for all the submenus. Make sure you always reserve
   // more than enough space so the pointers don't change.
-  int err = vector_tui_menu_reserve(mc, 16);
+  int err = vector_tui_menu_reserve(&ms->menuvec, 16);
   if(err) {
     LOGERR("Can't allocate space for menu!");
     return err;
   }
   tui_menu * menu;
   tui_menu * editmenu;
+  tui_menu * exportmenu;
+  tui_menu * optionsmenu;
+  tui_menu * sessionmenu;
   // --- MAIN menu ---
-  _MENUINIT(mc, menu);
-  _MENUINIT(mc, editmenu);
+  _MENUINIT(&ms->menuvec, menu);
+  _MENUINIT(&ms->menuvec, editmenu);
+  _MENUINIT(&ms->menuvec, exportmenu);
+  _MENUINIT(&ms->menuvec, optionsmenu);
+  _MENUINIT(&ms->menuvec, sessionmenu);
   TUIMITEM_SUBMENU_EXISTING(menu, err, "Edit", editmenu);
   if(err) { return err; }
   TUIMITEM_BASIC(menu, err, "Exit App", 0);
   if(err) { return err; }
   // --- EDIT menu ---
-  _MENUINIT(mc, editmenu);
+  _MENUINIT(&ms->menuvec, editmenu);
   return 0;
 }
 
@@ -133,6 +173,18 @@ int main() {
 
   char save_filename[MAX_FILENAME];
   control_config ctrlconfig = { .tool = 0, .scheme = 0, };
+  MainSystem system;
+  int mode = MAIN_MODE_DRAW;
+
+  if(mainsystem_init(&system)) {
+    LOGDBG("CAN'T INITIALIZE MAIN SYSTEM");
+    mode = MAIN_MODE_FAILURE;
+  }
+
+  if(main_menu_init(&system)) {
+    LOGDBG("CAN'T INITIALIZE MAIN MENU");
+    mode = MAIN_MODE_FAILURE;
+  }
 
   LOGDBG("STARTING MAIN LOOP");
 
@@ -140,9 +192,23 @@ int main() {
     control_inputs inputs = control_get_inputs();
     control_action actions = control_get_action(&ctrlconfig, &inputs);
 
-    if(actions.action == CTRL_MENU) {
-      break;
+    switch(mode) {
+      case MAIN_MODE_DRAW:
+        if(actions.action == CTRL_MENU) {
+          mode = MAIN_MODE_MENU;
+          continue;
+        }
+        break;
+      case MAIN_MODE_MENU:
+        // Only run the main menu, unless we stop running
+
+        if(actions.action == CTRL_MENU) {
+          mode = MAIN_MODE_MENU;
+          continue;
+        }
+        break;
     }
+
 
     // =======================================
     // Render the scene
