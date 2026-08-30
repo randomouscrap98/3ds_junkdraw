@@ -16,12 +16,16 @@ u32 __stacksize__ = 512 * 1024;
 #define MAX_DRAW_DATA ((u32)5000000)
 
 // Console crap
-#define UI_CONSOLE_MENUHEIGHT   12
-#define UI_CONSOLE_LOGTOP       20
-#define UI_CONSOLE_LOGHEIGHT    8
-#define UI_CONSOLE_LOGCOLOR     ANSI_FG_BRIGHT_BLACK
-#define UI_CONSOLE_CONTROLSCOLOR     ANSI_FG_BRIGHT_BLACK
-//CONSOLE_ESC(30;1m)
+#define UI_CONSOLE_LOGTOP         20
+#define UI_CONSOLE_LOGHEIGHT      8
+#define UI_CONSOLE_LOGCOLOR       ANSI_BG_BLACK ANSI_FG_BRIGHT_BLACK ANSI_INVERT_OFF
+#define UI_CONSOLE_CONTROLTOP     0
+#define UI_CONSOLE_CONTROLSCOLOR  ANSI_BG_BLACK ANSI_FG_BRIGHT_BLACK ANSI_INVERT_ON
+#define UI_CONSOLE_MENUTOP        6
+#define UI_CONSOLE_MENUHEIGHT     12
+#define UI_CONSOLE_MENUBARCOLOR   ANSI_BG_BLACK ANSI_FG_WHITE ANSI_INVERT_ON
+#define UI_CONSOLE_MENUCOLOR      ANSI_BG_BLACK ANSI_FG_WHITE ANSI_INVERT_OFF
+#define UI_CONSOLE_MENUSELECTCOLOR  ANSI_BG_BLACK ANSI_FG_CYAN ANSI_INVERT_ON
 
 // NOTE: for now, the log can't even scroll, so no need to make it large
 #define MAX_LOGMESSAGES 30
@@ -43,6 +47,7 @@ u32 __stacksize__ = 512 * 1024;
 typedef struct {
   DataContainer drawdata;
   vector_tui_menu menuvec;
+  C3D_RenderTarget * drawscreen;
 } MainSystem;
 
 int mainsystem_init(MainSystem * ms) {
@@ -50,14 +55,25 @@ int mainsystem_init(MainSystem * ms) {
   if(err) { return err; }
   err = vector_tui_menu_init(&ms->menuvec);
   if(err) { return err; }
+  ms->drawscreen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
+  if(!ms->drawscreen) { return 1; }
   return 0;
+}
+
+void mainsystem_free(MainSystem * ms) {
+  datacontainer_free(&ms->drawdata);
+  for(size_t i = 0; i < ms->menuvec.length; i++) {
+    tui_menu_free(ms->menuvec.array + i);
+  }
+  vector_tui_menu_free(&ms->menuvec);
+  C3D_RenderTargetDelete(ms->drawscreen);
 }
 
 // ==========================================
 //                Logging
 // ==========================================
 
-tui_logbox logbox;
+tui_logbox logbox; // Global makes it easier to implement functions below
 
 void LOGERR(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "E", fmt) }
 void LOGWRN(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "W", fmt) }
@@ -68,16 +84,6 @@ void LOGTRC(const char * fmt, ...) { TUILOGBOX_LOG_INNER(&logbox, "T", fmt) }
 // ==========================================
 //                 Menu
 // ==========================================
-
-void print_controls() {
-  printf(ANSI_RESET UI_CONSOLE_CONTROLSCOLOR ANSI_INVERT_ON);
-  printf("     L - color picker        R - general modifier\n");
-  printf("LFT/RT - line width     UP/DWN - zoom (+R - page)\n");
-  printf("SELECT - change layers   START - menu\n");
-  printf("  ABXY - change tools    C-PAD - scroll canvas\n");
-  printf(" R+B/A - undo/redo    COLP+L+R - change palette\n");
-  printf(ANSI_RESET);
-}
 
 #define _MENUINIT(mc, mp) { \
   size_t idx; \
@@ -116,23 +122,44 @@ int main_menu_init(MainSystem * ms) {
   return 0;
 }
 
-void free_all_menus(vector_tui_menu * mc) {
-  for(size_t i = 0; i < mc->length; i++) {
-    tui_menu_free(mc->array + i);
-  }
-  vector_tui_menu_free(mc);
-}
-
 // ==========================================
 //               Rendering
 // ==========================================
 
+void ui_render_controls() {
+  ANSI_GOTO(UI_CONSOLE_CONTROLTOP, 1);
+  printf(UI_CONSOLE_CONTROLSCOLOR);
+  printf("     L - color picker        R - general modifier ");
+  printf("LFT/RT - line width     UP/DWN - zoom (+R - page) ");
+  printf("SELECT - change layers   START - menu             ");
+  printf("  ABXY - change tools    C-PAD - scroll canvas    ");
+  printf(" R+B/A - undo/redo    COLP+L+R - change palette   ");
+}
+
 void ui_render_logbox(tui_logbox * lb) {
+  ANSI_GOTO(UI_CONSOLE_LOGTOP, 1);
+  printf(UI_CONSOLE_LOGCOLOR);
   char out[51]; // Just wide enough for the screen + null
   for(int i = 0; i < UI_CONSOLE_LOGHEIGHT; i++) {
     tui_logbox_renderline(lb, out, 50, UI_CONSOLE_LOGHEIGHT, i);
-    printf(CONSOLE_ESC(%d;%dH) UI_CONSOLE_LOGCOLOR "%s",
-           UI_CONSOLE_LOGTOP + i, 0, out);
+    // For efficiency: we know these lines all fill the entire width, so no 
+    // need to change cursor position or newline or anything
+    printf("%s", out);
+  }
+}
+
+void ui_render_menu(tui_menu * menu, int menu_open) {
+  ANSI_GOTO(UI_CONSOLE_MENUTOP, 1);
+  if(menu_open) {
+    char out[51];
+    for(int i = 0; i < UI_CONSOLE_MENUHEIGHT - 1; i++) {
+      tui_menu_renderline(menu, out, 50, i);
+      printf("%s", " ");
+    }
+  } else {
+    for(int i = 0; i < UI_CONSOLE_MENUHEIGHT; i++) {
+      printf("%50s", " ");
+    }
   }
 }
 
@@ -164,7 +191,6 @@ int main() {
 
   //PrintConsole * console_ptr = 
   consoleInit(GFX_TOP, NULL);
-  C3D_RenderTarget *screen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 
   if(isn3ds()) {
     LOGDBG("New 3ds detected");
@@ -226,8 +252,8 @@ int main() {
                    GPU_ONE_MINUS_SRC_ALPHA, GPU_SRC_ALPHA,
                    GPU_ONE_MINUS_SRC_ALPHA);
 
-    C2D_TargetClear(screen, SCREEN_COLOR);
-    C2D_SceneBegin(screen);
+    C2D_TargetClear(system.drawscreen, SCREEN_COLOR);
+    C2D_SceneBegin(system.drawscreen);
 
     if(logbox.head != logbox_lasthead) {
       ui_render_logbox(&logbox);
@@ -243,7 +269,7 @@ int main() {
   }
 ENDMAINLOOP:;
 
-  C3D_RenderTargetDelete(screen);
+  mainsystem_free(&system);
 
   C2D_Fini();
   C3D_Fini();
