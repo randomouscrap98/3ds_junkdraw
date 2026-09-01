@@ -66,16 +66,16 @@ int mainsystem_init(MainSystem * ms) {
   return 0;
 }
 
-// Returns the active menu and alert message
-void mainsystem_getactivemenu(MainSystem * ms, tui_menu ** menu, char ** msg) {
-  if(ms->warnmsg[0] != 0) {
-    *menu = ms->menuvec.array + 1;
-    *msg = ms->warnmsg;
-  } else {
-    *menu = ms->menuvec.array;
-    *msg = NULL;
-  }
-}
+// // Returns the active menu and alert message
+// void mainsystem_getactivemenu(MainSystem * ms, tui_menu ** menu, char ** msg) {
+//   if(ms->warnmsg[0] != 0) {
+//     *menu = ms->menuvec.array + 1;
+//     *msg = ms->warnmsg;
+//   } else {
+//     *menu = ms->menuvec.array;
+//     *msg = NULL;
+//   }
+// }
 
 void mainsystem_free(MainSystem * ms) {
   datacontainer_free(&ms->drawdata);
@@ -89,6 +89,61 @@ void mainsystem_free(MainSystem * ms) {
 // ==========================================
 //                 Menu
 // ==========================================
+
+// There is a menu system where you can setup an optional warning + work to do 
+// (which itself could be a menu). This allows you to create a menu item where 
+// you can throw up a customized warning message before 
+typedef struct {
+  MainSystem * system;
+  char * (*should_warn)(MainSystem * ms);
+  tui_menu * (*work)(MainSystem * ms);
+  char warning[TUIMENU_MAXENUMTOTAL - sizeof(void *) * 4];
+} optional_menu;
+
+// When user selects yes on the warning menu, run their desired work, which MAY produce
+// a menu, or may just "do the menu"
+static inline tui_menu * optional_menu_warning_yes_create(
+    tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
+  optional_menu * om = (optional_menu*)&data->raw;
+  om->system->warnmsg[0] = 0;     // No more menu
+  return om->work(om->system);
+}
+
+// the "menu create" function for a menu item which can optionally throw up a warning
+// before doing its work, or just directly do the work otherwise.
+static inline tui_menu * optional_menu_warning_create(
+    tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
+  optional_menu * om = (optional_menu*)&data->raw;
+  char * warning = om->should_warn(om->system);
+  if(warning) {
+    snprintf(om->system->warnmsg, sizeof(om->system->warnmsg), "%s", warning);
+    // Setup a temporary confirm menu with a yes that is another submenu item that redirects to
+    // our 
+    tui_menu * warnmenu = malloc(sizeof(tui_menu));
+    if(!warnmenu) {
+      LOGERR("Couldn't create warning submenu!");
+      return NULL;
+    }
+    int err;
+    TUIMITEM_BASIC(warnmenu, err, "No", 1);
+    if(err) { 
+      LOGERR("Couldn't create warning submenu 'no'!");
+      return NULL; 
+    }
+    tui_menu_item_data * yesdat;
+    TUIMITEM_SUBMENU(warnmenu, err, "Yes", 
+        optional_menu_warning_yes_create, tui_menu_submenu_destroy_malloc_menu, yesdat);
+    if(err) { 
+      LOGERR("Couldn't create warning submenu 'yes'!");
+      return NULL; 
+    }
+    memcpy((optional_menu *)&yesdat->raw, om, sizeof(optional_menu));
+    return warnmenu;
+  } else {
+    om->system->warnmsg[0] = 0;   // No more menu
+    return om->work(om->system);
+  }
+}
 
 #define _MENUINIT(mc, mp) { \
   size_t idx; \
@@ -108,7 +163,7 @@ int main_menu_init(MainSystem * ms) {
     return err;
   }
   tui_menu * menu;
-  tui_menu * confirmmenu;
+  // tui_menu * confirmmenu;
   tui_menu * editmenu;
   tui_menu * exportmenu;
   tui_menu * optionsmenu;
@@ -116,7 +171,7 @@ int main_menu_init(MainSystem * ms) {
   tui_menu * canvasmenu;
   // --- MAIN menu ---
   _MENUINIT(&ms->menuvec, menu);
-  _MENUINIT(&ms->menuvec, confirmmenu);
+  // _MENUINIT(&ms->menuvec, confirmmenu);
   _MENUINIT(&ms->menuvec, editmenu);
   _MENUINIT(&ms->menuvec, exportmenu);
   _MENUINIT(&ms->menuvec, optionsmenu);
@@ -133,11 +188,6 @@ int main_menu_init(MainSystem * ms) {
   TUIMITEM_SUBMENU_EXISTING(menu, err, "Canvas Options", canvasmenu);
   if(err) { return err; }
   TUIMITEM_BASIC(menu, err, "Exit App", 0);
-  if(err) { return err; }
-  // --- CONFIRM menu ---
-  TUIMITEM_BASIC(confirmmenu, err, "No", 1);
-  if(err) { return err; }
-  TUIMITEM_SUBMENU_EXISTING(confirmmenu, err, "Yes", 0);
   if(err) { return err; }
   // --- EDIT menu ---
   _MENUINIT(&ms->menuvec, editmenu);
@@ -251,9 +301,9 @@ int main() {
   while (aptMainLoop()) {
     control_inputs inputs = control_get_inputs();
     control_action actions = control_get_action(&ctrlconfig, &inputs);
-    tui_menu * act_menu;
-    char * act_status;
-    mainsystem_getactivemenu(&system, &act_menu, &act_status);
+    //tui_menu * act_menu;
+    //char * act_status;
+    //mainsystem_getactivemenu(&system, &act_menu, &act_status);
 
     switch(mode) {
       case MAIN_MODE_DRAW:;
@@ -264,7 +314,7 @@ int main() {
         break;
       case MAIN_MODE_MENU:;
         // Only run the main menu, unless we stop running
-        tui_menu_result mres = tui_menu_run(act_menu, actions.menuaction);
+        tui_menu_result mres = tui_menu_run(system.menuvec.array, actions.menuaction);
         if(mres.error) {
           LOGERR("Menu error?");
         }
@@ -297,7 +347,7 @@ int main() {
 
     // ---- CONSOLE ----
     if(actions.menuaction.action) {
-      ui_render_menu(act_menu, act_status, mode == MAIN_MODE_MENU);
+      ui_render_menu(system.menuvec.array, system.warnmsg, mode == MAIN_MODE_MENU);
     }
     logging_try_render(ui_render_logbox, 0);
 

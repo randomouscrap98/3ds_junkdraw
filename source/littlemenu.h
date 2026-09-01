@@ -267,6 +267,15 @@ static inline int tui_menu_submenu_destroy_existing_menu(
   return 0;
 }
 
+static inline int tui_menu_submenu_destroy_malloc_menu(
+    tui_menu_item_data * data, tui_menu * menu, tui_menu_unit_t pos) {
+  (void)data;
+  (void)pos;
+  tui_menu_free(menu);
+  return 0;
+}
+
+
 // WARN: Max is INCLUSIVE, and this is ALSO not a standard "loop"! Large steps near the edges will
 // only TAKE you to the edge, and large steps at the edge (if looping) will only take you to the first
 // value on the other side, NOT a proper modulus etc! This is intended behavior and IMO more ergonomic 
@@ -368,6 +377,17 @@ static inline int tui_menu_submenu_destroy_existing_menu(
   }; \
   _tmp.data.submenu.data.menu_ptr = _submenu; \
   err = tui_menu_push((tm), &_tmp); \
+}
+
+#define TUIMITEM_SUBMENU(tm, err, _name, _create, _destroy, _dataptr) { \
+  TUIITEM_COMMON(_tmp, _name, TUIMENU_TYPE_SUBMENU); \
+  _tmp.data.submenu = (tui_menu_submenu) { \
+    .create_menu = _create, \
+    .destroy_menu = _destroy, \
+    .menu = NULL, \
+  }; \
+  err = tui_menu_push((tm), &_tmp); \
+  if(!err) { _dataptr = &(tm)->items[(tm)->numitems - 1].data.submenu.data; } \
 }
 
 
