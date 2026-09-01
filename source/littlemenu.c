@@ -79,7 +79,9 @@ static inline int tui_menu_enter_submenu(tui_menu * tm, tui_menu_unit_t pos) {
   tmi = tm->items + pos;
   tmi->data.submenu.menu = tmi->data.submenu.create_menu(&tmi->data.submenu.data, tm, pos);
   if(tmi->data.submenu.menu == NULL) {
-    return 1;
+    // This is ALLOWED, it's an "optional" submenu. The outer menu will just exit as though
+    // you clicked on a basic item
+    return 0; 
   }
   tmi->data.submenu.menu->parent = tm;
   // Some courtesy housekeeping so you don't have to
@@ -318,6 +320,12 @@ tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action) {
       result = item->data.callback.callback(&item->data.callback.data, tm->current, action);
     } else if(item->type == TUIMENU_TYPE_SUBMENU) {
       result.error = tui_menu_enter_submenu(tm, tm->current);
+      // If no menu was produced and no error, then menu was just "clicked" and optional
+      // submenu didn't happen
+      if(result.error == 0 && tui_menu_get_submenu(tm, tm->current) == NULL) {
+        result.running = 0;
+        result.result = tm->current;
+      }
     }
   }
   return result;

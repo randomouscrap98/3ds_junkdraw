@@ -16,6 +16,7 @@ u32 __stacksize__ = 512 * 1024;
 
 #define MAX_FILENAME 64
 #define MAX_DRAW_DATA ((u32)5000000)
+#define MAX_WARNMSG   512
 
 // Version info?
 #define VERSION "0.6.0"
@@ -33,10 +34,10 @@ u32 __stacksize__ = 512 * 1024;
 #define UI_CONSOLE_MENUCOLOR      ANSI_BG_BLACK ANSI_FG_WHITE ANSI_INVERT_OFF
 #define UI_CONSOLE_MENUSELECTCOLOR  ANSI_BG_BLACK ANSI_FG_CYAN ANSI_INVERT_ON
 
-#define SCROLL_WIDTH 3
-#define SCREEN_COLOR C2D_Color32(90, 90, 90, 255)
-#define SCROLL_BG C2D_Color32f(0.8, 0.8, 0.8, 1)
-#define SCROLL_BAR C2D_Color32f(0.5, 0.5, 0.5, 1)
+#define SCROLL_WIDTH    3
+#define SCREEN_COLOR    C2D_Color32(90, 90, 90, 255)
+#define SCROLL_BG       C2D_Color32f(0.8, 0.8, 0.8, 1)
+#define SCROLL_BAR      C2D_Color32f(0.5, 0.5, 0.5, 1)
 
 #define MAIN_MODE_DRAW        0
 #define MAIN_MODE_MENU        1
@@ -51,6 +52,7 @@ typedef struct {
   DataContainer drawdata;
   vector_tui_menu menuvec;
   C3D_RenderTarget * drawscreen;
+  char warnmsg[MAX_WARNMSG];
 } MainSystem;
 
 int mainsystem_init(MainSystem * ms) {
@@ -60,7 +62,19 @@ int mainsystem_init(MainSystem * ms) {
   if(err) { return err; }
   ms->drawscreen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
   if(!ms->drawscreen) { return 1; }
+  ms->warnmsg[0] = 0;
   return 0;
+}
+
+// Returns the active menu and alert message
+void mainsystem_getactivemenu(MainSystem * ms, tui_menu ** menu, char ** msg) {
+  if(ms->warnmsg[0] != 0) {
+    *menu = ms->menuvec.array + 1;
+    *msg = ms->warnmsg;
+  } else {
+    *menu = ms->menuvec.array;
+    *msg = NULL;
+  }
 }
 
 void mainsystem_free(MainSystem * ms) {
@@ -84,7 +98,7 @@ void mainsystem_free(MainSystem * ms) {
 }
 
 // Setup the main menu within the given vector. The main menu itself will be the first
-// menu within the container.
+// menu within the container. The "confirm" menu is #2
 int main_menu_init(MainSystem * ms) {
   // Reserve space for all the submenus. Make sure you always reserve
   // more than enough space so the pointers don't change.
@@ -94,6 +108,7 @@ int main_menu_init(MainSystem * ms) {
     return err;
   }
   tui_menu * menu;
+  tui_menu * confirmmenu;
   tui_menu * editmenu;
   tui_menu * exportmenu;
   tui_menu * optionsmenu;
@@ -101,6 +116,7 @@ int main_menu_init(MainSystem * ms) {
   tui_menu * canvasmenu;
   // --- MAIN menu ---
   _MENUINIT(&ms->menuvec, menu);
+  _MENUINIT(&ms->menuvec, confirmmenu);
   _MENUINIT(&ms->menuvec, editmenu);
   _MENUINIT(&ms->menuvec, exportmenu);
   _MENUINIT(&ms->menuvec, optionsmenu);
@@ -118,8 +134,14 @@ int main_menu_init(MainSystem * ms) {
   if(err) { return err; }
   TUIMITEM_BASIC(menu, err, "Exit App", 0);
   if(err) { return err; }
+  // --- CONFIRM menu ---
+  TUIMITEM_BASIC(confirmmenu, err, "No", 1);
+  if(err) { return err; }
+  TUIMITEM_SUBMENU_EXISTING(confirmmenu, err, "Yes", 0);
+  if(err) { return err; }
   // --- EDIT menu ---
   _MENUINIT(&ms->menuvec, editmenu);
+
   return 0;
 }
 
@@ -149,7 +171,7 @@ void ui_render_logbox(tui_logbox * lb) {
   }
 }
 
-void ui_render_menu(tui_menu * menu, int menu_open) {
+void ui_render_menu(tui_menu * menu, char * alert, int menu_open) {
   ANSI_GOTO(UI_CONSOLE_MENUTOP, 1);
   if(menu_open) {
     char out[51];
@@ -222,13 +244,16 @@ int main() {
   }
 
   ui_render_controls();
-  ui_render_menu(system.menuvec.array, 0);
+  ui_render_menu(system.menuvec.array, NULL, 0);
 
   LOGDBG("STARTING MAIN LOOP");
 
   while (aptMainLoop()) {
     control_inputs inputs = control_get_inputs();
     control_action actions = control_get_action(&ctrlconfig, &inputs);
+    tui_menu * act_menu;
+    char * act_status;
+    mainsystem_getactivemenu(&system, &act_menu, &act_status);
 
     switch(mode) {
       case MAIN_MODE_DRAW:;
@@ -239,9 +264,9 @@ int main() {
         break;
       case MAIN_MODE_MENU:;
         // Only run the main menu, unless we stop running
-        tui_menu_result mres = tui_menu_run(system.menuvec.array, actions.menuaction);
+        tui_menu_result mres = tui_menu_run(act_menu, actions.menuaction);
         if(mres.error) {
-          LOGERR("Main menu error?");
+          LOGERR("Menu error?");
         }
         if(actions.action == CTRL_MENU || !mres.running) {
           LOGTRC("CLOSE MENU");
@@ -272,7 +297,7 @@ int main() {
 
     // ---- CONSOLE ----
     if(actions.menuaction.action) {
-      ui_render_menu(system.menuvec.array, mode == MAIN_MODE_MENU);
+      ui_render_menu(act_menu, act_status, mode == MAIN_MODE_MENU);
     }
     logging_try_render(ui_render_logbox, 0);
 
