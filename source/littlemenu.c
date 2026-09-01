@@ -163,6 +163,15 @@ int tui_menu_iscurrent(tui_menu * tm, tui_menu_unit_t line) {
   return tm->top + line == tm->current;
 }
 
+tui_menu_unit_t tui_menu_submenu_depth(tui_menu * tm) {
+  tui_menu_item * submenu = tui_menu_get_submenu(tm, tm->current);
+  if(submenu) {
+    return tui_menu_submenu_depth(submenu->data.submenu.menu) + 1;
+  } else {
+    return 0;
+  }
+}
+
 void tui_menu_renderline(tui_menu * tm, char * out, tui_menu_unit_t width, tui_menu_unit_t line) {
   tui_menu_item * submenu = tui_menu_get_submenu(tm, tm->current);
   if(submenu) { return tui_menu_renderline(submenu->data.submenu.menu, out, width, line); }
@@ -234,6 +243,50 @@ void tui_menu_renderline(tui_menu * tm, char * out, tui_menu_unit_t width, tui_m
   out[width] = 0;
 }
 
+static inline tui_menu * tui_menu_get_exit_parent(tui_menu * tm) {
+  // We only care if we are at least 2 levels deep and the parent we're
+  // returning to is a temp submenu. If your direct parent IS root, that's
+  // fine, root can't be temp. If you ARE root, there's nothing to exit to.
+  if(tm->parent) {
+    if(tm->parent->parent) {
+      tui_menu_item * parent_sub = tui_menu_get_submenu(
+          tm->parent->parent, tm->parent->parent->current);
+      // Our parent is temporary, we need to go higher
+      if(parent_sub->data.submenu.temporary) {
+        return tui_menu_get_exit_parent(tm->parent);
+      }
+    }
+  }
+  return tm->parent;
+}
+
+// These are some common occurrences within the menu, which multiple things
+// might resolve to
+#define _TUIMENU_RESULT_CANCEL() { \
+  result.result = -1; \
+  tui_menu * _tmparent = tui_menu_get_exit_parent(tm); \
+  if(_tmparent) { \
+    result.error |= tui_menu_exit_submenu(_tmparent, _tmparent->current); \
+    result.running = 1; \
+  } else { \
+    result.error |= tui_menu_exit_submenu(tm, tm->current); \
+    result.running = 0; \
+  } \
+}
+
+#define _TUIMENU_RESULT_ACCEPT() { \
+  /* An accept in a temp menu is a cancel with a result */ \
+  tui_menu_unit_t _curtemp = tm->current;  \
+  if(tm->parent) { \
+    tui_menu_item * oursub = tui_menu_get_submenu(tm->parent, tm->parent->current); \
+    if(oursub->data.submenu.temporary) { \
+      _TUIMENU_RESULT_CANCEL(); \
+    } \
+  } \
+  result.result = _curtemp; \
+  result.running = 1; \
+}
+
 tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action) {
   tui_menu_result result;
   result.running = 1;
@@ -241,8 +294,8 @@ tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action) {
   result.error = 0;
   // Redirect calls to the submenu BUT if it's a fullstop, we can exit NOW (ignore other commands)
   if(action.action & TUIMENU_ACTION_FULLSTOP) {
-    // SHOULD recursively exit all submenus
-    result.error = tui_menu_exit_submenu(tm, tm->current);
+    // SHOULD recursively exit all submenus (we're at the top right?)
+    result.error = tui_menu_exit_submenu_all(tm);
     result.running = 0;
     return result;
   }
@@ -297,34 +350,28 @@ tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action) {
                      item->loop);
     }
   }
-  // We're allowed to modify the action because it's pass by value. Selecting a quit
-  // basic item is the SAME as canceling. 
-  if ((action.action & TUIMENU_ACTION_ACCEPT) && item && 
-       item->type == TUIMENU_TYPE_BASIC && item->data.basic.quit) {
-    action.action |= TUIMENU_ACTION_CANCEL;
-  }
   if(action.action & TUIMENU_ACTION_CANCEL) {
-    // If we have a parent, exit THEIR submenu (it's us). otherwise, exit
-    // only our own submenus. We're still running if we have a parent
-    if(tm->parent) {
-      result.error = tui_menu_exit_submenu(tm->parent, tm->parent->current);
-    } else {
-      result.error = tui_menu_exit_submenu(tm, tm->current);
-      result.running = 0;
-    }
-  } else if(action.action & TUIMENU_ACTION_ACCEPT && item) {
+    _TUIMENU_RESULT_CANCEL();
+  } else if(action.action & TUIMENU_ACTION_ACCEPT) {
     if(item->type == TUIMENU_TYPE_BASIC) {
-      result.running = 0;   // TODO: does selecting on a basic item really mean the menu is done? Probably...
-      result.result = tm->current;
+      if(item->data.basic.quit) {
+        _TUIMENU_RESULT_CANCEL();
+      } else {
+        _TUIMENU_RESULT_ACCEPT();
+      }
     } else if(item->type == TUIMENU_TYPE_CALLBACK && item->data.callback.callback) {
       result = item->data.callback.callback(&item->data.callback.data, tm->current, action);
+      // Special: if result was -1, we're simulating a cancel. This ignores their running
+      // state request.
+      if(result.result < 0) {
+        _TUIMENU_RESULT_CANCEL();
+      }
     } else if(item->type == TUIMENU_TYPE_SUBMENU) {
       result.error = tui_menu_enter_submenu(tm, tm->current);
       // If no menu was produced and no error, then menu was just "clicked" and optional
       // submenu didn't happen
       if(result.error == 0 && tui_menu_get_submenu(tm, tm->current) == NULL) {
-        result.running = 0;
-        result.result = tm->current;
+        _TUIMENU_RESULT_ACCEPT();
       }
     }
   }

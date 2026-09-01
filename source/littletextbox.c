@@ -16,6 +16,13 @@ void tui_textwrap_reset(tui_textwrap * tw) {
   tw->last_config.width = 0;
   tw->last_config.line = 0;
   tw->last_config.delim = 0;
+  tw->full_height = 0;
+}
+
+static inline void tui_textwrap_reset_withconfig(tui_textwrap * tw, tui_textwrap_config config) {
+  tui_textwrap_reset(tw); 
+  tw->last_config = config;
+  tw->last_config.line = 0;
 }
 
 static inline int tui_textwrap_config_should_reset(tui_textwrap_config orig, 
@@ -58,40 +65,54 @@ static inline int tui_textwrap_findnext(tui_textwrap * tw, tui_textwrap_config c
         tw->last_len = prevlen;
         tw->last_next = prevnext;
       }
-      return 0;
+      break;
     }
     // Early exit: we're at a perfect location (or at the end)
     if(tw->last_next - tw->last_start >= config.width || *tw->last_next == 0) {
-      return 0;
+      break;
     }
   }
+  (tw)->scan_total++;
+  return 0;
+}
+
+static inline int tui_textwrap_walk(tui_textwrap * tw, tui_textwrap_config config) {
+  if(config.width < 1) { return -1; }
+  if(tui_textwrap_config_should_reset((tw)->last_config, config)) { 
+    tui_textwrap_reset_withconfig(tw, config); 
+  }
+  /* If SPECIFICALLY reset, pre-emptive scan for next */
+  if((tw)->last_next == NULL) { tui_textwrap_findnext(tw, config); }
+  /* Move forward through lines, wrapping each one */
+  for(; (tw)->last_config.line < config.line; (tw)->last_config.line++) {
+    /* If we're trying to scan forward and we're at the end before */
+    /* going to next, this is an error. You can't render lines past the end */
+    if(*(tw)->last_next == 0) { 
+      tw->full_height = tw->last_config.line + 1;
+      return 99;  // Special: want to know when this happens specifically
+    } 
+    (tw)->last_start = (tw)->last_next; 
+    tui_textwrap_findnext(tw, config); 
+  }
+  return 0;
+}
+
+tui_textbox_unit_t tui_textwrap_height(tui_textwrap * tw, tui_textwrap_config config) {
+  config.line = TUITEXTBOX_UNIT_MAX;
+  int err = tui_textwrap_walk(tw, config);
+  if(err != 99) return err;
+  return tw->full_height;
 }
 
 int tui_textwrap_renderline(tui_textwrap * tw, char * out, tui_textwrap_config config) {
   out[0] = 0;
-  if(config.width < 1) { return -1; }
-  if(tui_textwrap_config_should_reset(tw->last_config, config)) {
-    tui_textwrap_reset(tw);
-  }
-  // If we are SPECIFICALLY reset, do the pre-emptive scan for next
-  if(tw->last_next == NULL) {
-    tui_textwrap_findnext(tw, config);
-  }
-  // Move forward through lines, wrapping each one
-  for(; tw->last_config.line < config.line; tw->last_config.line++) {
-    // If we're trying to scan forward and we're at the end before
-    // going to next, this is an error. You can't render lines past the end
-    if(*tw->last_next == 0) { return -1; }
-    tw->last_start = tw->last_next;
-    tui_textwrap_findnext(tw, config);
-    tw->scan_total++;
-  }
+  // Because walk is special, we consume any error and produce a flat -1
+  if(tui_textwrap_walk(tw, config)) { return -1; }
   // Now we should be at the appropriate spot. Render out the line, plus padding
   snprintf(out, tw->last_len + 1, "%s", tw->last_start);
   for(tui_textbox_unit_t i = strlen(out); i < config.width; i++) {
     out[i] = config.delim;
   }
   out[config.width] = 0;
-  tw->last_config = config;
   return 0;
 }

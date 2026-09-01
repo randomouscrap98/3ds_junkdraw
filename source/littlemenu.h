@@ -121,10 +121,21 @@ typedef struct {
   uint8_t running;
 } tui_menu_result;
 
+#define TUIMENU_CANCELRESULT (tui_menu_result) { \
+  .error = 0, \
+  .result = -1, \
+  .running = 0, \
+}
+
 typedef struct {
   uint16_t action;
   tui_menu_unit_t offset;
 } tui_menu_action;
+
+#define TUIMENU_CANCELACTION (tui_menu_action) { \
+  .offset = 0, \
+  .action = TUIMENU_ACTION_CANCEL, \
+}
 
 struct tui_menu {
   tui_menu_item * items;
@@ -159,6 +170,7 @@ int tui_menu_clear(tui_menu * tm);
 int tui_menu_push(tui_menu * tm, tui_menu_item * item);
 // Whether the given RENDER line is the "current" (where the cursor is)
 int tui_menu_iscurrent(tui_menu * tm, tui_menu_unit_t line);
+tui_menu_unit_t tui_menu_submenu_depth(tui_menu * tm);
 
 // NOTE: out is expected to have enough capacity to store the render at width
 // PLUS the null terminating character!! Buffer should be width + 1!!
@@ -225,8 +237,11 @@ typedef struct {
 struct tui_menu_submenu {
   tui_menu * (*create_menu)(tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos);
   int (*destroy_menu)(tui_menu_item_data * data, tui_menu * menu, tui_menu_unit_t pos);
-  tui_menu_item_data data;
   tui_menu * menu;  // The CURRENTLY open menu!(?)
+  tui_menu_item_data data;
+  // Whether the submenu is non-reentrant, meaning once you move "through" the menu, going
+  // "back" will not take you into the menu
+  uint8_t temporary;
 };
 
 typedef union {
@@ -272,6 +287,7 @@ static inline int tui_menu_submenu_destroy_malloc_menu(
   (void)data;
   (void)pos;
   tui_menu_free(menu);
+  free(menu);
   return 0;
 }
 
@@ -374,17 +390,19 @@ static inline int tui_menu_submenu_destroy_malloc_menu(
     .create_menu = tui_menu_submenu_create_existing_menu, \
     .destroy_menu = tui_menu_submenu_destroy_existing_menu, \
     .menu = NULL, \
+    .temporary = 0, \
   }; \
   _tmp.data.submenu.data.menu_ptr = _submenu; \
   err = tui_menu_push((tm), &_tmp); \
 }
 
-#define TUIMITEM_SUBMENU(tm, err, _name, _create, _destroy, _dataptr) { \
+#define TUIMITEM_SUBMENU(tm, err, _name, _create, _destroy, _dataptr, _tempmenu) { \
   TUIITEM_COMMON(_tmp, _name, TUIMENU_TYPE_SUBMENU); \
   _tmp.data.submenu = (tui_menu_submenu) { \
     .create_menu = _create, \
     .destroy_menu = _destroy, \
     .menu = NULL, \
+    .temporary = _tempmenu, \
   }; \
   err = tui_menu_push((tm), &_tmp); \
   if(!err) { _dataptr = &(tm)->items[(tm)->numitems - 1].data.submenu.data; } \
