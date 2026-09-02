@@ -3,8 +3,12 @@
 
 #include "littlemenu.h"
 #include "littletextbox.h"
+#include "linkedlist.h"
 
 #include <stdio.h>
+
+LL_BASICSTRUCT(tui_menu_ll, tui_menu);
+LL_PROTOTYPE(tui_menu_ll);
 
 #ifndef TUIMENUX_MAXALERT
 #define TUIMENUX_MAXALERT 512
@@ -21,14 +25,21 @@
 #define TUIMENUX_ALERTLINE      (1 << 2)  // SOME alert line (text OR menu)
 #define TUIMENUX_SELECTLINE     (1 << 3)  // SOME select line (normal menu or alert)
 
+// An expanded menu system that allows storage for submenus cleaned up with the
+// main menu, and for alerts within the menu rendering system which can OPTIONALLY
+// run on behalf of a new "alert" menu item type (which is a wrapper around submenu type).
+// Rendering also assumes a status line at the top of the menu with the path.
 typedef struct {
   tui_menu menu;      // The actual internal menu
   tui_textwrap alertwrap;
+  tui_menu_ll * submenus;
   char alert[TUIMENUX_MAXALERT];
 } tui_menu_extra;
 
 void tui_menu_extra_init(tui_menu_extra * tme, tui_menu_unit_t height);
 void tui_menu_extra_free(tui_menu_extra * tme);
+// Add a new submenu; it will be returned initialized and ready for items to be added
+tui_menu * tui_menu_extra_new_submenu(tui_menu_extra * tme);
 // Render a line into out, and indicate WHICH kind of line it is. The extra menu automatically
 // renders a status line and alert box into the menu region for you
 int tui_menu_extra_renderline(tui_menu_extra * tm, const char * prefix, char * out, 

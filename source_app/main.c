@@ -20,7 +20,7 @@ u32 __stacksize__ = 512 * 1024;
 
 // Version info?
 #define VERSION "0.6.0"
-#define VERSIONSTRING "- Junkdraw "VERSION" -"
+#define VERSIONSTRING "Junkdraw "VERSION""
 
 // Console crap
 #define UI_CONSOLE_LOGTOP         20
@@ -50,21 +50,16 @@ u32 __stacksize__ = 512 * 1024;
 
 typedef struct {
   DataContainer drawdata;
-  vector_tui_menu menuvec;
   tui_menu_extra mainmenu;
   C3D_RenderTarget * drawscreen;
-  // char warnmsg[MAX_WARNMSG];
 } MainSystem;
 
 int mainsystem_init(MainSystem * ms) {
   int err = datacontainer_init(&ms->drawdata, MAX_DRAW_DATA);
   if(err) { return err; }
-  err = vector_tui_menu_init(&ms->menuvec);
-  if(err) { return err; }
   ms->drawscreen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
   if(!ms->drawscreen) { return 1; }
   tui_menu_extra_init(&ms->mainmenu, UI_CONSOLE_MENUHEIGHT);
-  // ms->warnmsg[0] = 0;
   return 0;
 }
 
@@ -81,10 +76,6 @@ int mainsystem_init(MainSystem * ms) {
 
 void mainsystem_free(MainSystem * ms) {
   datacontainer_free(&ms->drawdata);
-  for(size_t i = 0; i < ms->menuvec.length; i++) {
-    tui_menu_free(ms->menuvec.array + i);
-  }
-  vector_tui_menu_free(&ms->menuvec);
   tui_menu_extra_free(&ms->mainmenu);
   C3D_RenderTargetDelete(ms->drawscreen);
 }
@@ -148,52 +139,38 @@ void mainsystem_free(MainSystem * ms) {
 //   }
 // }
 
-#define _MENUINIT(mc, mp) { \
-  size_t idx; \
-  vector_tui_menu_increment(mc, &idx); \
-  mp = (mc)->array + idx; \
-  tui_menu_init(mp, UI_CONSOLE_MENUHEIGHT - 1); \
-}
+#define _SUBMENU_INIT(_ms, _name) \
+  tui_menu * _name = tui_menu_extra_new_submenu(&(_ms)->mainmenu); \
+  if(_name == NULL) { \
+    LOGERR("Can't initialize submenu"); \
+    return 1; \
+  }
 
 // Setup the main menu within the given vector. The main menu itself will be the first
 // menu within the container. The "confirm" menu is #2
 int main_menu_init(MainSystem * ms) {
-  // Reserve space for all the submenus. Make sure you always reserve
-  // more than enough space so the pointers don't change.
-  int err = vector_tui_menu_reserve(&ms->menuvec, 16);
-  if(err) {
-    LOGERR("Can't allocate space for menu!");
-    return err;
-  }
-  tui_menu * menu;
-  // tui_menu * confirmmenu;
-  tui_menu * editmenu;
-  tui_menu * exportmenu;
-  tui_menu * optionsmenu;
-  tui_menu * sessionmenu;
-  tui_menu * canvasmenu;
+  // Setup all the submenus so they're available for the main menu
+  // (at least allocate them)
+  _SUBMENU_INIT(ms, editmenu);
+  _SUBMENU_INIT(ms, exportmenu);
+  _SUBMENU_INIT(ms, optionsmenu);
+  _SUBMENU_INIT(ms, sessionmenu);
+  _SUBMENU_INIT(ms, canvasmenu);
   // --- MAIN menu ---
-  _MENUINIT(&ms->menuvec, menu);
-  // _MENUINIT(&ms->menuvec, confirmmenu);
-  _MENUINIT(&ms->menuvec, editmenu);
-  _MENUINIT(&ms->menuvec, exportmenu);
-  _MENUINIT(&ms->menuvec, optionsmenu);
-  _MENUINIT(&ms->menuvec, sessionmenu);
-  _MENUINIT(&ms->menuvec, canvasmenu);
-  TUIMITEM_SUBMENU_EXISTING(menu, err, "Edit", editmenu);
+  int err;
+  TUIMITEM_SUBMENU_EXISTING(&ms->mainmenu.menu, err, "Edit", editmenu);
   if(err) { return err; }
-  TUIMITEM_SUBMENU_EXISTING(menu, err, "Export", exportmenu);
+  TUIMITEM_SUBMENU_EXISTING(&ms->mainmenu.menu, err, "Export", exportmenu);
   if(err) { return err; }
-  TUIMITEM_SUBMENU_EXISTING(menu, err, "Options", optionsmenu);
+  TUIMITEM_SUBMENU_EXISTING(&ms->mainmenu.menu, err, "Options", optionsmenu);
   if(err) { return err; }
-  TUIMITEM_SUBMENU_EXISTING(menu, err, "Session Options", sessionmenu);
+  TUIMITEM_SUBMENU_EXISTING(&ms->mainmenu.menu, err, "Session Options", sessionmenu);
   if(err) { return err; }
-  TUIMITEM_SUBMENU_EXISTING(menu, err, "Canvas Options", canvasmenu);
+  TUIMITEM_SUBMENU_EXISTING(&ms->mainmenu.menu, err, "Canvas Options", canvasmenu);
   if(err) { return err; }
-  TUIMITEM_BASIC(menu, err, "Exit App", 0);
+  TUIMITEM_BASIC(&ms->mainmenu.menu, err, "Exit App", 0);
   if(err) { return err; }
   // --- EDIT menu ---
-  _MENUINIT(&ms->menuvec, editmenu);
 
   return 0;
 }
@@ -224,19 +201,23 @@ void ui_render_logbox(tui_logbox * lb) {
   }
 }
 
-void ui_render_menu(tui_menu * menu, char * alert, int menu_open) {
+void ui_render_menu(tui_menu_extra * menu, int menu_open) {
   ANSI_GOTO(UI_CONSOLE_MENUTOP, 1);
   if(menu_open) {
     char out[51];
-    tui_menu_renderpath(menu, VERSIONSTRING, out, 50);
     printf(UI_CONSOLE_MENUBARCOLOR "%s", out);
-    for(int i = 0; i < UI_CONSOLE_MENUHEIGHT - 1; i++) {
-      tui_menu_renderline(menu, out, 50, i);
-      if(tui_menu_iscurrent(menu, i)) {
-        printf(UI_CONSOLE_MENUSELECTCOLOR "%s", out);
-      } else {
-        printf(UI_CONSOLE_MENUCOLOR "%s", out);
+    for(int i = 0; i < UI_CONSOLE_MENUHEIGHT; i++) {
+      int type = tui_menu_extra_renderline(menu, VERSIONSTRING, out, 48, i);
+      if(type & TUIMENUX_STATUSLINE) {
+        printf(UI_CONSOLE_MENUBARCOLOR);
+      } else if(type == TUIMENUX_ALERTLINE) {
+        printf(ANSI_FG_MAGENTA ANSI_INVERT_ON);
+      } else if(type & TUIMENUX_SELECTLINE) {
+        printf(UI_CONSOLE_MENUSELECTCOLOR);
+      } else if(type & TUIMENUX_MENULINE) {
+        printf(UI_CONSOLE_MENUCOLOR);
       }
+      printf(" %s ", out);
     }
   } else {
     printf(UI_CONSOLE_MENUCOLOR);
@@ -244,7 +225,7 @@ void ui_render_menu(tui_menu * menu, char * alert, int menu_open) {
       printf("%50s", " ");
     }
     ANSI_GOTO(UI_CONSOLE_MENUTOP, 1);
-    printf("%s", VERSIONSTRING);
+    printf(" %s ", VERSIONSTRING);
   }
 }
 
@@ -297,7 +278,7 @@ int main() {
   }
 
   ui_render_controls();
-  ui_render_menu(system.menuvec.array, NULL, 0);
+  ui_render_menu(&system.mainmenu, 0);
 
   LOGDBG("STARTING MAIN LOOP");
 
@@ -317,7 +298,7 @@ int main() {
         break;
       case MAIN_MODE_MENU:;
         // Only run the main menu, unless we stop running
-        tui_menu_result mres = tui_menu_run(system.menuvec.array, actions.menuaction);
+        tui_menu_result mres = tui_menu_run(&system.mainmenu.menu, actions.menuaction);
         if(mres.error) {
           LOGERR("Menu error?");
         }
@@ -350,7 +331,7 @@ int main() {
 
     // ---- CONSOLE ----
     if(actions.menuaction.action) {
-      ui_render_menu(system.menuvec.array, system.warnmsg, mode == MAIN_MODE_MENU);
+      ui_render_menu(&system.mainmenu, mode == MAIN_MODE_MENU);
     }
     logging_try_render(ui_render_logbox, 0);
 

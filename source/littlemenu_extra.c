@@ -1,15 +1,32 @@
 #include "littlemenu_extra.h"
+#include "linkedlist.h"
 #include "littlemenu.h"
 #include "littletextbox.h"
 
+LL_DEFINITION(tui_menu_ll);
+
 void tui_menu_extra_init(tui_menu_extra * tme, tui_menu_unit_t height) {
   tme->alert[0] = 0;
+  tui_menu_ll_init(&tme->submenus);
   tui_textwrap_init(&tme->alertwrap, tme->alert);
   return tui_menu_init(&tme->menu, height - 1);
 }
 
+static inline void tui_menu_ll_free_inner(tui_menu_ll * item) {
+  tui_menu_free(&item->data);
+}
+
 void tui_menu_extra_free(tui_menu_extra * tme) {
   tui_menu_free(&tme->menu);
+  tui_menu_ll_free(&tme->submenus, tui_menu_ll_free_inner);
+}
+
+tui_menu * tui_menu_extra_new_submenu(tui_menu_extra * tme) {
+  tui_menu_ll * result;
+  int err = tui_menu_ll_create_after(&tme->submenus, NULL, &result);
+  if(err) { return NULL; }
+  tui_menu_init(&result->data, tme->menu.height);
+  return &result->data;
 }
 
 static inline int tui_menu_extra_renderline_menu(tui_menu * menu, char * out, 

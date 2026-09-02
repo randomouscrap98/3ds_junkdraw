@@ -275,13 +275,11 @@ static inline tui_menu * tui_menu_get_exit_parent(tui_menu * tm) {
 }
 
 #define _TUIMENU_RESULT_ACCEPT() { \
-  /* An accept in a temp menu is a cancel with a result */ \
   tui_menu_unit_t _curtemp = tm->current;  \
   if(tm->parent) { \
     tui_menu_item * oursub = tui_menu_get_submenu(tm->parent, tm->parent->current); \
-    if(oursub->data.submenu.temporary) { \
-      _TUIMENU_RESULT_CANCEL(); \
-    } \
+    /* An accept in a temp menu is a cancel with a result */ \
+    if(oursub->data.submenu.temporary) { _TUIMENU_RESULT_CANCEL(); } \
   } \
   result.result = _curtemp; \
   result.running = 1; \
