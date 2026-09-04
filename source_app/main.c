@@ -18,7 +18,7 @@
 
 u32 __stacksize__ = 512 * 1024;
 
-#define MAX_FILENAME 64
+#define MAX_FILENAME  64
 #define MAX_DRAW_DATA ((u32)5000000)
 #define MAX_WARNMSG   512
 
@@ -87,61 +87,6 @@ void mainsystem_free(MainSystem * ms) {
 // ==========================================
 //                 Menu
 // ==========================================
-
-// // There is a menu system where you can setup an optional warning + work to do 
-// // (which itself could be a menu). This allows you to create a menu item where 
-// // you can throw up a customized warning message before 
-// typedef struct {
-//   MainSystem * system;
-//   char * (*should_warn)(MainSystem * ms);
-//   tui_menu * (*work)(MainSystem * ms);
-//   char warning[TUIMENU_MAXENUMTOTAL - sizeof(void *) * 4];
-// } optional_menu;
-// 
-// // When user selects yes on the warning menu, run their desired work, which MAY produce
-// // a menu, or may just "do the menu"
-// static inline tui_menu * optional_menu_warning_yes_create(
-//     tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
-//   optional_menu * om = (optional_menu*)&data->raw;
-//   om->system->warnmsg[0] = 0;     // No more menu
-//   return om->work(om->system);
-// }
-// 
-// // the "menu create" function for a menu item which can optionally throw up a warning
-// // before doing its work, or just directly do the work otherwise.
-// static inline tui_menu * optional_menu_warning_create(
-//     tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
-//   optional_menu * om = (optional_menu*)&data->raw;
-//   char * warning = om->should_warn(om->system);
-//   if(warning) {
-//     snprintf(om->system->warnmsg, sizeof(om->system->warnmsg), "%s", warning);
-//     // Setup a temporary confirm menu with a yes that is another submenu item that redirects to
-//     // our 
-//     tui_menu * warnmenu = malloc(sizeof(tui_menu));
-//     if(!warnmenu) {
-//       LOGERR("Couldn't create warning submenu!");
-//       return NULL;
-//     }
-//     int err;
-//     TUIMITEM_BASIC(warnmenu, err, "No", 1);
-//     if(err) { 
-//       LOGERR("Couldn't create warning submenu 'no'!");
-//       return NULL; 
-//     }
-//     tui_menu_item_data * yesdat;
-//     TUIMITEM_SUBMENU(warnmenu, err, "Yes", 
-//         optional_menu_warning_yes_create, tui_menu_submenu_destroy_malloc_menu, yesdat);
-//     if(err) { 
-//       LOGERR("Couldn't create warning submenu 'yes'!");
-//       return NULL; 
-//     }
-//     memcpy((optional_menu *)&yesdat->raw, om, sizeof(optional_menu));
-//     return warnmenu;
-//   } else {
-//     om->system->warnmsg[0] = 0;   // No more menu
-//     return om->work(om->system);
-//   }
-// }
 
 #define _SUBMENU_INIT(_ms, _name) \
   tui_menu * _name = tui_menu_extra_new_submenu(&(_ms)->mainmenu); \
