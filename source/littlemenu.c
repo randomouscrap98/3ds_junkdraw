@@ -213,7 +213,7 @@ void tui_menu_renderline(tui_menu * tm, char * out, tui_menu_unit_t width, tui_m
     char * valuepos = out + (width - tm->valuewidth);
     // TODO: For now, we don't actually use the left/right
     if(item->type == TUIMENU_TYPE_NUMBER) {
-      snprintf(valuepos, tm->valuewidth + 1, "%d", *item->data.number.value);
+      snprintf(valuepos, tm->valuewidth + 1, "%" TUIMENU_NUMBER_FORMAT, *item->data.number.value);
     }
     else if(item->type == TUIMENU_TYPE_FLOAT) {
       snprintf(valuepos, tm->valuewidth + 1, "%.*f", item->data.floatingpoint.precision,

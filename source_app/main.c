@@ -1,3 +1,7 @@
+#ifndef __GLIBC_USE
+#define __GLIBC_USE(F) 0
+#endif
+
 #include "3ds/console.h"
 #include "littlemenu_extra.h"
 #include "utils.h"

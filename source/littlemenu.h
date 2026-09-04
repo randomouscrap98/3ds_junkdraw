@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 // ===================================
 //               Const
@@ -66,6 +67,9 @@
 #endif
 #ifndef TUIMENU_NUMBER_TYPE
 #define TUIMENU_NUMBER_TYPE int32_t
+#endif
+#ifndef TUIMENU_NUMBER_FORMAT
+#define TUIMENU_NUMBER_FORMAT PRId32
 #endif
 #ifndef TUIMENU_FLOAT_TYPE
 #define TUIMENU_FLOAT_TYPE float
