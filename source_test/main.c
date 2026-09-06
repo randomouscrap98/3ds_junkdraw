@@ -599,7 +599,7 @@ int run_lineconverter_test_suite(void) {
     LOGERR("Incremental convert (batch 1) failed: converted %zu, expected 2", converted);
     goto error;
   }
-  if (lineconverter_done(&lc)) {
+  if (lineconverter_isdone(&lc)) {
     LOGERR("lineconverter_done reported prematurely true");
     goto error;
   }
@@ -610,7 +610,7 @@ int run_lineconverter_test_suite(void) {
     LOGERR("Incremental convert (batch 2) failed: converted %zu, expected 3", converted);
     goto error;
   }
-  if (!lineconverter_done(&lc)) {
+  if (!lineconverter_isdone(&lc)) {
     LOGERR("lineconverter_done reported false when pending lines exhausted");
     goto error;
   }
@@ -710,7 +710,7 @@ int run_lineconverter_test_suite(void) {
   lc.pending.length = 0;
   lc.pending_next = 0;
   converted = lineconverter_convert(&lc, 5);
-  if (converted != 0 || !lineconverter_done(&lc)) {
+  if (converted != 0 || !lineconverter_isdone(&lc)) {
     LOGERR("Converting empty pending stroke failed to return 0 / set done flag");
     goto error;
   }
