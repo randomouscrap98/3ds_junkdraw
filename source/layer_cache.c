@@ -162,7 +162,7 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, PageRan
     if(max_draw == 0) {
       LOGTRC("Overloaded pre-window pending lines");
       // Don't leave garbage behind for next time (not necessarily required?)
-      if(lineconverter_done(&lw->pending)) { lw->pending_unit = NULL; } 
+      if(lineconverter_isdone(&lw->pending)) { lw->pending_unit = NULL; } 
       return 0;
     }
   }
@@ -190,7 +190,7 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, PageRan
       // early if it could not convert the whole thing (otherwise we
       // lose lines!)
       max_draw -= lineconverter_convert(&lw->pending, max_draw);
-      if(!lineconverter_done(&lw->pending)) { break; }
+      if(!lineconverter_isdone(&lw->pending)) { break; }
     }
     // Render what we got before moving on to the next page
     layerwindowunit_render(lw->pending_unit, &lw->pending, 1);

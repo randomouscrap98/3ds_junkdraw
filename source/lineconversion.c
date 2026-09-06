@@ -29,7 +29,7 @@ void lineconverter_free(LineConverter * lc) {
   vector_vector_RenderLine_free(&lc->lines);
 }
 
-int lineconverter_done(LineConverter * lc) {
+int lineconverter_isdone(LineConverter * lc) {
   return lc->pending_next >= lc->pending.length;
 }
 

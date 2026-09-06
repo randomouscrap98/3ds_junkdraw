@@ -48,6 +48,30 @@ typedef u16 lineidx_t;
 #define JDDC_PAGE_DEL 4095
 #define JDDC_PAGE_TMP 4094
 
+// ================================================
+
+typedef struct { 
+  coord_t x1, y1, x2, y2; 
+} LineSegment;
+
+// Lines as the data container wants them
+typedef struct {
+   LineSegment * lines;
+   u16 capacity;
+   u16 length;
+   page_t page;
+   u16 color;
+   style_t style;
+   layer_t layer;
+   width_t width;
+} LineContainer;
+
+// Initialize a line container specifically to hold a stroke and no more.
+int linecontainer_init_stroke(LineContainer * lc);
+void linecontainer_free(LineContainer * lc);
+
+// ================================================
+
 typedef struct {
   resolutionid_t resolution_id;
   u16 bgcolor;
@@ -81,28 +105,10 @@ size_t datacontainer_filled(DataContainer * dc);
 void datacontainer_setheader(DataContainer * dc, DataHeader * dh);
 void datacontainer_getheader(DataContainer * dc, DataHeader * dh);
 
-typedef struct { 
-  coord_t x1, y1, x2, y2; 
-} LineSegment;
-
-// Lines as the data container wants them
-typedef struct {
-   LineSegment * lines;
-   u16 capacity;
-   u16 length;
-   page_t page;
-   u16 color;
-   style_t style;
-   layer_t layer;
-   width_t width;
-} LineContainer;
-
-// Initialize a line container specifically to hold a stroke and no more.
-int linecontainer_init_stroke(LineContainer * lc);
-void linecontainer_free(LineContainer * lc);
-
 // Lines are always added at the end of the container. No need for scanning
 int datacontainer_addline(DataContainer * dc, LineContainer * lc);
+
+// ================================================
 
 typedef struct {
   DataContainer * parent;
@@ -124,8 +130,9 @@ typedef struct {
 // by value to signify this a bit
 DataScanner datacontainer_get_scanner(DataContainer * dc);
 
+// Find next stroke chunk (collection of lines etc)
 DataScannerResult datascanner_next(DataScanner * ds);
-// Useful for loop: scan while strokes are found
+// Useful for loops: a datascanner_next you can use in a while()
 int datascanner_next_loop(DataScanner * ds, DataScannerResult * dsr);
 int datascanner_at_end(DataScanner * ds);
 void datascanner_reset(DataScanner * ds);

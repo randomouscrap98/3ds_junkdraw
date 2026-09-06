@@ -60,8 +60,7 @@ typedef struct {
   u8 width;
 } RenderLine;
 
-//void layer_create_wh(Layer * layer, int width, int height);
-int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type); //Tex3DS_SubTexture subtex);
+int layer_init(Layer * layer, layerdim_t width, layerdim_t height, u8 type);
 void layer_free(Layer * layer);
 // Sometimes a layer's actual area inside is different (because of citro bugs)
 void layer_mapped_area(Layer * layer, S32Bounds * bounds);

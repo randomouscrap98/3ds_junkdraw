@@ -17,7 +17,7 @@ typedef struct {
 } LayerWindowUnit;
 
 // A system for rendering pages and caching them. The system can allow throttled, ordered
-// drawing into pages from N to offset, and allows exports. Setup to automatically pull from
+// drawing into pages from N to offset, and allows exports. Set to automatically pull from
 // a DataContainer source. Layers can be software or hardware rendered.
 typedef struct {
   Layer * master_layers;    // To cut down on spaced out mallocs, all unit layers here

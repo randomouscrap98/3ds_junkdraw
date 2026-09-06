@@ -4,7 +4,7 @@ CompileFlags:
     -I/opt/devkitpro/libctru/include,
     -I/opt/devkitpro/portlibs/3ds/include,
     -I/opt/devkitpro/devkitARM/arm-none-eabi/include,
-    -I../include,
     -I../source,
-    -I../source_deprecated,
+    -I../source/external,
+    -I../source/deprecated,
   ]
