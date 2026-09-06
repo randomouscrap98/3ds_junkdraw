@@ -1,4 +1,5 @@
 #include "layercompositor.h"
+#include "layer.h"
 
 #include <citro2d.h>
 
@@ -32,19 +33,90 @@ void layercompositor_reset(LayerCompositor *c) {
   layercompositor_reset_visuals(c);
 }
 
-static inline void layercompositor_draw_scrollbars(LayerCompositor * c) {
+static inline void layercompositor_draw_scrollbars(LayerCompositor * c, const Layer * linfo) {
+  float fill_w = c->screen->frameBuf.width / (float)linfo->width / c->zoom;
+  float fill_h = c->screen->frameBuf.height / (float)linfo->height / c->zoom;
+  u16 sofs_x = fill_w * (float)c->offset_x;
+  u16 sofs_y = fill_h * (float)c->offset_y;
 
+  // Bottom and right scrollbar bg
+  if(fill_w < 1.0f) {
+    C2D_DrawRectSolid(0, c->screen->frameBuf.height - c->scroll_width, 0.5f,
+                      c->screen->frameBuf.width, c->scroll_width, c->scroll_color_bg);
+  }
+  if(fill_h < 1.0f) {
+    C2D_DrawRectSolid(c->screen->frameBuf.width - c->scroll_width, 0, 0.5f, c->scroll_width,
+                      c->screen->frameBuf.height, c->scroll_color_bg);
+  }
+  // bottom and right scrollbar bar
+  if(fill_w < 1.0f) {
+    C2D_DrawRectSolid(sofs_x, c->screen->frameBuf.height - c->scroll_width, 0.5f,
+                      c->screen->frameBuf.width * fill_w, c->scroll_width, c->scroll_color_bar);
+  }
+  if(fill_h < 1.0f) {
+    C2D_DrawRectSolid(c->screen->frameBuf.width - c->scroll_width, sofs_y, 0.5f,
+                    c->scroll_width, c->screen->frameBuf.height * fill_h, c->scroll_color_bar);
+  }
 }
 
-void layercompositor_draw(LayerCompositor * c, Layer ** layers, size_t layer_count) {
+void layercompositor_draw(LayerCompositor * c, LayerDraw * layers, size_t layer_count) {
+  // IDK, this was from the original junkdraw code.
+  C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA,
+                 GPU_ONE_MINUS_SRC_ALPHA, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
   C2D_SceneBegin(c->screen);
-  // The empty background color
+  // -- The empty background color --
   C2D_TargetClear(c->screen, c->screen_color);
   if(layer_count <= 0) { goto DRAWEND; }
+  // -- The canvas background before layers (they should be transparent) --
   // ASSUME the first layer has the info; draw the canvas background itself
   C2D_DrawRectSolid(-c->offset_x, -c->offset_y, 0.5f,
-                    layers[0]->width * c->zoom, layers[0]->height * c->zoom,
+                    layers[0].layer->width * c->zoom, layers[0].layer->height * c->zoom,
                     c->canvas_color);
+  // -- Draw the layers -- 
+  C2D_ImageTint tint;
+  for (int l = 0; l < layer_count; l++) {
+    C2D_ImageTint * tintptr;
+    // Layers can be "modified" by various things before drawing.
+    switch(layers[l].modtype) {
+      case JDLCM_MODTYPE_ONIONOPACITY:
+        // Onion Opacity is "fake" because I'm just blending the colors with the canvas color. this
+        // doesn't actually work for "normal" opacity but it's exactly what these should be
+        for (int i = 0; i < 4; i++) {
+          tint.corners[i].color = c->canvas_color;
+          tint.corners[i].blend = 1.0f - layers[l].mod.opacity;
+          // NOTE: opacity is 0 for full transparent, which for fake opacity should be 1 for
+          // full color blend, hence 1 - opacity
+        }
+        tintptr = &tint;
+        break;
+      default:
+        tintptr = NULL;
+        break;
+    }
+    // TODO: Right now we ONLY composite hardware layers...
+    if(layers[l].layer->type == JDL_TYPE_HARDWARE) {
+      S32Bounds bounds;
+      layer_mapped_area(layers[l].layer, &bounds);
+      C2D_DrawImageAt(layers[l].layer->texture.hw.image,
+                      -c->offset_x - bounds.x1 * c->zoom,
+                      -c->offset_y - bounds.y1 * c->zoom,
+                      0.5f, tintptr, c->zoom, c->zoom);
+    }
+  }
+  // TODO: I don't actually know what this was for, but old junkdraw did it. I may remove it later
+  // and see what happens. Might be because texture is power of 2 and there's no cropping on the
+  // thing above (that's probably what it was... yeah)
+  float canvas_x = layers[0].layer->width * c->zoom - c->offset_x;
+  float canvas_y = layers[0].layer->height * c->zoom - c->offset_y;
+  // This is rather wasteful but eh...
+  C2D_DrawRectSolid(canvas_x, 0, 0.5f,  // pos
+                    c->screen->frameBuf.width - canvas_x, c->screen->frameBuf.height, 
+                    c->screen_color);
+  C2D_DrawRectSolid(0, canvas_y, 0.5f,  // pos
+                    canvas_x, c->screen->frameBuf.height, 
+                    c->screen_color);
+  // -- Draw the scrollbars --
+  layercompositor_draw_scrollbars(c, layers[0].layer);
 DRAWEND:
   C2D_Flush();
 }

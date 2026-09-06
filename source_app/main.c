@@ -7,6 +7,7 @@
 #include "utils.h"
 #include "ansi.h"
 #include "datacontainer.h"
+#include "layercompositor.h"
 
 #include "controls.h"
 #include "logging.h"
@@ -54,15 +55,18 @@ u32 __stacksize__ = 512 * 1024;
 
 typedef struct {
   DataContainer drawdata;
+  LayerCompositor compositor;
   tui_menu_extra mainmenu;
-  C3D_RenderTarget * drawscreen;
+  //C3D_RenderTarget * drawscreen;
 } MainSystem;
 
 int mainsystem_init(MainSystem * ms) {
   int err = datacontainer_init(&ms->drawdata, MAX_DRAW_DATA);
   if(err) { return err; }
-  ms->drawscreen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
-  if(!ms->drawscreen) { return 1; }
+  err = layercompositor_init_screen(&ms->compositor, GFX_BOTTOM);
+  if(err) { return err; }
+  //ms->drawscreen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
+  //if(!ms->drawscreen) { return 1; }
   tui_menu_extra_init(&ms->mainmenu, UI_CONSOLE_MENUHEIGHT);
   return 0;
 }
@@ -81,7 +85,7 @@ int mainsystem_init(MainSystem * ms) {
 void mainsystem_free(MainSystem * ms) {
   datacontainer_free(&ms->drawdata);
   tui_menu_extra_free(&ms->mainmenu);
-  C3D_RenderTargetDelete(ms->drawscreen);
+  layercompositor_free(&ms->compositor);
 }
 
 // ==========================================
@@ -267,16 +271,7 @@ int main() {
     // -- LAYER DRAW SECTION --
     C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE,
                    GPU_ZERO);
-
     C2D_Flush();
-
-    // -- OTHER DRAW SECTION --
-    C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA,
-                   GPU_ONE_MINUS_SRC_ALPHA, GPU_SRC_ALPHA,
-                   GPU_ONE_MINUS_SRC_ALPHA);
-
-    C2D_TargetClear(system.drawscreen, SCREEN_COLOR);
-    C2D_SceneBegin(system.drawscreen);
 
     // ---- CONSOLE ----
     if(actions.menuaction.action) {
@@ -284,9 +279,8 @@ int main() {
     }
     logging_try_render(ui_render_logbox, 0);
 
-    // draw_layers(&layer_window, &sys);
-    // draw_scrollbars(&sys.screen_state);
-    // draw_colorpicker(&sys.colors, !sstate.palette_active);
+    // ---- FINAL COMPOSITE? ----
+    layercompositor_draw(&system.compositor, NULL, 0);
 
     C3D_FrameEnd(0);
 

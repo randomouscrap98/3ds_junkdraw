@@ -316,6 +316,11 @@ int layer_composite_onto(Layer * dest, Layer * source) {
 
 #ifdef JDL_EXPORTPNG
 
+// Because... reasons? Warnings I don't quite understand
+#ifndef __GLIBC_USE
+#define __GLIBC_USE(F) 0
+#endif
+
 #include <png.h>
 #define JDL_PNG_FORMAT PNG_COLOR_TYPE_RGBA
 #define JDL_PNG_BYTESPER 4

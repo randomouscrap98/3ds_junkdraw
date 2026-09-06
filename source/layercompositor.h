@@ -12,6 +12,30 @@
 #define JDLCM_SCROLL_COLOR_BG  C2D_Color32f(0.8, 0.8, 0.8, 1)
 #define JDLCM_SCROLL_COLOR_BAR C2D_Color32f(0.5, 0.5, 0.5, 1)
 
+#define JDLCM_MODTYPE_NONE          0
+#define JDLCM_MODTYPE_ONIONOPACITY  1
+
+typedef union {
+  float opacity;
+} LayerDrawMod;
+
+typedef struct {
+  Layer * layer;        // Just a pointer to somewhere
+  LayerDrawMod mod;     // What kind of modification to give the layer
+  int modtype;          // Which mod it is
+} LayerDraw;
+
+#define LAYERDRAW_NOMOD(_layer) (LayerDraw) { \
+  .layer = _layer, \
+  .modtype = JDLCM_MODTYPE_NONE, \
+}
+
+#define LAYERDRAW_ONIONOPACITY(_layer, _op) (LayerDraw) { \
+  .layer = _layer, \
+  .mod.opacity = _op, \
+  .modtype = JDLCM_MODTYPE_ONIONOPACITY, \
+}
+
 typedef struct {
   float zoom;
   float offset_x;
@@ -34,6 +58,6 @@ void layercompositor_reset_visuals(LayerCompositor * c);
 // Reset the compositor entirely
 void layercompositor_reset(LayerCompositor * c);
 
-void layercompositor_draw(LayerCompositor * c, Layer ** layers, size_t layer_count);
+void layercompositor_draw(LayerCompositor * c, LayerDraw * layers, size_t layer_count);
 
 #endif
