@@ -3,6 +3,7 @@
 #include "datacontainer.h"
 #include "layer.h"
 #include "lineconversion.h"
+#include "pagerange.h"
 #include "utils.h"
 
 #include <stdlib.h>
@@ -123,22 +124,10 @@ static void layerwindowunit_render(LayerWindowUnit * unit, LineConverter * pendi
 }
 
 int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, PageRange range) {
-  page_t increment = range.offset < 0 ? -1 : 1;
-  // Can't wrap around multiple times, that's bad. Offset is inclusive! 0 = pull one page!
-  if(abs(range.offset) >= lw->unit_count) range.offset = increment * (lw->unit_count - 1);
-  page_t end = range.page + range.offset + increment; // EXCLUSIVE (to make loops simpler)
-  // Oops, don't go past the start!
-  if(-range.offset > range.page) { 
-    if(range.loop_point > 0) { // looping
-      // very non performant but only if you pass in stupid values (nobody will)
-      while(end < 0) { end += range.loop_point; }
-    } else {
-      end = 0;  // just clamp
-    }
-  }
+  page_t pg;
+  pagerange_begin(&range, lw->unit_count);
   // First, need to go through and clear out any invalid pages
-  for(page_t pg = range.page; pg != end; pg += increment) {
-    if(pg < 0) pg += range.loop_point;
+  while(pagerange_next(&range, &pg)) {
     size_t unit = JDLC_UNIT(lw, pg);
     // Fill all the scanners with max_draw. Maybe kinda bad?
     lw->units[unit].scanner.max_scan = max_scan;
@@ -152,9 +141,6 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, PageRan
   lineconverter_reset_converted(&lw->pending);
   // For simplicity: if we still have a pending unit, clear that out first
   if(lw->pending_unit) {
-#ifdef JDLC_DEBUG
-    LOGTRC("Pending lines: %d/%d", lw->pending.pending_next, lw->pending.pending.length);
-#endif
     max_draw -= lineconverter_convert(&lw->pending, max_draw);
     // ALWAYS render what we pulled out (also clears converted lines)
     layerwindowunit_render(lw->pending_unit, &lw->pending, 1);
@@ -166,15 +152,10 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, PageRan
       return 0;
     }
   }
-// #ifdef JDLC_DEBUG
-//   else {
-//     LOGTRC("NO PENDING LINES (normal?)");
-//   }
-// #endif
   // Now iterate over the user's requested pages again!
   DataScannerResult dsr;
-  for(page_t pg = range.page; pg != end; pg += increment) {
-    if(pg < 0) pg += range.loop_point;
+  pagerange_begin(&range, lw->unit_count);
+  while(pagerange_next(&range, &pg)) {
     // Set which unit we're working on (in case we exit early)
     lw->pending_unit = lw->units + JDLC_UNIT(lw, pg);
     // Skip a lot of work if we literally have nothing...
