@@ -1,12 +1,22 @@
 #include "layercompositor.h"
 #include "layer.h"
+#include "utils.h"
 
 #include <citro2d.h>
+
+static inline void layercompositor_dims(LayerCompositor * c, u16 * width, u16 * height) {
+  // It's flipped remember
+  *width = c->screen->frameBuf.height;
+  *height = c->screen->frameBuf.width;
+}
 
 int layercompositor_init_screen(LayerCompositor * c, int screen) {
   c->screen = C2D_CreateScreenTarget(screen, GFX_LEFT);
   if(!c->screen) { return 1; }
   layercompositor_reset(c);
+  u16 width, height;
+  layercompositor_dims(c, &width, &height);
+  LOGTRC("Screen: %dx%d", width, height);
   return 0;
 }
 
@@ -34,28 +44,30 @@ void layercompositor_reset(LayerCompositor *c) {
 }
 
 static inline void layercompositor_draw_scrollbars(LayerCompositor * c, const Layer * linfo) {
-  float fill_w = c->screen->frameBuf.width / (float)linfo->width / c->zoom;
-  float fill_h = c->screen->frameBuf.height / (float)linfo->height / c->zoom;
+  u16 swidth, sheight;
+  layercompositor_dims(c, &swidth, &sheight);
+  float fill_w = swidth / (float)linfo->width / c->zoom;
+  float fill_h = sheight / (float)linfo->height / c->zoom;
   u16 sofs_x = fill_w * (float)c->offset_x;
   u16 sofs_y = fill_h * (float)c->offset_y;
 
   // Bottom and right scrollbar bg
   if(fill_w < 1.0f) {
-    C2D_DrawRectSolid(0, c->screen->frameBuf.height - c->scroll_width, 0.5f,
-                      c->screen->frameBuf.width, c->scroll_width, c->scroll_color_bg);
+    C2D_DrawRectSolid(0, sheight - c->scroll_width, 0.5f,
+                      swidth, c->scroll_width, c->scroll_color_bg);
   }
   if(fill_h < 1.0f) {
-    C2D_DrawRectSolid(c->screen->frameBuf.width - c->scroll_width, 0, 0.5f, c->scroll_width,
-                      c->screen->frameBuf.height, c->scroll_color_bg);
+    C2D_DrawRectSolid(swidth - c->scroll_width, 0, 0.5f, c->scroll_width,
+                      sheight, c->scroll_color_bg);
   }
   // bottom and right scrollbar bar
   if(fill_w < 1.0f) {
-    C2D_DrawRectSolid(sofs_x, c->screen->frameBuf.height - c->scroll_width, 0.5f,
-                      c->screen->frameBuf.width * fill_w, c->scroll_width, c->scroll_color_bar);
+    C2D_DrawRectSolid(sofs_x, sheight - c->scroll_width, 0.5f,
+                      swidth * fill_w, c->scroll_width, c->scroll_color_bar);
   }
   if(fill_h < 1.0f) {
-    C2D_DrawRectSolid(c->screen->frameBuf.width - c->scroll_width, sofs_y, 0.5f,
-                    c->scroll_width, c->screen->frameBuf.height * fill_h, c->scroll_color_bar);
+    C2D_DrawRectSolid(swidth - c->scroll_width, sofs_y, 0.5f,
+                    c->scroll_width, sheight * fill_h, c->scroll_color_bar);
   }
 }
 
@@ -72,6 +84,8 @@ void layercompositor_draw(LayerCompositor * c, LayerDraw * layers, size_t layer_
   C2D_DrawRectSolid(-c->offset_x, -c->offset_y, 0.5f,
                     layers[0].layer->width * c->zoom, layers[0].layer->height * c->zoom,
                     c->canvas_color);
+  u16 swidth, sheight;
+  layercompositor_dims(c, &swidth, &sheight);
   // -- Draw the layers -- 
   C2D_ImageTint tint;
   for (int l = 0; l < layer_count; l++) {
@@ -110,11 +124,9 @@ void layercompositor_draw(LayerCompositor * c, LayerDraw * layers, size_t layer_
   float canvas_y = layers[0].layer->height * c->zoom - c->offset_y;
   // This is rather wasteful but eh...
   C2D_DrawRectSolid(canvas_x, 0, 0.5f,  // pos
-                    c->screen->frameBuf.width - canvas_x, c->screen->frameBuf.height, 
-                    c->screen_color);
+                    swidth - canvas_x, sheight, c->screen_color);
   C2D_DrawRectSolid(0, canvas_y, 0.5f,  // pos
-                    canvas_x, c->screen->frameBuf.height, 
-                    c->screen_color);
+                    canvas_x, sheight, c->screen_color);
   // -- Draw the scrollbars --
   layercompositor_draw_scrollbars(c, layers[0].layer);
 DRAWEND:

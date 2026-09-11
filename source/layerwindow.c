@@ -1,4 +1,4 @@
-#include "layer_cache.h"
+#include "layerwindow.h"
 
 #include "datacontainer.h"
 #include "layer.h"
@@ -121,6 +121,11 @@ static void layerwindowunit_render(LayerWindowUnit * unit, LineConverter * pendi
   if(clear_lines) { // So common, easier to do it in render
     lineconverter_reset_converted(pending);
   }
+}
+
+Layer * layerwindow_getlayer(LayerWindow * lw, page_t page, layer_t layer) {
+  size_t unit = JDLC_UNIT(lw, page);
+  return &lw->units[unit].layers[layer % lw->units[unit].layer_count];
 }
 
 int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, PageRange range) {

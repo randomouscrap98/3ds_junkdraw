@@ -18,7 +18,7 @@ u32 __stacksize__ = 512 * 1024;
 #include "edit.h"
 #include "datacontainer.h"
 #include "lineconversion.h"
-#include "layer_cache.h"
+#include "layerwindow.h"
 
 #define BREPEAT_DELAY 20
 #define BREPEAT_INTERVAL 7

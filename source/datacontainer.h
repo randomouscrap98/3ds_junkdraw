@@ -94,6 +94,8 @@ typedef struct {
 
 int datacontainer_init(DataContainer * dc, size_t capacity);
 void datacontainer_free(DataContainer * dc);
+// Empty the data container and start over. The header is preserved.
+void datacontainer_reset(DataContainer * dc);
 
 size_t datacontainer_length(DataContainer * dc);
 page_t datacontainer_last_used_page(DataContainer * dc);

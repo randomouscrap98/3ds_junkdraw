@@ -118,14 +118,19 @@ int datacontainer_init(DataContainer * dc, size_t capacity) {
   if(!dc->container) {
     return 1;
   }
-  dc->start = dc->end = dc->container + JDDC_FHEADER_LEN;
+  datacontainer_reset(dc);
   // Just in case the user forgets: let's assign a default header.
   DataHeader dh;
   dataheader_default(&dh);
   datacontainer_setheader(dc, &dh);
+  return 0;
+}
+
+void datacontainer_reset(DataContainer * dc) {
+  dc->sequence++;  // Should invalidate scanners no matter where they are
+  dc->start = dc->end = dc->container + JDDC_FHEADER_LEN;
   // Maybe not necessary but yeah...
   dc->start[0] = 0;
-  return 0;
 }
 
 void datacontainer_free(DataContainer * dc) {

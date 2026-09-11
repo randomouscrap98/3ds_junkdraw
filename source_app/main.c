@@ -7,7 +7,9 @@
 #include "utils.h"
 #include "ansi.h"
 #include "datacontainer.h"
+#include "layer.h"
 #include "layercompositor.h"
+#include "layerwindow.h"
 
 #include "controls.h"
 #include "logging.h"
@@ -49,43 +51,94 @@ u32 __stacksize__ = 512 * 1024;
 #define MAIN_MODE_FAILURE     2
 #define MAIN_MODE_EXIT        3
 
+void header_res_decode(resolutionid_t resolution, layerdim_t * width, layerdim_t * height) {
+  switch(resolution) {
+    // Unfortunately, both the 500 and 250 versions have the same limitations
+    // because the library needs that 8 pixel buffer around the edge of the texture...
+    case 1:
+      *width = 500;
+      *height = 500;
+      break;
+    case 2:
+      *width = 320;
+      *height = 240;
+      break;
+    // case 3 reserved
+    default: // also case 0
+      *width = 1000;
+      *height = 1000;
+      break;
+  }
+}
+
 // ==========================================
 //              Global Data
 // ==========================================
 
 typedef struct {
   DataContainer drawdata;
+  LayerWindow layers;
   LayerCompositor compositor;
   tui_menu_extra mainmenu;
-  //C3D_RenderTarget * drawscreen;
+  // May move into separate systems later
+  page_t page;
+  layer_t layer;
+  onion_t onions;
 } MainSystem;
 
 int mainsystem_init(MainSystem * ms) {
+  ms->page = 0;   // just for safety
+  ms->layer = 0;
+  ms->onions = 0;
   int err = datacontainer_init(&ms->drawdata, MAX_DRAW_DATA);
   if(err) { return err; }
   err = layercompositor_init_screen(&ms->compositor, GFX_BOTTOM);
   if(err) { return err; }
-  //ms->drawscreen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
-  //if(!ms->drawscreen) { return 1; }
   tui_menu_extra_init(&ms->mainmenu, UI_CONSOLE_MENUHEIGHT);
+  layerwindow_init(&ms->layers, &ms->drawdata, JDL_TYPE_HARDWARE);
   return 0;
 }
 
-// // Returns the active menu and alert message
-// void mainsystem_getactivemenu(MainSystem * ms, tui_menu ** menu, char ** msg) {
-//   if(ms->warnmsg[0] != 0) {
-//     *menu = ms->menuvec.array + 1;
-//     *msg = ms->warnmsg;
-//   } else {
-//     *menu = ms->menuvec.array;
-//     *msg = NULL;
-//   }
-// }
+int mainsystem_newdrawing(MainSystem * ms) {
+  DataHeader dh;
+  dataheader_default(&dh);
+  layerdim_t width, height;
+  header_res_decode(dh.resolution_id, &width, &height);
+  int err = layerwindow_reset(&ms->layers, width, height, dh.layer_count, 0);
+  if(err) {
+    return err;
+  }
+  datacontainer_reset(&ms->drawdata);
+  datacontainer_setheader(&ms->drawdata, &dh);
+  LOGDBG("New drawing: %dx%d", width, height);
+  ms->page = 0;
+  ms->layer = 0;
+  // DON'T reset onions!
+  return 0;
+}
 
 void mainsystem_free(MainSystem * ms) {
   datacontainer_free(&ms->drawdata);
   tui_menu_extra_free(&ms->mainmenu);
   layercompositor_free(&ms->compositor);
+  layerwindow_free(&ms->layers);
+}
+
+void mainsystem_calc_layerdraw(MainSystem * ms, LayerDraw * ld, size_t * total_layers) {
+  DataHeader dh;
+  datacontainer_getheader(&ms->drawdata, &dh);
+  *total_layers = 0;
+  //*total_layers = dh.layer_count * (1 + ms->onions);
+  //size_t lidx = 0;
+  // TODO: put onion skins here back to front. You can use the same loop and just
+  // change NOMOD to the onion skin thing and iterate over the pages using a PageRange,
+  // or you can... do something else I guess...
+  // The topmost actual layer (layers are back to front)
+  for(layer_t i = dh.layer_count - 1; i >= 0; i--) {
+    Layer * layer = layerwindow_getlayer(&ms->layers, ms->page, ms->layer);
+    ld[*total_layers] = LAYERDRAW_NOMOD(layer);
+    (*total_layers)++;
+  }
 }
 
 // ==========================================
@@ -158,7 +211,7 @@ void ui_render_menu(tui_menu_extra * menu, int menu_open) {
   ANSI_GOTO(UI_CONSOLE_MENUTOP, 1);
   if(menu_open) {
     char out[51];
-    printf(UI_CONSOLE_MENUBARCOLOR "%s", out);
+    printf(UI_CONSOLE_MENUBARCOLOR);
     for(int i = 0; i < UI_CONSOLE_MENUHEIGHT; i++) {
       int type = tui_menu_extra_renderline(menu, VERSIONSTRING, out, 48, i);
       if(type & TUIMENUX_STATUSLINE) {
@@ -219,6 +272,8 @@ int main() {
   control_config ctrlconfig = { .tool = 0, .scheme = 0, };
   MainSystem system;
   int mode = MAIN_MODE_DRAW;
+  LayerDraw layers[JDDC_MAXLAYERS];
+  size_t layers_count;
 
   if(mainsystem_init(&system)) {
     LOGDBG("CAN'T INITIALIZE MAIN SYSTEM");
@@ -227,6 +282,11 @@ int main() {
 
   if(main_menu_init(&system)) {
     LOGDBG("CAN'T INITIALIZE MAIN MENU");
+    mode = MAIN_MODE_FAILURE;
+  }
+
+  if(mainsystem_newdrawing(&system)) {
+    LOGERR("Can't initialize new drawing with given parameters!");
     mode = MAIN_MODE_FAILURE;
   }
 
@@ -273,14 +333,16 @@ int main() {
                    GPU_ZERO);
     C2D_Flush();
 
+    // ---- FINAL COMPOSITE? ----
+    // FOR NOW, we can simply grab the layers directly out of the system.
+    mainsystem_calc_layerdraw(&system, layers, &layers_count);
+    layercompositor_draw(&system.compositor, layers, layers_count);
+
     // ---- CONSOLE ----
     if(actions.menuaction.action) {
       ui_render_menu(&system.mainmenu, mode == MAIN_MODE_MENU);
     }
     logging_try_render(ui_render_logbox, 0);
-
-    // ---- FINAL COMPOSITE? ----
-    layercompositor_draw(&system.compositor, NULL, 0);
 
     C3D_FrameEnd(0);
 

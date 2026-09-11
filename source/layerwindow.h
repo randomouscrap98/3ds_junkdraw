@@ -38,6 +38,7 @@ void layerwindow_free(LayerWindow * lw);
 // on to other pages. Automatically clears cached pages that are getting overwritten. 
 // Basically: you can call this once per frame with no qualifiers and it should be fine.
 int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, PageRange range);
+Layer * layerwindow_getlayer(LayerWindow * lw, page_t page, layer_t layer);
 
 // pass 0 for max_units if you don't want to limit the number of units except by max pixel
 // (system requirement). Amount of actual units may be smaller than max_units
