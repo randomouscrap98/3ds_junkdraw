@@ -24,9 +24,11 @@
 
 u32 __stacksize__ = 512 * 1024;
 
-#define MAX_FILENAME  64
-#define MAX_DRAW_DATA ((u32)5000000)
-#define MAX_WARNMSG   512
+#define MAX_FILENAME    64
+#define MAX_DRAW_DATA   ((u32)5000000)
+#define MAX_FRAMELINES  1000 // Having trouble with this...
+#define MAX_FRAMESCAN   500000
+#define MAX_WARNMSG     512
 
 // Version info?
 #define VERSION "0.6.0"
@@ -43,6 +45,7 @@ u32 __stacksize__ = 512 * 1024;
 #define UI_CONSOLE_MENUBARCOLOR   ANSI_BG_BLACK ANSI_FG_WHITE ANSI_INVERT_ON
 #define UI_CONSOLE_MENUCOLOR      ANSI_BG_BLACK ANSI_FG_WHITE ANSI_INVERT_OFF
 #define UI_CONSOLE_MENUSELECTCOLOR  ANSI_BG_BLACK ANSI_FG_CYAN ANSI_INVERT_ON
+#define UI_CONSOLE_MENUALERTCOLOR ANSI_BG_BLACK ANSI_FG_BRIGHT_MAGENTA ANSI_INVERT_ON
 
 #define SCROLL_WIDTH    3
 #define SCREEN_COLOR    C2D_Color32(90, 90, 90, 255)
@@ -123,7 +126,7 @@ int mainsystem_newdrawing(MainSystem * ms) {
   ms->page = 0;
   ms->layer = 0;
   ms->current_filename[0] = 0;
-  ms->last_save = NULL; //ms->drawdata.end;
+  ms->last_save = ms->drawdata.end;
   // DON'T reset onions!
   return 0;
 }
@@ -263,7 +266,7 @@ void ui_render_menu(tui_menu_extra * menu, int menu_open) {
       if(type & TUIMENUX_STATUSLINE) {
         printf(UI_CONSOLE_MENUBARCOLOR);
       } else if(type == TUIMENUX_ALERTLINE) {
-        printf(ANSI_FG_MAGENTA ANSI_INVERT_ON);
+        printf(UI_CONSOLE_MENUALERTCOLOR);
       } else if(type & TUIMENUX_SELECTLINE) {
         printf(UI_CONSOLE_MENUSELECTCOLOR);
       } else if(type & TUIMENUX_MENULINE) {
@@ -361,8 +364,11 @@ int main() {
         if(mres.error) {
           LOGERR("Menu error?");
         }
-        if(actions.action == CTRL_MENU || !mres.running) {
+        // TODO: there should be some way to know what menu your result is from...
+        if(!mres.running || mres.result >= 0) {
           LOGTRC("CLOSE MENU");
+          // TODO: this sucks that we have to do this
+          system.mainmenu.alert[0] = 0;
           mode = MAIN_MODE_DRAW;
         }
         break;
@@ -381,6 +387,12 @@ int main() {
     // -- LAYER DRAW SECTION --
     C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE,
                    GPU_ZERO);
+    PageRange range = {
+      .page = system.page,
+      .loop_point = 0,
+      .offset = -system.onions,
+    };
+    layerwindow_pull(&system.layerwindow, MAX_FRAMESCAN, MAX_FRAMELINES, range);
     C2D_Flush();
 
     // ---- FINAL COMPOSITE? ----
