@@ -2,7 +2,12 @@
 #define __GLIBC_USE(F) 0
 #endif
 
+#include <3ds.h>
+#include <citro3d.h>
+#include <citro2d.h>
 #include "3ds/console.h"
+
+// source
 #include "littlemenu_extra.h"
 #include "utils.h"
 #include "ansi.h"
@@ -11,12 +16,10 @@
 #include "layercompositor.h"
 #include "layerwindow.h"
 
+// source_app
 #include "controls.h"
 #include "logging.h"
-
-#include <3ds.h>
-#include <citro3d.h>
-#include <citro2d.h>
+#include "cpad.h"
 
 
 u32 __stacksize__ = 512 * 1024;
@@ -77,9 +80,10 @@ void header_res_decode(resolutionid_t resolution, layerdim_t * width, layerdim_t
 
 typedef struct {
   DataContainer drawdata;
-  LayerWindow layers;
+  LayerWindow layerwindow;
   LayerCompositor compositor;
   tui_menu_extra mainmenu;
+  CpadProfile cpad;
   // May move into separate systems later
   page_t page;
   layer_t layer;
@@ -90,12 +94,13 @@ int mainsystem_init(MainSystem * ms) {
   ms->page = 0;   // just for safety
   ms->layer = 0;
   ms->onions = 0;
+  ms->cpad = cpadprofile_default();
   int err = datacontainer_init(&ms->drawdata, MAX_DRAW_DATA);
   if(err) { return err; }
   err = layercompositor_init_screen(&ms->compositor, GFX_BOTTOM);
   if(err) { return err; }
   tui_menu_extra_init(&ms->mainmenu, UI_CONSOLE_MENUHEIGHT);
-  layerwindow_init(&ms->layers, &ms->drawdata, JDL_TYPE_HARDWARE);
+  layerwindow_init(&ms->layerwindow, &ms->drawdata, JDL_TYPE_HARDWARE);
   return 0;
 }
 
@@ -104,7 +109,7 @@ int mainsystem_newdrawing(MainSystem * ms) {
   dataheader_default(&dh);
   layerdim_t width, height;
   header_res_decode(dh.resolution_id, &width, &height);
-  int err = layerwindow_reset(&ms->layers, width, height, dh.layer_count, 0);
+  int err = layerwindow_reset(&ms->layerwindow, width, height, dh.layer_count, 0);
   if(err) {
     return err;
   }
@@ -121,7 +126,7 @@ void mainsystem_free(MainSystem * ms) {
   datacontainer_free(&ms->drawdata);
   tui_menu_extra_free(&ms->mainmenu);
   layercompositor_free(&ms->compositor);
-  layerwindow_free(&ms->layers);
+  layerwindow_free(&ms->layerwindow);
 }
 
 void mainsystem_calc_layerdraw(MainSystem * ms, LayerDraw * ld, size_t * total_layers) {
@@ -135,10 +140,18 @@ void mainsystem_calc_layerdraw(MainSystem * ms, LayerDraw * ld, size_t * total_l
   // or you can... do something else I guess...
   // The topmost actual layer (layers are back to front)
   for(layer_t i = dh.layer_count - 1; i >= 0; i--) {
-    Layer * layer = layerwindow_getlayer(&ms->layers, ms->page, ms->layer);
+    Layer * layer = layerwindow_getlayer(&ms->layerwindow, ms->page, ms->layer);
     ld[*total_layers] = LAYERDRAW_NOMOD(layer);
     (*total_layers)++;
   }
+}
+
+// Take input and use it to modify internal offset of compositor
+void mainsystem_run_offset(MainSystem * ms, control_inputs * inputs) {
+  layercompositor_offset(&ms->compositor,
+    layerwindow_getlayer(&ms->layerwindow, ms->page, ms->layer),
+    cpadprofile_translate(&ms->cpad, inputs->cpos.dx, ms->compositor.offset_x),
+    cpadprofile_translate(&ms->cpad, -inputs->cpos.dy, ms->compositor.offset_y));
 }
 
 // ==========================================
@@ -322,6 +335,10 @@ int main() {
         break;
     }
 
+    // =======================================
+    // Other controls?
+    // =======================================
+    mainsystem_run_offset(&system, &inputs);
 
     // =======================================
     // Render the scene

@@ -59,5 +59,7 @@ void layercompositor_reset_visuals(LayerCompositor * c);
 void layercompositor_reset(LayerCompositor * c);
 
 void layercompositor_draw(LayerCompositor * c, LayerDraw * layers, size_t layer_count);
+void layercompositor_offset(LayerCompositor * lc, Layer * layer, u16 offset_x, u16 offset_y);
+void layercompositor_zoom(LayerCompositor * lc, Layer * layer, float zoom);
 
 #endif
