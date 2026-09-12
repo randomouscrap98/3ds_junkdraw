@@ -84,6 +84,8 @@ typedef struct {
   LayerCompositor compositor;
   tui_menu_extra mainmenu;
   CpadProfile cpad;
+  char current_filename[MAX_FILENAME];    // JUST the name
+  char * last_save;
   // May move into separate systems later
   page_t page;
   layer_t layer;
@@ -94,7 +96,9 @@ int mainsystem_init(MainSystem * ms) {
   ms->page = 0;   // just for safety
   ms->layer = 0;
   ms->onions = 0;
+  ms->current_filename[0] = 0;
   ms->cpad = cpadprofile_default();
+  ms->last_save = NULL;
   int err = datacontainer_init(&ms->drawdata, MAX_DRAW_DATA);
   if(err) { return err; }
   err = layercompositor_init_screen(&ms->compositor, GFX_BOTTOM);
@@ -118,6 +122,8 @@ int mainsystem_newdrawing(MainSystem * ms) {
   LOGDBG("New drawing: %dx%d", width, height);
   ms->page = 0;
   ms->layer = 0;
+  ms->current_filename[0] = 0;
+  ms->last_save = NULL; //ms->drawdata.end;
   // DON'T reset onions!
   return 0;
 }
@@ -154,6 +160,31 @@ void mainsystem_run_offset(MainSystem * ms, control_inputs * inputs) {
     cpadprofile_translate(&ms->cpad, -inputs->cpos.dy, ms->compositor.offset_y));
 }
 
+// --------- Mainsystem + Menu funcs -------------------
+
+int mainsystem_menu_unsaved_check(void * udata, char * alert, size_t alertlen, 
+                             tui_menu * parent, tui_menu_unit_t pos) {
+  // We don't use these
+  (void)parent;
+  (void)pos;
+  MainSystem * ms = (MainSystem *)udata;
+  if(ms->last_save != ms->drawdata.end) {
+    snprintf(alert, alertlen, "WARN: There is unsaved data! Are you sure you want to lose unsaved data?");
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+tui_menu * mainsystem_menu_new(void * udata, tui_menu * parent, tui_menu_unit_t pos) {
+  // We don't use these
+  (void)parent;
+  (void)pos;
+  MainSystem * ms = (MainSystem *)udata;
+  mainsystem_newdrawing(ms);
+  return NULL;
+}
+
 // ==========================================
 //                 Menu
 // ==========================================
@@ -178,6 +209,8 @@ int main_menu_init(MainSystem * ms) {
   // --- MAIN menu ---
   int err;
   TUIMITEM_SUBMENU_EXISTING(&ms->mainmenu.menu, err, "Edit", editmenu);
+  if(err) { return err; }
+  TUIMXITEM_ALERT(&ms->mainmenu, err, "New", mainsystem_menu_unsaved_check, mainsystem_menu_new, ms);
   if(err) { return err; }
   TUIMITEM_SUBMENU_EXISTING(&ms->mainmenu.menu, err, "Export", exportmenu);
   if(err) { return err; }
