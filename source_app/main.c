@@ -23,6 +23,9 @@
 #include "saveload.h"
 
 
+// Some debug flags
+#define DEBUG_NEWUNSAVED
+
 u32 __stacksize__ = 512 * 1024;
 
 #define MAX_FILENAME    64
@@ -127,7 +130,11 @@ int mainsystem_newdrawing(MainSystem * ms) {
   ms->page = 0;
   ms->layer = 0;
   ms->current_filename[0] = 0;
+#ifdef DEBUG_NEWUNSAVED
+  ms->last_save = NULL;
+#else
   ms->last_save = ms->drawdata.end;
+#endif
   // DON'T reset onions!
   return 0;
 }
@@ -180,6 +187,7 @@ int mainsystem_menu_unsaved_check(void * udata, char * alert, size_t alertlen,
   (void)pos;
   MainSystem * ms = (MainSystem *)udata;
   if(ms->last_save != ms->drawdata.end) {
+    LOGDBG("Unsaved data: %zu", ms->last_save ? ms->drawdata.end - ms->last_save : 0);
     snprintf(alert, alertlen, "WARN: There is unsaved data! Are you sure you want to lose unsaved data?");
     return 1;
   } else {
@@ -230,16 +238,15 @@ int main_menu_init(MainSystem * ms) {
   int err;
   TUIMITEM_SUBMENU_EXISTING(&ms->mainmenu.menu, err, "Edit", editmenu);
   if(err) { return err; }
-  tui_menu_item_data * subdat;
-  TUIMITEM_SUBMENU(&ms->mainmenu.menu, err, "Load", saveload_create_load_submenu,
-      tui_menu_submenu_destroy_malloc_menu, subdat, 0);
-  if(err) { return err; }
-  // Reuse the menu alert since we're passing the usual alert fields (to create alerts)
+  // Load menu needs to send a generic alert to every entry so loading 
+  // shows an alert AFTER selecting (not before, so the user can browse)
   tui_menu_alert subalert;
   subalert.should_alert = mainsystem_menu_unsaved_check;
   subalert.work = mainsystem_menu_load;
   subalert.userdata = ms;
-  memcpy(subdat->raw, &subalert, sizeof(tui_menu_alert));
+  subalert.menu = &ms->mainmenu;
+  JDSL_LOAD_SUBMENU(&ms->mainmenu.menu, err, "Load", &subalert);
+  if(err) { return err; }
   TUIMXITEM_ALERT(&ms->mainmenu, err, "New", mainsystem_menu_unsaved_check, mainsystem_menu_new, ms);
   if(err) { return err; }
   TUIMITEM_SUBMENU_EXISTING(&ms->mainmenu.menu, err, "Export", exportmenu);

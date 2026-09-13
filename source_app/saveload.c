@@ -35,6 +35,7 @@ int saveload_fill_loadmenu(tui_menu * menu, tui_menu_alert * alert_ref, const ch
   return 0;
 }
 
+
 #define _JDSL_ITEMFAILCHECK(err) \
   if(err) { \
     LOGERR("Can't allocate menu item for load!"); \
