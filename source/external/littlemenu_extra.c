@@ -76,6 +76,11 @@ tui_menu_result tui_menu_extra_run(tui_menu_extra * tm, tui_menu_action action) 
   return result;
 }
 
+int tui_menu_extra_reset(tui_menu_extra * tm) {
+  tm->alert[0] = 0;
+  return tui_menu_reset(&tm->menu);
+}
+
 tui_menu_result tui_menu_alert_no_callback(tui_menu_item_data * data, 
     tui_menu_unit_t pos, tui_menu_action action) {
   (void)pos;

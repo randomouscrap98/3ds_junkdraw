@@ -20,6 +20,7 @@
 #include "controls.h"
 #include "logging.h"
 #include "cpad.h"
+#include "saveload.h"
 
 
 u32 __stacksize__ = 512 * 1024;
@@ -131,6 +132,13 @@ int mainsystem_newdrawing(MainSystem * ms) {
   return 0;
 }
 
+int mainsystem_loaddrawing(MainSystem * ms, const char * name) {
+  // TODO: call the saveload thing to get the stuff into datacontainer, then load
+  // our own thing.
+  LOGDBG("Loading not supported yet");
+  return 0;
+}
+
 void mainsystem_free(MainSystem * ms) {
   datacontainer_free(&ms->drawdata);
   tui_menu_extra_free(&ms->mainmenu);
@@ -188,6 +196,15 @@ tui_menu * mainsystem_menu_new(void * udata, tui_menu * parent, tui_menu_unit_t 
   return NULL;
 }
 
+tui_menu * mainsystem_menu_load(void * udata, tui_menu * parent, tui_menu_unit_t pos) {
+  // The name of the selected menu item is the filename
+  const char * filename = parent->items[pos].name;
+  MainSystem * ms = (MainSystem *)udata;
+  mainsystem_loaddrawing(ms, filename);
+  //mainsystem_newdrawing(ms);
+  return NULL;
+}
+
 // ==========================================
 //                 Menu
 // ==========================================
@@ -213,6 +230,16 @@ int main_menu_init(MainSystem * ms) {
   int err;
   TUIMITEM_SUBMENU_EXISTING(&ms->mainmenu.menu, err, "Edit", editmenu);
   if(err) { return err; }
+  tui_menu_item_data * subdat;
+  TUIMITEM_SUBMENU(&ms->mainmenu.menu, err, "Load", saveload_create_load_submenu,
+      tui_menu_submenu_destroy_malloc_menu, subdat, 0);
+  if(err) { return err; }
+  // Reuse the menu alert since we're passing the usual alert fields (to create alerts)
+  tui_menu_alert subalert;
+  subalert.should_alert = mainsystem_menu_unsaved_check;
+  subalert.work = mainsystem_menu_load;
+  subalert.userdata = ms;
+  memcpy(subdat->raw, &subalert, sizeof(tui_menu_alert));
   TUIMXITEM_ALERT(&ms->mainmenu, err, "New", mainsystem_menu_unsaved_check, mainsystem_menu_new, ms);
   if(err) { return err; }
   TUIMITEM_SUBMENU_EXISTING(&ms->mainmenu.menu, err, "Export", exportmenu);
@@ -366,6 +393,7 @@ int main() {
         }
         // TODO: remember, the depth in result should help if you need to check result
         if(!mres.running || mres.result >= 0) {
+          tui_menu_extra_reset(&system.mainmenu);
           LOGTRC("CLOSE MENU");
           mode = MAIN_MODE_DRAW;
         }

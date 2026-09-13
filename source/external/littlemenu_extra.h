@@ -45,6 +45,7 @@ tui_menu * tui_menu_extra_new_submenu(tui_menu_extra * tme);
 int tui_menu_extra_renderline(tui_menu_extra * tm, const char * prefix, char * out, 
     tui_menu_unit_t width, tui_menu_unit_t line);
 tui_menu_result tui_menu_extra_run(tui_menu_extra * tm, tui_menu_action action);
+int tui_menu_extra_reset(tui_menu_extra * tm);
 
 // Allows the creation of tui menu items which can have an optional alert,
 // which inserts a special alert menu when should_alert returns an alert.
@@ -67,9 +68,9 @@ tui_menu * tui_menu_alert_create_yes_menu(
 tui_menu * tui_menu_alert_create_menu(
     tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos);
 
-#define TUIMXITEM_ALERT(tme, err, _name, _shouldalert, _work, _userdata) { \
+#define TUIMXITEM_ALERT_SUB(tms, tme, err, _name, _shouldalert, _work, _userdata) { \
   tui_menu_item_data * _tmpdat; \
-  TUIMITEM_SUBMENU(&(tme)->menu, err, _name, tui_menu_alert_create_menu, \
+  TUIMITEM_SUBMENU(tms, err, _name, tui_menu_alert_create_menu, \
       tui_menu_submenu_destroy_malloc_menu, _tmpdat, 1); \
   if(!err) { \
     tui_menu_alert tma; \
@@ -81,4 +82,14 @@ tui_menu * tui_menu_alert_create_menu(
   } \
 }
 
+#define TUIMXITEM_ALERT(tme, err, _name, _shouldalert, _work, _userdata) \
+  TUIMXITEM_ALERT_SUB(&(tme)->menu, tme, err, _name, _shouldalert, _work, _userdata)
+
+// Create an alert item in a submenu using a copy of an alert (for menus where everything
+// inside might throw an alert)
+#define TUIMXITEM_ALERT_COPY(tm, tma, err, _name) \
+  TUIMXITEM_ALERT_SUB(tm, tma->menu, err, _name, tma->should_alert, \
+      tma->work, tma->userdata)
+
+ 
 #endif

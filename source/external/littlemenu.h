@@ -7,6 +7,19 @@
 #include <stdlib.h>
 #include <inttypes.h>
 
+// I really really hate this crap
+#ifndef __GNUC__
+#define snprintf_nowarn  snprintf
+#else
+#define snprintf_nowarn(...) __extension__({ \
+    _Pragma("GCC diagnostic push"); \
+    _Pragma("GCC diagnostic ignored \"-Wformat-truncation\""); \
+    const int _snprintf_nowarn = snprintf(__VA_ARGS__); \
+    _Pragma("GCC diagnostic pop"); \
+    _snprintf_nowarn; \
+})
+#endif
+
 // ===================================
 //               Const
 // ===================================
@@ -321,7 +334,7 @@ static inline int tui_menu_submenu_destroy_malloc_menu(
     .type = (_type), \
     .loop = TUIMENU_LOOP, \
   }; \
-  (void)snprintf(var.name, TUIMENU_MAXNAME, "%s", (_name)); \
+  snprintf_nowarn(var.name, TUIMENU_MAXNAME, "%s", (_name)); \
 
 // Easily push a basic menu item (one you're expected to click on)
 #define TUIMITEM_BASIC(tm, err, _name, _quit) { \
@@ -365,7 +378,7 @@ static inline int tui_menu_submenu_destroy_malloc_menu(
     .numitems = 1, /* Newlines go BETWEEN items. */ \
   }; \
   /* Now we need to copy the raw values and replace \n with 0 */ \
-  snprintf(_tmp.data.enumerator.values, TUIMENU_MAXENUMTOTAL, "%s", _values); \
+  snprintf_nowarn(_tmp.data.enumerator.values, TUIMENU_MAXENUMTOTAL, "%s", _values); \
   size_t _vlen = strlen(_values); \
   for(size_t _i = 0; _i < _vlen; _i++) { \
     if(_tmp.data.enumerator.values[_i] == TUIMENU_ENUM_SPLIT) { \
