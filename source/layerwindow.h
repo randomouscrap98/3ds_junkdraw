@@ -40,6 +40,11 @@ void layerwindow_free(LayerWindow * lw);
 int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, PageRange range);
 Layer * layerwindow_getlayer(LayerWindow * lw, page_t page, layer_t layer);
 
+// Total layers would be layers times units. If you have a target layer count, the
+// onion skin count is (total / layers) - 1. If you are modifying the layer count, it's
+// total / (onion + 1). 
+size_t layerwindow_estimate_totallayers(LayerWindow * lw, layerdim_t width, layerdim_t height);
+
 // pass 0 for max_units if you don't want to limit the number of units except by max pixel
 // (system requirement). Amount of actual units may be smaller than max_units
 int layerwindow_reset(LayerWindow * lw, layerdim_t width, layerdim_t height, 

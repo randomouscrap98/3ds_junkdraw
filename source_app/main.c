@@ -126,7 +126,7 @@ int mainsystem_newdrawing(MainSystem * ms) {
   ms->page = 0;
   ms->layer = 0;
   ms->current_filename[0] = 0;
-  ms->last_save = NULL; //ms->drawdata.end;
+  ms->last_save = ms->drawdata.end;
   // DON'T reset onions!
   return 0;
 }
@@ -364,11 +364,9 @@ int main() {
         if(mres.error) {
           LOGERR("Menu error?");
         }
-        // TODO: there should be some way to know what menu your result is from...
+        // TODO: remember, the depth in result should help if you need to check result
         if(!mres.running || mres.result >= 0) {
           LOGTRC("CLOSE MENU");
-          // TODO: this sucks that we have to do this
-          // system.mainmenu.alert[0] = 0;
           mode = MAIN_MODE_DRAW;
         }
         break;

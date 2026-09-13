@@ -45,6 +45,11 @@ void layerwindow_free(LayerWindow * lw) {
   lineconverter_free(&lw->pending);
 }
 
+size_t layerwindow_estimate_totallayers(LayerWindow * lw, layerdim_t width, layerdim_t height) {
+  size_t layerpixels = layer_estimate_pixelcount(lw->layer_type, width, height);
+  return JDLC_MAXPIXELS / layerpixels;
+}
+
 int layerwindow_reset(LayerWindow * lw, layerdim_t width, layerdim_t height, 
     layer_t layer_count, size_t max_units) {
   // Start by resetting... kinda scary
@@ -52,8 +57,7 @@ int layerwindow_reset(LayerWindow * lw, layerdim_t width, layerdim_t height,
   layerwindow_free_partial(lw);
   lineconverter_reset(&lw->pending);
   // Calculate total pixels of apparent layers and estimate maximum layer count.
-  size_t layerpixels = layer_estimate_pixelcount(lw->layer_type, width, height);
-  size_t max_layers = JDLC_MAXPIXELS / layerpixels;
+  size_t max_layers = layerwindow_estimate_totallayers(lw, width, height);
   size_t max_units_by_pixels = max_layers / layer_count;
   if(max_units == 0) {
     lw->unit_count = max_units_by_pixels;
