@@ -44,6 +44,7 @@ tui_menu * tui_menu_extra_new_submenu(tui_menu_extra * tme);
 // renders a status line and alert box into the menu region for you
 int tui_menu_extra_renderline(tui_menu_extra * tm, const char * prefix, char * out, 
     tui_menu_unit_t width, tui_menu_unit_t line);
+tui_menu_result tui_menu_extra_run(tui_menu_extra * tm, tui_menu_action action);
 
 // Allows the creation of tui menu items which can have an optional alert,
 // which inserts a special alert menu when should_alert returns an alert.

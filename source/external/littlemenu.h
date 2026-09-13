@@ -123,6 +123,8 @@ typedef struct {
   tui_menu_unit_t result;
   int error;
   uint8_t running;
+  uint8_t cancelled;
+  uint8_t depth;
 } tui_menu_result;
 
 #define TUIMENU_CANCELRESULT (tui_menu_result) { \

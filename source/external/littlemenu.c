@@ -264,6 +264,7 @@ static inline tui_menu * tui_menu_get_exit_parent(tui_menu * tm) {
 // might resolve to
 #define _TUIMENU_RESULT_CANCEL() { \
   result.result = -1; \
+  result.cancelled = 1; \
   tui_menu * _tmparent = tui_menu_get_exit_parent(tm); \
   if(_tmparent) { \
     result.error |= tui_menu_exit_submenu(_tmparent, _tmparent->current); \
@@ -283,6 +284,7 @@ static inline tui_menu * tui_menu_get_exit_parent(tui_menu * tm) {
   } \
   result.result = _curtemp; \
   result.running = 1; \
+  result.cancelled = 0; \
 }
 
 tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action) {
@@ -290,6 +292,8 @@ tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action) {
   result.running = 1;
   result.result = -1;
   result.error = 0;
+  result.cancelled = 0;
+  result.depth = 0;
   // Redirect calls to the submenu BUT if it's a fullstop, we can exit NOW (ignore other commands)
   if(action.action & TUIMENU_ACTION_FULLSTOP) {
     // SHOULD recursively exit all submenus (we're at the top right?)
@@ -299,6 +303,8 @@ tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action) {
   }
   tui_menu_item * submenu = tui_menu_get_submenu(tm, tm->current);
   if(submenu) { return tui_menu_run(submenu->data.submenu.menu, action); }
+  // Only do it here once we know we're in the deepest submenu.
+  result.depth = tui_menu_submenu_depth(tm);
   if(action.action & (TUIMENU_ACTION_MOVE | TUIMENU_ACTION_POSITION)) {
     if(action.action & TUIMENU_ACTION_POSITION) {
       tm->current = action.offset;

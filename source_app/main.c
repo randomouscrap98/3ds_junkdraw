@@ -126,7 +126,7 @@ int mainsystem_newdrawing(MainSystem * ms) {
   ms->page = 0;
   ms->layer = 0;
   ms->current_filename[0] = 0;
-  ms->last_save = ms->drawdata.end;
+  ms->last_save = NULL; //ms->drawdata.end;
   // DON'T reset onions!
   return 0;
 }
@@ -317,7 +317,7 @@ int main() {
     osSetSpeedupEnable(true);
   } 
 
-  char save_filename[MAX_FILENAME];
+  //char save_filename[MAX_FILENAME];
   control_config ctrlconfig = { .tool = 0, .scheme = 0, };
   MainSystem system;
   int mode = MAIN_MODE_DRAW;
@@ -360,7 +360,7 @@ int main() {
         break;
       case MAIN_MODE_MENU:;
         // Only run the main menu, unless we stop running
-        tui_menu_result mres = tui_menu_run(&system.mainmenu.menu, actions.menuaction);
+        tui_menu_result mres = tui_menu_extra_run(&system.mainmenu, actions.menuaction);
         if(mres.error) {
           LOGERR("Menu error?");
         }
@@ -368,7 +368,7 @@ int main() {
         if(!mres.running || mres.result >= 0) {
           LOGTRC("CLOSE MENU");
           // TODO: this sucks that we have to do this
-          system.mainmenu.alert[0] = 0;
+          // system.mainmenu.alert[0] = 0;
           mode = MAIN_MODE_DRAW;
         }
         break;

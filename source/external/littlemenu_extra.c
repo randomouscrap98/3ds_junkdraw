@@ -68,6 +68,14 @@ int tui_menu_extra_renderline(tui_menu_extra * tme, const char * prefix, char * 
   return result;
 }
 
+tui_menu_result tui_menu_extra_run(tui_menu_extra * tm, tui_menu_action action) {
+  tui_menu_result result = tui_menu_run(&tm->menu, action);
+  if(!result.running || result.cancelled) {
+    tm->alert[0] = 0;
+  }
+  return result;
+}
+
 tui_menu_result tui_menu_alert_no_callback(tui_menu_item_data * data, 
     tui_menu_unit_t pos, tui_menu_action action) {
   (void)pos;
