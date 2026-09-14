@@ -159,6 +159,7 @@ typedef struct {
 struct tui_menu {
   tui_menu_item * items;
   tui_menu * parent;  // You can manually manage this even without submenu items defined
+  void * dataptr;     // Data you can attach to menu for ease of retrieval in callbacks
   char ui_listedge[TUIMENU_MAXUISTRING];
   char ui_left[TUIMENU_MAXUISTRING];
   char ui_right[TUIMENU_MAXUISTRING];
@@ -190,6 +191,8 @@ int tui_menu_push(tui_menu * tm, tui_menu_item * item);
 // Whether the given RENDER line is the "current" (where the cursor is)
 int tui_menu_iscurrent(tui_menu * tm, tui_menu_unit_t line);
 tui_menu_unit_t tui_menu_submenu_depth(tui_menu * tm);
+// Get the top level menu from current menu
+tui_menu * tui_menu_root(tui_menu * tm);
 
 // NOTE: out is expected to have enough capacity to store the render at width
 // PLUS the null terminating character!! Buffer should be width + 1!!

@@ -90,6 +90,13 @@ static inline int tui_menu_enter_submenu(tui_menu * tm, tui_menu_unit_t pos) {
   return 0;
 }
 
+tui_menu * tui_menu_root(tui_menu * tm) {
+  while(tm && tm->parent) {
+    tm = tm->parent;
+  }
+  return tm;
+}
+
 void tui_menu_renderpath(tui_menu* tm, const char * prefix, char * out, tui_menu_unit_t width) {
   snprintf(out, width + 1, "%s", prefix);
   tui_menu_item * next = tui_menu_get_submenu(tm, tm->current);

@@ -111,6 +111,9 @@ int mainsystem_init(MainSystem * ms) {
   err = layercompositor_init_screen(&ms->compositor, GFX_BOTTOM);
   if(err) { return err; }
   tui_menu_extra_init(&ms->mainmenu, UI_CONSOLE_MENUHEIGHT);
+  // This vastly simplifies anything that requires system data, since
+  // it's just in the menu. Lifetimes might suck but should be ok...
+  ms->mainmenu.menu.dataptr = ms;
   layerwindow_init(&ms->layerwindow, &ms->drawdata, JDL_TYPE_HARDWARE);
   return 0;
 }
@@ -142,6 +145,7 @@ int mainsystem_newdrawing(MainSystem * ms) {
 int mainsystem_loaddrawing(MainSystem * ms, const char * name) {
   // TODO: call the saveload thing to get the stuff into datacontainer, then load
   // our own thing.
+  LOGINF("Loading: %s", name);
   LOGDBG("Loading not supported yet");
   return 0;
 }
@@ -182,10 +186,9 @@ void mainsystem_run_offset(MainSystem * ms, control_inputs * inputs) {
 
 int mainsystem_menu_unsaved_check(void * udata, char * alert, size_t alertlen, 
                              tui_menu * parent, tui_menu_unit_t pos) {
-  // We don't use these
-  (void)parent;
-  (void)pos;
-  MainSystem * ms = (MainSystem *)udata;
+  (void)udata; // We don't use this right now
+  (void)pos; // We don't use this right now
+  MainSystem * ms = (MainSystem *)tui_menu_root(parent)->dataptr;
   if(ms->last_save != ms->drawdata.end) {
     LOGDBG("Unsaved data: %zu", ms->last_save ? ms->drawdata.end - ms->last_save : 0);
     snprintf(alert, alertlen, "WARN: There is unsaved data! Are you sure you want to lose unsaved data?");
@@ -197,9 +200,9 @@ int mainsystem_menu_unsaved_check(void * udata, char * alert, size_t alertlen,
 
 tui_menu * mainsystem_menu_new(void * udata, tui_menu * parent, tui_menu_unit_t pos) {
   // We don't use these
-  (void)parent;
+  (void)udata;
   (void)pos;
-  MainSystem * ms = (MainSystem *)udata;
+  MainSystem * ms = (MainSystem *)tui_menu_root(parent)->dataptr;
   mainsystem_newdrawing(ms);
   return NULL;
 }
@@ -207,7 +210,7 @@ tui_menu * mainsystem_menu_new(void * udata, tui_menu * parent, tui_menu_unit_t 
 tui_menu * mainsystem_menu_load(void * udata, tui_menu * parent, tui_menu_unit_t pos) {
   // The name of the selected menu item is the filename
   const char * filename = parent->items[pos].name;
-  MainSystem * ms = (MainSystem *)udata;
+  MainSystem * ms = (MainSystem *)tui_menu_root(parent)->dataptr;
   mainsystem_loaddrawing(ms, filename);
   //mainsystem_newdrawing(ms);
   return NULL;
@@ -243,11 +246,12 @@ int main_menu_init(MainSystem * ms) {
   tui_menu_alert subalert;
   subalert.should_alert = mainsystem_menu_unsaved_check;
   subalert.work = mainsystem_menu_load;
-  subalert.userdata = ms;
+  subalert.userdata = NULL; // Maybe later?
   subalert.menu = &ms->mainmenu;
   JDSL_LOAD_SUBMENU(&ms->mainmenu.menu, err, "Load", &subalert);
   if(err) { return err; }
-  TUIMXITEM_ALERT(&ms->mainmenu, err, "New", mainsystem_menu_unsaved_check, mainsystem_menu_new, ms);
+  TUIMXITEM_ALERT(&ms->mainmenu.menu, err, "New", &ms->mainmenu,
+      mainsystem_menu_unsaved_check, mainsystem_menu_new, ms);
   if(err) { return err; }
   TUIMITEM_SUBMENU_EXISTING(&ms->mainmenu.menu, err, "Export", exportmenu);
   if(err) { return err; }

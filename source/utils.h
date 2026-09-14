@@ -16,15 +16,43 @@
 
 VECTOR_DECLARE(tui_menu);
 
-// // Do not create a new menu, only provide an existing one pointed to by
-// // the item data. This allows easy submenus with lifetimes you manage
-// static inline tui_menu * utils_submenu_create_existing_menu(
-//     tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
-//   (void)parent;
-//   (void)pos;
-//   return data->menu_ptr;
-// }
+// =====================
+//        List
+// =====================
 
+static inline int list_sort_compare_string_asc(char * a, char * b) {
+  return strcmp(a, b) <= 0;
+}
+static inline int list_sort_compare_string_desc(char * a, char * b) {
+  return strcmp(a, b) >= 0;
+}
+static inline int list_sort_compare_menu_name_asc(tui_menu_item * a, tui_menu_item * b) {
+  return strcmp(a->name, b->name) <= 0;
+}
+
+// Performs insertion sort (in-place, etc). The 'compare' function
+// should return 1 if two consecutive elements are "in order"
+#define LIST_SORT(list, length, type, compare) {  \
+  for(int __i = 1; __i < length; __i++) { \
+    for(int __j = __i; __j > 0; __j--) { \
+      if(compare(list[__j - 1], list[__j])) break; \
+      type __tmp = list[__j - 1]; \
+      list[__j - 1] = list[__j]; \
+      list[__j] = __tmp; \
+    } \
+  } \
+}
+
+#define LIST_SORT_REF(list, length, type, compare) {  \
+  for(int __i = 1; __i < length; __i++) { \
+    for(int __j = __i; __j > 0; __j--) { \
+      if(compare(&list[__j - 1], &list[__j])) break; \
+      type __tmp = list[__j - 1]; \
+      list[__j - 1] = list[__j]; \
+      list[__j] = __tmp; \
+    } \
+  } \
+}
 
 // =====================
 //       LOGGING

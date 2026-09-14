@@ -26,11 +26,14 @@ int saveload_fill_loadmenu(tui_menu * menu, tui_menu_alert * alert_ref, const ch
   while (entry != NULL) {
     if (entry->d_type == DT_DIR) {
       int err;
-      TUIMXITEM_ALERT_COPY(menu, alert_ref, err, entry->d_name);
+      TUIMXITEM_ALERT_COPY(menu, err, entry->d_name, alert_ref);
       if(err) { return err; }
     }
     entry = readdir(dir);
   }
+
+  // Now sort? Is this OK???
+  LIST_SORT_REF(menu->items, menu->numitems, tui_menu_item, list_sort_compare_menu_name_asc);
 
   return 0;
 }

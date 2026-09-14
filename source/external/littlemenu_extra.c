@@ -97,11 +97,15 @@ tui_menu * tui_menu_alert_create_yes_submenu(
   memcpy(&tma, data->raw, sizeof(tui_menu_alert));
   // Must exit the alert
   tma.menu->alert[0] = 0;     // No more alert
-  // tui_menu_run(&tma.menu->menu, TUIMENU_CANCELACTION);
-  return tma.work(tma.userdata, parent, pos);
+  // NOTE: the parent of this submenu is really the alert, so we want the user
+  // to get the info from the ORIGINAL click. The alert is supposed to be
+  // transparent.
+  return tma.work(tma.userdata, tma._orig_menu, tma._orig_pos);
 }
 
 
+// Base create menu function when clicking on an alert item. This will EITHER
+// create an alert OR just directly call work (which can create another menu itself)
 tui_menu * tui_menu_alert_create_menu(
     tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
   // Unfortunately, we always must memcpy out because of strict pointer aliasing,
@@ -130,6 +134,9 @@ tui_menu * tui_menu_alert_create_menu(
       free(alertmenu);
       return NULL; 
     }
+    // need to put the old position in before copying into yes udata
+    tma._orig_pos = pos;
+    tma._orig_menu = parent;
     memcpy(yesdat->raw, &tma, sizeof(tui_menu_alert));
     return alertmenu;
   } else {

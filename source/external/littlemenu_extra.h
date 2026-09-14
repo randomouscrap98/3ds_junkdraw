@@ -56,6 +56,12 @@ typedef struct {
   int (*should_alert)(void * udata, char * alert, size_t alertlen, 
       tui_menu * parent, tui_menu_unit_t pos);
   tui_menu * (*work)(void * udata, tui_menu * parent, tui_menu_unit_t pos);
+  // WARN: ONLY used when alert is shown and old data must be sent! Don't use
+  // this field!
+  tui_menu_unit_t _orig_pos;
+  // WARN: ONLY used when alert is shown and old data must be sent! Don't use
+  // this field!
+  tui_menu * _orig_menu;
 } tui_menu_alert;
 
 // When user selects yes on the warning menu, run their desired work, which MAY produce
@@ -68,7 +74,9 @@ tui_menu * tui_menu_alert_create_yes_menu(
 tui_menu * tui_menu_alert_create_menu(
     tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos);
 
-#define TUIMXITEM_ALERT_SUB(tms, tme, err, _name, _shouldalert, _work, _userdata) { \
+// Insert alert into given menu. An alert NEEDS a link to the root menu to put the
+// alert into, so it can unfortunately become a little cumbersome...
+#define TUIMXITEM_ALERT(tms, err, _name, tme, _shouldalert, _work, _userdata) { \
   tui_menu_item_data * _tmpdat; \
   TUIMITEM_SUBMENU(tms, err, _name, tui_menu_alert_create_menu, \
       tui_menu_submenu_destroy_malloc_menu, _tmpdat, 1); \
@@ -82,13 +90,10 @@ tui_menu * tui_menu_alert_create_menu(
   } \
 }
 
-#define TUIMXITEM_ALERT(tme, err, _name, _shouldalert, _work, _userdata) \
-  TUIMXITEM_ALERT_SUB(&(tme)->menu, tme, err, _name, _shouldalert, _work, _userdata)
-
 // Create an alert item in a submenu using a copy of an alert (for menus where everything
 // inside might throw an alert)
-#define TUIMXITEM_ALERT_COPY(tm, tma, err, _name) \
-  TUIMXITEM_ALERT_SUB(tm, tma->menu, err, _name, tma->should_alert, \
+#define TUIMXITEM_ALERT_COPY(tm, err, _name, tma) \
+  TUIMXITEM_ALERT(tm, err, _name, tma->menu, tma->should_alert, \
       tma->work, tma->userdata)
 
  
