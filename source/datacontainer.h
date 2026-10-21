@@ -89,13 +89,14 @@ typedef struct {
   char * start;   // Past any header, etc
   char * end;     // One past last written byte
   size_t capacity;
-  u8 sequence;    // Used to invalidate scanners
+  u16 sequence;    // Used to invalidate scanners
 } DataContainer;
 
 int datacontainer_init(DataContainer * dc, size_t capacity);
 void datacontainer_free(DataContainer * dc);
 // Empty the data container and start over. The header is preserved.
 void datacontainer_reset(DataContainer * dc);
+void datacontainer_invalidate(DataContainer * dc);
 
 size_t datacontainer_length(DataContainer * dc);
 page_t datacontainer_last_used_page(DataContainer * dc);
@@ -118,7 +119,7 @@ typedef struct {
   ssize_t max_scan;
   page_t page;
   // layerid_t layer;
-  u8 sequence;
+  u16 sequence;
 } DataScanner;
 
 typedef struct {

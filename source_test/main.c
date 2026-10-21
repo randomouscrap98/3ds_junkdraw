@@ -861,6 +861,37 @@ error:
 #define LWP_TYPE JDL_TYPE_HARDWARE
 #endif
 
+// Pull until nothing is pending and every scanner is at the end of data
+static int helper_pull_all(LayerWindow *lw, PageRange prange) {
+  int attempts = 0;
+  start_frame();
+  while (attempts < 20) {
+    layerwindow_pull(lw, 100000, 1000, prange);
+    attempts++;
+    int all_done = (lw->pending_unit == NULL || lineconverter_isdone(&lw->pending));
+    for (size_t i = 0; all_done && i < lw->unit_count; i++) {
+      if (!datascanner_at_end(&lw->units[i].scanner)) all_done = 0;
+    }
+    if (all_done) break;
+  }
+  end_frame();
+  return attempts;
+}
+
+// Check whether a pixel on a page's layer is drawn (expect_drawn = 1) or clear (0)
+static int helper_expect_pixel(LayerWindow *lw, page_t page, layer_t layer,
+                               layerdim_t x, layerdim_t y, int expect_drawn,
+                               const char *what) {
+  u32 col = layer_querycolor(layerwindow_getlayer(lw, page, layer), x, y);
+  int drawn = (col != JDLC_CLEAR);
+  if (drawn != expect_drawn) {
+    LOGERR("%s: pg %d L%d (%d,%d) expected %s, got 0x%08lX", what, page, layer,
+           x, y, expect_drawn ? "drawn" : "clear", col);
+    return 1;
+  }
+  return 0;
+}
+
 int test_layerwindow_cache_and_pull(C3D_RenderTarget *bottom_target) {
   LOGINF("Starting LayerWindow Cache and Pull Test...");
 
@@ -1099,6 +1130,45 @@ int test_layerwindow_cache_and_pull(C3D_RenderTarget *bottom_target) {
     ret = 1;
     goto CLEANUP;
   }
+
+  // --- Step 3: Cached pages must re-render after page edits ---
+  // Pages are all cached now. Edits rewrite data behind the scanners, so
+  // without invalidation the cached pixels would stay stale.
+  // Probe points (layer 0): (20,20) is on the page 0 red cross, (32,40) is on
+  // the page 1 vertical bar, page 2's cyan diagonal also covers (20,20).
+  LOGINF("Testing cache invalidation after page edits...");
+
+  // Swap pages 0 and 1: their layer 0 contents should trade places
+  if (edit_swap_pages(&dc, 0, 1) != 0) {
+    LOGERR("edit_swap_pages failed");
+    ret = 1;
+    goto CLEANUP;
+  }
+  LOGTRC("Pulls after swap: %d", helper_pull_all(&lw, prange));
+  if (helper_expect_pixel(&lw, 0, 0, 20, 20, 0, "Swap: old pg0 cross not cleared") ||
+      helper_expect_pixel(&lw, 0, 0, 32, 40, 1, "Swap: pg1 bar missing on pg0") ||
+      helper_expect_pixel(&lw, 1, 0, 20, 20, 1, "Swap: pg0 cross missing on pg1") ||
+      helper_expect_pixel(&lw, 1, 0, 32, 40, 0, "Swap: old pg1 bar not cleared")) {
+    ret = 1;
+    goto CLEANUP;
+  }
+  LOGDBG("Invalidation after swap passed");
+
+  // Delete page 2: both its layers should end up clear
+  if (edit_delete_page(&dc, 2) != 0) {
+    LOGERR("edit_delete_page failed");
+    ret = 1;
+    goto CLEANUP;
+  }
+  LOGTRC("Pulls after delete: %d", helper_pull_all(&lw, prange));
+  if (helper_expect_pixel(&lw, 2, 0, 20, 20, 0, "Delete: pg2 diagonal not cleared") ||
+      helper_expect_pixel(&lw, 2, 1, 32, 50, 0, "Delete: pg2 edge not cleared") ||
+      helper_expect_pixel(&lw, 0, 0, 32, 40, 1, "Delete: pg0 lost its bar") ||
+      helper_expect_pixel(&lw, 1, 0, 20, 20, 1, "Delete: pg1 lost its cross")) {
+    ret = 1;
+    goto CLEANUP;
+  }
+  LOGDBG("Invalidation after delete passed");
 
   LOGINF("PASS: LayerWindow cache, metered pull, and pending unit tests passed!");
 

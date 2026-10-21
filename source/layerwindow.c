@@ -140,7 +140,8 @@ int layerwindow_pull(LayerWindow * lw, size_t max_scan, size_t max_draw, PageRan
     size_t unit = JDLC_UNIT(lw, pg);
     // Fill all the scanners with max_draw. Maybe kinda bad?
     lw->units[unit].scanner.max_scan = max_scan;
-    if(lw->units[unit].scanner.page != pg) {
+    int stale = datascanner_sync(&lw->units[unit].scanner);
+    if(stale || lw->units[unit].scanner.page != pg) {
       LOGTRC("Resetting page unit %d (pg %d)", unit, pg);
       layerwindow_reset_unit(lw, unit);
       lw->units[unit].scanner.page = pg;

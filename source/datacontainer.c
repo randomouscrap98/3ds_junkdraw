@@ -126,8 +126,12 @@ int datacontainer_init(DataContainer * dc, size_t capacity) {
   return 0;
 }
 
-void datacontainer_reset(DataContainer * dc) {
+void datacontainer_invalidate(DataContainer * dc) {
   dc->sequence++;  // Should invalidate scanners no matter where they are
+}
+
+void datacontainer_reset(DataContainer * dc) {
+  datacontainer_invalidate(dc);
   dc->start = dc->end = dc->container + JDDC_FHEADER_LEN;
   // Maybe not necessary but yeah...
   dc->start[0] = 0;

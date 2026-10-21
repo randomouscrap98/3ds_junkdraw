@@ -73,6 +73,7 @@ int edit_swap_pages(DataContainer * dc, const page_t sourcepage, const page_t de
     datascannerresult_overwritepage(&result, destpage);
   }
 
+  datacontainer_invalidate(dc);
   LOGDBG("Swapped %ld strokes between pg %d and %d", numtouched, sourcepage + 1, destpage + 1);
   return 0;
 }
@@ -102,6 +103,7 @@ int edit_delete_page(DataContainer * dc, const page_t page) {
 
   // move the container's end back
   dc->end -= reclaim;
+  datacontainer_invalidate(dc);
 
   LOGDBG("Deleted %ld strokes for pg %d", delstrokes, page + 1);
   
@@ -148,6 +150,8 @@ int edit_move_page(DataContainer * dc, const page_t sourcepage, const page_t des
   while(datascanner_next_loop(&ds, &result)) {
     datascannerresult_overwritepage(&result, destpage);
   }
+
+  datacontainer_invalidate(dc);
 
   LOGDBG("Moved %ld strokes between pg %d and %d", numtouched, sourcepage + 1, destpage + 1);
   return 0;
