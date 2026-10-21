@@ -278,6 +278,127 @@ static int helper_check_page_strokes(DataContainer *dc, page_t page,
   return 0;
 }
 
+// Copy tests on their own containers so the main edit suite's
+// one-stroke-per-page expectations stay simple
+int run_edit_copy_test_suite(void) {
+  LOGINF("Starting Edit Copy Test Suite...");
+
+  DataContainer dc;
+  DataContainer small;
+  int small_init = 0;
+  u32 count = 0;
+  u16 color_sum = 0;
+  size_t filled = 0;
+
+  if (datacontainer_init(&dc, 4096) != 0) {
+    LOGERR("Failed to initialize DataContainer");
+    return 1;
+  }
+
+  // Page 0 gets two strokes, page 1 one stroke
+  if (helper_add_sample_stroke(&dc, 0, 0x1111) != 0 ||
+      helper_add_sample_stroke(&dc, 0, 0x0101) != 0 ||
+      helper_add_sample_stroke(&dc, 1, 0x2222) != 0) {
+    LOGERR("Failed to add initial strokes");
+    goto error;
+  }
+
+  // Multi-stroke copy: dest gets both, source unchanged, other page untouched
+  if (edit_copy_page(&dc, 0, 2) != 0) {
+    LOGERR("edit_copy_page (multi) failed");
+    goto error;
+  }
+  if (helper_check_page_strokes(&dc, 2, &count, &color_sum) != 0 ||
+      count != 2 || color_sum != 0x1212) {
+    LOGERR("Multi copy: dest wrong (count %ld sum %x)", count, color_sum);
+    goto error;
+  }
+  if (helper_check_page_strokes(&dc, 0, &count, &color_sum) != 0 ||
+      count != 2 || color_sum != 0x1212) {
+    LOGERR("Multi copy: source changed (count %ld sum %x)", count, color_sum);
+    goto error;
+  }
+  if (helper_check_page_strokes(&dc, 1, &count, &color_sum) != 0 ||
+      count != 1 || color_sum != 0x2222) {
+    LOGERR("Multi copy: page 1 changed (count %ld sum %x)", count, color_sum);
+    goto error;
+  }
+  LOGDBG("edit_copy_page multi-stroke test passed");
+
+  // Self copy: should be rejected and change nothing
+  filled = datacontainer_filled(&dc);
+  if (edit_copy_page(&dc, 0, 0) == 0) {
+    LOGERR("Self copy should return error");
+    goto error;
+  }
+  if (datacontainer_filled(&dc) != filled) {
+    LOGERR("Self copy changed fill: %zu -> %zu", filled, datacontainer_filled(&dc));
+    goto error;
+  }
+  if (helper_check_page_strokes(&dc, 0, &count, &color_sum) != 0 ||
+      count != 2 || color_sum != 0x1212) {
+    LOGERR("Self copy changed page 0 (count %ld sum %x)", count, color_sum);
+    goto error;
+  }
+  LOGDBG("edit_copy_page self-copy test passed");
+
+  // Out of space: container sized so only ONE of two strokes fits. The copy
+  // must fail and leave everything as it was. Sizes are measured, not hardcoded.
+  if (datacontainer_init(&small, 4096) != 0) {
+    LOGERR("Failed to initialize small DataContainer");
+    goto error;
+  }
+  small_init = 1;
+  size_t base = datacontainer_filled(&small);
+  if (helper_add_sample_stroke(&small, 0, 0x1111) != 0) {
+    LOGERR("Failed to add small stroke");
+    goto error;
+  }
+  size_t stroke_len = datacontainer_filled(&small) - base;
+  datacontainer_free(&small);
+  small_init = 0;
+
+  if (datacontainer_init(&small, base + 3 * stroke_len) != 0) {
+    LOGERR("Failed to initialize sized DataContainer");
+    goto error;
+  }
+  small_init = 1;
+  if (helper_add_sample_stroke(&small, 0, 0x1111) != 0 ||
+      helper_add_sample_stroke(&small, 0, 0x0101) != 0) {
+    LOGERR("Failed to add sized strokes");
+    goto error;
+  }
+  filled = datacontainer_filled(&small);
+  if (edit_copy_page(&small, 0, 1) == 0) {
+    LOGERR("Out of space copy should return error");
+    goto error;
+  }
+  if (datacontainer_filled(&small) != filled) {
+    LOGERR("Failed copy changed fill: %zu -> %zu", filled, datacontainer_filled(&small));
+    goto error;
+  }
+  if (helper_check_page_strokes(&small, 1, &count, &color_sum) != 0 || count != 0) {
+    LOGERR("Failed copy left strokes on dest (count %ld)", count);
+    goto error;
+  }
+  if (helper_check_page_strokes(&small, 0, &count, &color_sum) != 0 ||
+      count != 2 || color_sum != 0x1212) {
+    LOGERR("Failed copy changed source (count %ld sum %x)", count, color_sum);
+    goto error;
+  }
+  LOGDBG("edit_copy_page out-of-space test passed");
+
+  datacontainer_free(&small);
+  datacontainer_free(&dc);
+  LOGINF("PASS: Edit copy test suite completed successfully");
+  return 0;
+
+error:
+  if (small_init) datacontainer_free(&small);
+  datacontainer_free(&dc);
+  return 1;
+}
+
 int run_edit_test_suite(void) {
   LOGINF("Starting Edit Test Suite...");
 
@@ -1024,6 +1145,10 @@ int main(int argc, char **argv) {
 #ifndef EDIT_SKIP
   if(run_edit_test_suite()) {
     LOGERR("EDIT FAILED");
+    goto SKIPTESTS;
+  }
+  if(run_edit_copy_test_suite()) {
+    LOGERR("EDIT COPY FAILED");
     goto SKIPTESTS;
   }
 #endif
