@@ -345,16 +345,21 @@ DataScanner datacontainer_get_scanner(DataContainer * dc) {
   return out;
 }
 
+int datascanner_sync(DataScanner * ds) {
+  // First, see if we're invalidated. If so, reset scanner.
+  if(ds->sequence != ds->parent->sequence) {
+    ds->sequence = ds->parent->sequence;
+    ds->current = ds->parent->start;
+    return 1;
+  }
+  return 0;
+}
+
 // Scan until either we reach the end, the max scan is reached,
 // or we actually find the first occurence of a stroke on a page that we want.
 // Doesn't actually parse the stroke, just looks for the next one. 
 // result.stroke_start will be null if no stroke is found.
 DataScannerResult datascanner_next(DataScanner * ds) {
-  // First, see if we're invalidated. If so, reset scanner.
-  if(ds->sequence != ds->parent->sequence) {
-    ds->sequence = ds->parent->sequence;
-    ds->current = ds->parent->start;
-  }
 
   DataScannerResult result;
   result.stroke_start = NULL;

@@ -134,6 +134,8 @@ DataScanner datacontainer_get_scanner(DataContainer * dc);
 
 // Find next stroke chunk (collection of lines etc)
 DataScannerResult datascanner_next(DataScanner * ds);
+// Call to synchronize the scanners when underlying data changes.
+int datascanner_sync(DataScanner * ds);
 // Useful for loops: a datascanner_next you can use in a while()
 int datascanner_next_loop(DataScanner * ds, DataScannerResult * dsr);
 int datascanner_at_end(DataScanner * ds);

@@ -168,7 +168,7 @@ void mainsystem_calc_layerdraw(MainSystem * ms, LayerDraw * ld, size_t * total_l
   // or you can... do something else I guess...
   // The topmost actual layer (layers are back to front)
   for(layer_t i = dh.layer_count - 1; i >= 0; i--) {
-    Layer * layer = layerwindow_getlayer(&ms->layerwindow, ms->page, ms->layer);
+    Layer * layer = layerwindow_getlayer(&ms->layerwindow, ms->page, i);
     ld[*total_layers] = LAYERDRAW_NOMOD(layer);
     (*total_layers)++;
   }
