@@ -437,6 +437,25 @@ int datascanner_at_end(DataScanner * ds) {
   return ds->current >= ds->parent->end;
 }
 
+int datascannerresult_copyresult(
+    DataScannerResult * dsr, DataContainer * dc, DataScannerResult * out) {
+  size_t len = (dsr->data_end - dsr->data_start); // length includes meta
+  size_t diff = dc->end - dsr->data_start;
+  if(!datacontainer_enough(dc, len)) {
+    return 1;
+  }
+  memcpy(dc->end, dsr->data_start, len); // copy WHOLE stroke
+  dc->end += len;
+  if(out) {
+    *out = *dsr;
+    out->data_start += diff;
+    out->data_end += diff;
+    out->stroke_start += diff;
+  }
+  return 0;
+}
+
+
 void datascannerresult_overwritepage(DataScannerResult * dsr, page_t page) {
   int_to_chars(page, JDDC_PAGEBYTES, dsr->data_start + 1);
 }

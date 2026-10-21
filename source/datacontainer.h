@@ -139,6 +139,11 @@ int datascanner_next_loop(DataScanner * ds, DataScannerResult * dsr);
 int datascanner_at_end(DataScanner * ds);
 void datascanner_reset(DataScanner * ds);
 
+// Copy a result to the end of the given data container, increasing
+// the size of data container and returning a scanner result pointing
+// to the new copy.
+int datascannerresult_copyresult(
+    DataScannerResult * dsr, DataContainer * dc, DataScannerResult * out);
 void datascannerresult_overwritepage(DataScannerResult * dsr, page_t page);
 int datascannerresult_parseline(DataScannerResult * dsr, LineContainer * lc);
 

@@ -344,7 +344,7 @@ int main() {
   if(logging_init()) return 1;
 
   C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
-  C2D_Init(C2D_DEFAULT_MAX_OBJECTS);
+  C2D_Init(JDL_MAXOBJECTS);
   C2D_Prepare();
 
   //PrintConsole * console_ptr = 

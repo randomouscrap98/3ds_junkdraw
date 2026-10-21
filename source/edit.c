@@ -6,29 +6,32 @@
 
 // Copy the entire contents of given page to the given destination page. Returns the new end
 int edit_copy_page(DataContainer * dc, const page_t sourcepage, const page_t destpage) {
+
+  if(sourcepage == destpage) {
+    LOGDBG("WARN: skipping useless copy");
+    return 1;
+  }
+
   DataScannerResult result;
   DataScanner ds = datacontainer_get_scanner(dc);
   ds.page = sourcepage;
   u32 numcopied = 0;
-  size_t copybytes = 0;
+  char * oldend = dc->end;
 
   // Scan through, find strokes on given page (only up to old end)
   while(datascanner_next_loop(&ds, &result)) {
-    size_t len = (result.data_end - result.data_start); // length includes meta
-    if(!datacontainer_enough(dc, len)) {
+    DataScannerResult newcopy;
+    if (datascannerresult_copyresult(&result, dc, &newcopy)) {
       size_t filled = datacontainer_filled(dc);
+      size_t len = (result.data_end - result.data_start); // length includes meta
       LOGDBG("Not enough space to copy page! Len: %zu Fill: %zu Copied: %d", 
              len, filled, numcopied);
+      dc->end = oldend; // restore end as if nothing happened
       return 1;
     }
-    memcpy(dc->end, result.data_start, len); // copy WHOLE stroke
-    datascannerresult_overwritepage(&result, destpage);
-    copybytes += len;
+    datascannerresult_overwritepage(&newcopy, destpage);
     numcopied++;
   }
-
-  // Only update end afterwards
-  dc->end += copybytes;
 
   LOGDBG("Copied %ld strokes from pg %d to %d", numcopied, sourcepage + 1, destpage + 1);
 
