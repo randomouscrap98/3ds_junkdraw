@@ -27,6 +27,7 @@ void lineconverter_free(LineConverter * lc) {
   // Get rid of inner lines first
   lineconverter_delete_lines(lc);
   vector_vector_RenderLine_free(&lc->lines);
+  linecontainer_free(&lc->pending);
 }
 
 int lineconverter_isdone(LineConverter * lc) {

@@ -135,7 +135,7 @@ DRAWEND:
 
 // Move the offset for the compositor against the given layer. Can be any of the layers you'd
 // normally send to the draw function (use the first one for perfect compatibility)
-void layercompositor_offset(LayerCompositor * lc, Layer * layer, u16 offset_x, u16 offset_y) {
+void layercompositor_offset(LayerCompositor * lc, Layer * layer, float offset_x, float offset_y) {
   u16 width, height;
   layercompositor_dims(lc, &width, &height);
   float maxofsx = layer->width * lc->zoom - width;
@@ -150,10 +150,10 @@ void layercompositor_zoom(LayerCompositor * lc, Layer * layer, float zoom) {
   u16 width, height;
   layercompositor_dims(lc, &width, &height);
   float zoom_ratio = zoom / lc->zoom;
-  u16 center_x = width >> 1;
-  u16 center_y = height >> 1;
-  u16 new_ofsx = zoom_ratio * (lc->offset_x + center_x) - center_x;
-  u16 new_ofsy = zoom_ratio * (lc->offset_y + center_y) - center_y;
+  float center_x = width >> 1;
+  float center_y = height >> 1;
+  float new_ofsx = zoom_ratio * (lc->offset_x + center_x) - center_x;
+  float new_ofsy = zoom_ratio * (lc->offset_y + center_y) - center_y;
   lc->zoom = zoom;
   layercompositor_offset(lc, layer, new_ofsx, new_ofsy);
 }

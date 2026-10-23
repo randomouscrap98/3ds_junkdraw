@@ -9,7 +9,7 @@
 // arbitrary data in a vector
 
 #define VECTOR_INIT_CAPACITY 4
-#define VECTOR_GROW_FACTOR 1.5
+#define VECTOR_GROW_FACTOR 1.5f
 
 // Create the struct and prototypes for a vector of the given type. This
 // will create a new type called "vector_type", such as "vector_int" etc
@@ -69,8 +69,11 @@
 #define VECTOR_FUNC_RESERVE(type) \
   int vector_##type##_reserve(vector_##type * v, size_t cap) { \
     if(cap <= v->capacity) { return 0; } \
+    type * tmp = realloc(v->array, sizeof(type) * cap); \
+    if(tmp == NULL) { return 1; } \
     v->capacity = cap; \
-    return !(v->array = realloc(v->array, sizeof(type) * v->capacity)); \
+    v->array = tmp; \
+    return 0; \
   }
 
 #define VECTOR_FUNC_DECREMENT(type) \

@@ -15,6 +15,7 @@
 
 int saveload_fill_loadmenu(tui_menu * menu, tui_menu_alert * alert_ref, const char * directory) {
   DIR *dir = opendir(directory);
+  int err = 0;
 
   if (!dir) {
     LOGERR("Couldn't open dir %s\n", directory);
@@ -25,9 +26,8 @@ int saveload_fill_loadmenu(tui_menu * menu, tui_menu_alert * alert_ref, const ch
 
   while (entry != NULL) {
     if (entry->d_type == DT_DIR) {
-      int err;
       TUIMXITEM_ALERT_COPY(menu, err, entry->d_name, alert_ref);
-      if(err) { return err; }
+      if(err) { goto END; }
     }
     entry = readdir(dir);
   }
@@ -35,7 +35,9 @@ int saveload_fill_loadmenu(tui_menu * menu, tui_menu_alert * alert_ref, const ch
   // Now sort? Is this OK???
   LIST_SORT_REF(menu->items, menu->numitems, tui_menu_item, list_sort_compare_menu_name_asc);
 
-  return 0;
+END:
+  closedir(dir);
+  return err;
 }
 
 

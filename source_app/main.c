@@ -114,7 +114,8 @@ int mainsystem_init(MainSystem * ms) {
   // This vastly simplifies anything that requires system data, since
   // it's just in the menu. Lifetimes might suck but should be ok...
   ms->mainmenu.menu.dataptr = ms;
-  layerwindow_init(&ms->layerwindow, &ms->drawdata, JDL_TYPE_HARDWARE);
+  err = layerwindow_init(&ms->layerwindow, &ms->drawdata, JDL_TYPE_HARDWARE);
+  if(err) { return err; }
   return 0;
 }
 
