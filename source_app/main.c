@@ -58,7 +58,6 @@ u32 __stacksize__ = 512 * 1024;
 
 #define MAIN_MODE_DRAW        0
 #define MAIN_MODE_MENU        1
-#define MAIN_MODE_FAILURE     2
 #define MAIN_MODE_EXIT        3
 
 void header_res_decode(resolutionid_t resolution, layerdim_t * width, layerdim_t * height) {
@@ -327,7 +326,7 @@ void ui_render_menu(tui_menu_extra * menu, int menu_open) {
 //                  Main
 // ==========================================
 
-bool isn3ds() {
+static bool isn3ds() {
   bool isn3ds = false;
   Result res = APT_CheckNew3DS(&isn3ds);
 
@@ -335,6 +334,19 @@ bool isn3ds() {
     return isn3ds;
   } 
   return false;
+}
+
+static void failstate() {
+  consoleClear();
+  printf("FATAL: can't start. START to exit\n");
+  logging_try_render(ui_render_logbox, 1);
+  gfxFlushBuffers();
+  gfxSwapBuffers();
+  while(aptMainLoop()) {
+    hidScanInput();
+    if(hidKeysDown() & KEY_START) break;
+    gspWaitForVBlank();
+  }
 }
 
 int main() {
@@ -364,18 +376,21 @@ int main() {
   size_t layers_count;
 
   if(mainsystem_init(&system)) {
-    LOGDBG("CAN'T INITIALIZE MAIN SYSTEM");
-    mode = MAIN_MODE_FAILURE;
+    LOGERR("CAN'T INITIALIZE MAIN SYSTEM");
+    failstate();
+    goto ENDAPP;
   }
 
   if(main_menu_init(&system)) {
-    LOGDBG("CAN'T INITIALIZE MAIN MENU");
-    mode = MAIN_MODE_FAILURE;
+    LOGERR("CAN'T INITIALIZE MAIN MENU");
+    failstate();
+    goto ENDAPP;
   }
 
   if(mainsystem_newdrawing(&system)) {
     LOGERR("Can't initialize new drawing with given parameters!");
-    mode = MAIN_MODE_FAILURE;
+    failstate();
+    goto ENDAPP;
   }
 
   ui_render_controls();
@@ -450,6 +465,8 @@ int main() {
 ENDMAINLOOP:;
 
   mainsystem_free(&system);
+
+ENDAPP:;
 
   C2D_Fini();
   C3D_Fini();
