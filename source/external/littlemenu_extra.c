@@ -113,6 +113,9 @@ tui_menu * tui_menu_alert_create_menu(
   tui_menu_alert tma;
   memcpy(&tma, data->raw, sizeof(tui_menu_alert));
   if(tma.should_alert(tma.userdata, tma.menu->alert, sizeof(tma.menu->alert), parent, pos)) {
+    // The alert text was just rewritten in place; the wrapper caches scan positions
+    // into the old text, so it must start over
+    tui_textwrap_reset(&tma.menu->alertwrap);
     // Setup a temporary confirm menu with a yes that is another submenu item that redirects to
     // the user's work item (or just exits normally)
     tui_menu * alertmenu = (tui_menu *)malloc(sizeof(tui_menu));

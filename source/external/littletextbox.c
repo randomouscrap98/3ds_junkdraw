@@ -40,10 +40,11 @@ static inline void tui_textwrap_scanchunk(tui_textwrap * tw, char delim) {
 // Wherever we are in the tracking, find len and next. Does NOT advance last_line, only
 // finds length and next
 static inline int tui_textwrap_findnext(tui_textwrap * tw, tui_textwrap_config config) {
+  // Reset scanner end (just in case). Done before the end check so last_next is
+  // never left NULL, which the walk dereferences.
+  tw->last_next = tw->last_start;
   // quick exit if past end
   if(tw->last_start[0] == 0) return -1;
-  // Reset scanner end (just in case)
-  tw->last_next = tw->last_start;
   while(1) {
     // Consume the next word + space chunk. Save some stuff before probing forward
     char * prevnext = tw->last_next;
@@ -98,6 +99,7 @@ static inline int tui_textwrap_walk(tui_textwrap * tw, tui_textwrap_config confi
 }
 
 tui_textbox_unit_t tui_textwrap_height(tui_textwrap * tw, tui_textwrap_config config) {
+  if(tw->str[0] == 0) return 0;  // Empty text has no lines
   config.line = TUITEXTBOX_UNIT_MAX;
   int err = tui_textwrap_walk(tw, config);
   if(err != 99) return err;
