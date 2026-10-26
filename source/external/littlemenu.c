@@ -258,8 +258,9 @@ static inline tui_menu * tui_menu_get_exit_parent(tui_menu * tm) {
     if(tm->parent->parent) {
       tui_menu_item * parent_sub = tui_menu_get_submenu(
           tm->parent->parent, tm->parent->parent->current);
-      // Our parent is temporary, we need to go higher
-      if(parent_sub->data.submenu.temporary) {
+      // Our parent is temporary, we need to go higher. parent_sub can be NULL when
+      // parent pointers were set manually rather than through submenu items.
+      if(parent_sub && parent_sub->data.submenu.temporary) {
         return tui_menu_get_exit_parent(tm->parent);
       }
     }
@@ -287,7 +288,7 @@ static inline tui_menu * tui_menu_get_exit_parent(tui_menu * tm) {
   if(tm->parent) { \
     tui_menu_item * oursub = tui_menu_get_submenu(tm->parent, tm->parent->current); \
     /* An accept in a temp menu is a cancel with a result */ \
-    if(oursub->data.submenu.temporary) { _TUIMENU_RESULT_CANCEL(); } \
+    if(oursub && oursub->data.submenu.temporary) { _TUIMENU_RESULT_CANCEL(); } \
   } \
   result.result = _curtemp; \
   result.running = 1; \
@@ -310,9 +311,11 @@ tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action) {
   }
   tui_menu_item * submenu = tui_menu_get_submenu(tm, tm->current);
   if(submenu) { return tui_menu_run(submenu->data.submenu.menu, action); }
-  // Only do it here once we know we're in the deepest submenu.
-  result.depth = tui_menu_submenu_depth(tm);
-  if(action.action & (TUIMENU_ACTION_MOVE | TUIMENU_ACTION_POSITION)) {
+  // Only do it here once we know we're in the deepest submenu: how far below the
+  // root the menu handling this action is (root = 0).
+  uint8_t depth = 0;
+  for(tui_menu * p = tm->parent; p; p = p->parent) depth++;
+  if((action.action & (TUIMENU_ACTION_MOVE | TUIMENU_ACTION_POSITION)) && tm->numitems > 0) { // Nothing to move to in an empty menu
     if(action.action & TUIMENU_ACTION_POSITION) {
       tm->current = action.offset;
       action.offset = 0;
@@ -363,7 +366,7 @@ tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action) {
   }
   if(action.action & TUIMENU_ACTION_CANCEL) {
     _TUIMENU_RESULT_CANCEL();
-  } else if(action.action & TUIMENU_ACTION_ACCEPT) {
+  } else if((action.action & TUIMENU_ACTION_ACCEPT) && item) { // item is NULL in an empty menu
     if(item->type == TUIMENU_TYPE_BASIC) {
       if(item->data.basic.quit) {
         _TUIMENU_RESULT_CANCEL();
@@ -386,5 +389,6 @@ tui_menu_result tui_menu_run(tui_menu * tm, tui_menu_action action) {
       }
     }
   }
+  result.depth = depth; // Callbacks replace result wholesale, so set this last
   return result;
 }

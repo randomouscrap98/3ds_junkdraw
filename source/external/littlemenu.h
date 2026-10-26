@@ -137,13 +137,15 @@ typedef struct {
   int error;
   uint8_t running;
   uint8_t cancelled;
-  uint8_t depth;
+  uint8_t depth;      // Depth (root = 0) of the menu that handled the action, counted
+                      // through parent pointers before the action took effect
 } tui_menu_result;
 
 #define TUIMENU_CANCELRESULT (tui_menu_result) { \
   .error = 0, \
   .result = -1, \
   .running = 0, \
+  .cancelled = 1, \
 }
 
 typedef struct {

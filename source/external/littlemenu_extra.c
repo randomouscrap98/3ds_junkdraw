@@ -123,6 +123,7 @@ tui_menu * tui_menu_alert_create_menu(
     nodat.ptr = tma.menu->alert;
     TUIMITEM_CALLBACK(alertmenu, err, TUIMENUX_NO, tui_menu_alert_no_callback, nodat);
     if(err) { 
+      tui_menu_free(alertmenu); // Frees the items array, if one was allocated
       free(alertmenu); 
       return NULL; 
     }
@@ -131,6 +132,7 @@ tui_menu * tui_menu_alert_create_menu(
     TUIMITEM_SUBMENU(alertmenu, err, TUIMENUX_YES, tui_menu_alert_create_yes_submenu, 
         tui_menu_submenu_destroy_malloc_menu, yesdat, 0);
     if(err) { 
+      tui_menu_free(alertmenu); // The "No" item was already pushed; don't leak it
       free(alertmenu);
       return NULL; 
     }
